@@ -1,0 +1,240 @@
+name: Build Viking source baseline for RC01
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc01-viking-baseline-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VIKING_SOURCE: e5b0e82156513e81b6b712e4498ab15fd3a28571
+  CONTROL_COMMIT: ${{ github.sha }}
+  TARGET_DIR: bin/targets/qualcommbe/ipq95xx
+  CCACHE_MAXSIZE: 3G
+  TZ: Asia/Singapore
+
+jobs:
+  baseline:
+    name: Unmodified Viking source / BE10000 device defaults
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout the exact unmodified Viking source
+        uses: actions/checkout@v4
+        with:
+          repository: VIKINGYFY/immortalwrt
+          ref: ${{ env.VIKING_SOURCE }}
+          persist-credentials: false
+
+      - name: Confirm source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$VIKING_SOURCE"
+          git diff --exit-code
+          test ! -d package/emortal/rc01-platform
+          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+
+      - name: Reclaim runner space
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo docker system prune --all --force --volumes || true
+          df -h
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential clang llvm flex bison gawk gcc-multilib gettext git \
+            libncurses-dev libssl-dev zlib1g-dev python3-dev python3-setuptools \
+            python3-pyelftools python3-cryptography rsync swig unzip file wget \
+            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils
+
+      - name: Restore source downloads
+        uses: actions/cache/restore@v4
+        with:
+          path: dl
+          key: rc01-viking-baseline-dl-${{ runner.os }}-${{ env.VIKING_SOURCE }}-${{ github.run_id }}
+          restore-keys: |
+            rc01-viking-baseline-dl-${{ runner.os }}-${{ env.VIKING_SOURCE }}-
+            rc01-dl-${{ runner.os }}-
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: rc01-viking-baseline-ccache-${{ runner.os }}-${{ env.VIKING_SOURCE }}-${{ github.run_id }}
+          restore-keys: |
+            rc01-viking-baseline-ccache-${{ runner.os }}-${{ env.VIKING_SOURCE }}-
+            rc01-ccache-${{ runner.os }}-
+
+      - name: Select the device defaults with the same public feed revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > feeds.conf <<'EOF'
+          src-git packages https://github.com/immortalwrt/packages.git^48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd
+          src-git luci https://github.com/immortalwrt/luci.git^df794c7f69361641195a4b336634d1b1c918099c
+          src-git routing https://github.com/openwrt/routing.git^ea8633da9c461a9bdc62a0323439d31180762e03
+          EOF
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          while read -r type name url; do
+            test "$type" = src-git
+            test "$(git -C "feeds/$name" rev-parse HEAD)" = "${url##*^}"
+          done < feeds.conf
+          cat > .config <<'EOF'
+          CONFIG_TARGET_qualcommbe=y
+          CONFIG_TARGET_qualcommbe_ipq95xx=y
+          CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_xiaomi_be10000=y
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_DEVEL=y
+          CONFIG_CCACHE=y
+          CONFIG_INCLUDE_CONFIG=y
+          CONFIG_JSON_OVERVIEW_IMAGE_INFO=y
+          EOF
+          make defconfig
+          grep -Fxq 'CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_xiaomi_be10000=y' .config
+          for package in luci kmod-qcom-ppe kmod-ath12k ipq-wifi-xiaomi_be10000 uboot-envtools; do
+            grep -Fxq "CONFIG_PACKAGE_$package=y" .config
+          done
+          if grep -Eq '^CONFIG_PACKAGE_(rc01-platform|luci-app-rc01|mihomo-meta|nikki|dae|daed|luci-app-daede)=y$' .config; then
+            echo 'Unexpected personal package in the source baseline' >&2
+            exit 1
+          fi
+          test ! -d files
+          git diff --exit-code
+          ./scripts/diffconfig.sh > baseline.diffconfig
+
+      - name: Download package sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! make -j4 download 2>&1 | tee download.log; then
+            make -j1 V=s download 2>&1 | tee -a download.log
+          fi
+
+      - name: Build the source baseline
+        id: firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! make -j4 2>&1 | tee build.log; then
+            make -j1 V=s 2>&1 | tee -a build.log
+          fi
+
+      - name: Preserve built images before metadata and container checks
+        if: ${{ !cancelled() && steps.firmware.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: viking-source-baseline-unchecked-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ env.TARGET_DIR }}/
+
+      - name: Record the exact inputs and check the output containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test "$(git rev-parse HEAD)" = "$VIKING_SOURCE"
+          cp .config "$TARGET_DIR/baseline.config"
+          cp baseline.diffconfig "$TARGET_DIR/baseline.diffconfig"
+          cp feeds.conf "$TARGET_DIR/baseline-feeds.lock"
+          {
+            echo 'baseline_kind=unmodified-viking-source-device-defaults'
+            echo 'published_viking_release_replica=false'
+            echo 'source_repository=https://github.com/VIKINGYFY/immortalwrt'
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "source_tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "ci_control_commit=$CONTROL_COMMIT"
+            echo "source_date_epoch=$SOURCE_DATE_EPOCH"
+            echo "kernel=$(cat target/linux/generic/kernel-6.18)"
+            echo 'rc01_custom_patches=none'
+            echo 'du_v2_c4_alias=not-added'
+            echo 'envtools_64k_fix=not-added'
+            echo 'rc01_fan_patch=not-added'
+            echo 'physical_acceptance=not-performed'
+            echo 'flash_readiness=requires-separate-compatibility-review'
+            for feed in packages luci routing; do
+              echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
+            done
+          } > "$TARGET_DIR/baseline-build-metadata.txt"
+          shopt -s nullglob
+          factories=("$TARGET_DIR"/*xiaomi_be10000-squashfs-factory.ubi)
+          upgrades=("$TARGET_DIR"/*xiaomi_be10000-squashfs-sysupgrade.bin)
+          test "${#factories[@]}" -eq 1
+          test "${#upgrades[@]}" -eq 1
+          test -s "${factories[0]}"
+          test "$(head -c 4 "${factories[0]}")" = 'UBI#'
+          tar -tf "${upgrades[0]}" > /tmp/baseline-tar-members
+          grep -Eq '^sysupgrade-[^/]+/kernel$' /tmp/baseline-tar-members
+          grep -Eq '^sysupgrade-[^/]+/root$' /tmp/baseline-tar-members
+          (cd "$TARGET_DIR"; sha256sum *xiaomi_be10000-squashfs-* > baseline-images.sha256)
+
+      - name: Upload source baseline images and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: viking-source-baseline-e5b0e82156-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.TARGET_DIR }}/*xiaomi_be10000-squashfs-*
+            ${{ env.TARGET_DIR }}/baseline*
+            ${{ env.TARGET_DIR }}/*.manifest
+            ${{ env.TARGET_DIR }}/config.buildinfo
+            ${{ env.TARGET_DIR }}/feeds.buildinfo
+            ${{ env.TARGET_DIR }}/version.buildinfo
+            ${{ env.TARGET_DIR }}/profiles.json
+            ${{ env.TARGET_DIR }}/sha256sums
+
+      - name: Upload matching packages and public signing material
+        if: ${{ !cancelled() && steps.firmware.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: viking-source-baseline-packages-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            bin/packages/**/*.apk
+            ${{ env.TARGET_DIR }}/packages/*.apk
+            key-build.pub
+            key-build.ucert
+            public-key.pem
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viking-source-baseline-failure-${{ github.run_number }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            download.log
+            build.log
+            logs
+            .config
+            baseline.diffconfig
+            feeds.conf
+
+      - name: Save source downloads
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v4
+        with:
+          path: dl
+          key: rc01-viking-baseline-dl-${{ runner.os }}-${{ env.VIKING_SOURCE }}-${{ github.run_id }}
+
+      - name: Save compiler cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: rc01-viking-baseline-ccache-${{ runner.os }}-${{ env.VIKING_SOURCE }}-${{ github.run_id }}
