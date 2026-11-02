@@ -6,8 +6,8 @@ import { snapshot } from 'rc01.platform';
 let action = ARGV[0] || 'status';
 let target = ARGV[1] || 'hardware';
 if (length(ARGV) > 2 || (action == 'status' && length(ARGV) > 1) || index([ 'status', 'check' ], action) < 0 ||
-	index([ 'hardware', 'nikki', 'daed' ], target) < 0) {
-	warn('Usage: rc01-check [status | check [hardware|nikki|daed]]\n');
+	index([ 'hardware', 'nikki', 'dae', 'daed' ], target) < 0) {
+	warn('Usage: rc01-check [status | check [hardware|nikki|dae|daed]]\n');
 	exit(2);
 }
 let state = snapshot(cursor());

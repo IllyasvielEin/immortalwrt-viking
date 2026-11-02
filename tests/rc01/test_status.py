@@ -23,6 +23,7 @@ class Status(unittest.TestCase):
             "router-tool": {"main": {"auto_network": "0"}},
             "nikki": {"config": {"enabled": "0"}},
             "daed": {"config": {"enabled": "0"}},
+            "dae": {"config": {"enabled": "0"}},
             "firewall": {"defaults": {".type": "defaults", "flow_offloading": "0", "flow_offloading_hw": "0"}},
             "wireless": {"radio0": {".type": "wifi-device", ".name": "radio0", "disabled": "1"}},
         }
@@ -55,7 +56,7 @@ class Status(unittest.TestCase):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(value) + "\n")
-        if name in ("usr/libexec/mihomo", "usr/bin/daed"):
+        if name in ("usr/libexec/mihomo", "usr/bin/dae", "usr/bin/daed"):
             path.chmod(0o755)
 
     def run_status(self, target="hardware"):
@@ -119,6 +120,21 @@ class Status(unittest.TestCase):
         self.write("usr/bin/daed", "test executable placeholder")
         self.write("sys/kernel/btf/vmlinux", "test BTF placeholder")
         self.assertEqual(self.levels(self.run_status("daed"))["other-proxy"], "error")
+
+    def test_dae_preflight_requires_btf_and_detects_nikki_and_daed(self):
+        self.write("usr/bin/dae", "test executable placeholder")
+        self.assertEqual(self.levels(self.run_status("dae"))["btf"], "error")
+        self.write("sys/kernel/btf/vmlinux", "test BTF placeholder")
+        self.assertTrue(self.run_status("dae")["result"]["passed"])
+        self.config["nikki"]["config"]["enabled"] = "1"
+        self.assertEqual(self.levels(self.run_status("dae"))["other-proxy"], "error")
+        self.config["nikki"]["config"]["enabled"] = "0"
+        self.write("proc/124/comm", "daed")
+        self.assertEqual(self.levels(self.run_status("dae"))["other-proxy"], "error")
+
+    def test_dae_enabled_blocks_nikki_even_before_process_start(self):
+        self.config["dae"]["config"]["enabled"] = "1"
+        self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
 
     def test_daed_requires_btf_but_nikki_does_not(self):
         self.write("usr/bin/daed", "test executable placeholder")

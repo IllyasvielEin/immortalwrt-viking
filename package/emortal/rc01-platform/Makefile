@@ -25,12 +25,12 @@ define Build/Compile
 endef
 
 define Package/rc01-platform/install
-  $(INSTALL_DIR) $(1)/etc/init.d $(1)/usr/libexec $(1)/lib/upgrade $(1)/usr/bin $(1)/usr/share/ucode/rc01
-  $(INSTALL_BIN) ./files/rc01-fan.init $(1)/etc/init.d/rc01-fan
-  $(INSTALL_BIN) ./files/rc01-fan-guard $(1)/usr/libexec/rc01-fan-guard
-  $(INSTALL_DATA) ./files/rc01.sh $(1)/lib/upgrade/rc01.sh
-  $(INSTALL_DATA) ./files/platform.uc $(1)/usr/share/ucode/rc01/platform.uc
-  $(INSTALL_BIN) ./files/rc01-check $(1)/usr/bin/rc01-check
+	$(INSTALL_DIR) $(1)/etc/init.d $(1)/usr/libexec $(1)/lib/upgrade $(1)/usr/bin $(1)/usr/share/ucode/rc01
+	$(INSTALL_BIN) ./files/rc01-fan.init $(1)/etc/init.d/rc01-fan
+	$(INSTALL_BIN) ./files/rc01-fan-guard $(1)/usr/libexec/rc01-fan-guard
+	$(INSTALL_DATA) ./files/rc01.sh $(1)/lib/upgrade/rc01.sh
+	$(INSTALL_DATA) ./files/platform.uc $(1)/usr/share/ucode/rc01/platform.uc
+	$(INSTALL_BIN) ./files/rc01-check $(1)/usr/bin/rc01-check
 endef
 
 $(eval $(call BuildPackage,rc01-platform))

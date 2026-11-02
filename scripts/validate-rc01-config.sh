@@ -40,10 +40,12 @@ done
 profiles="$(grep -Ec '^CONFIG_TARGET_.+_DEVICE_.+=y$' "$config" || :)"
 [ "$profiles" -eq 1 ] || { echo "Expected one RC01 device, found $profiles" >&2; exit 1; }
 grep -Fqx 'CONFIG_FEED_nikki=m' "$config" || { echo 'Do not mix the Nikki release binary feed into this source build' >&2; exit 1; }
+grep -Fqx 'CONFIG_FEED_daede=m' "$config" || { echo 'Do not enable a public daede binary feed in this source build' >&2; exit 1; }
 
 for package in \
 	mihomo-alpha sing-box luci-app-homeproxy luci-app-openclash \
-	luci-app-passwall luci-app-passwall2 dae luci-app-dae \
+	luci-app-passwall luci-app-passwall2 luci-app-dae \
+	daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn vmlinux-btf \
 	irqbalance luci-app-qca-ppe-qos qca-ppe-qos qosify sqm-scripts \
 	tcpdump-mini ethtool iw tc-tiny tc-bpf \
 	samba4-server ksmbd-server luci-app-samba4 \
@@ -55,9 +57,9 @@ do
 	fi
 done
 
-with_daed=false
-if grep -Fqx 'CONFIG_PACKAGE_daed=y' "$config"; then
-	with_daed=true
+with_dae=false
+if grep -Fqx 'CONFIG_PACKAGE_dae=y' "$config"; then
+	with_dae=true
 	for symbol in \
 		CONFIG_BPF_TOOLCHAIN_HOST CONFIG_USE_LLVM_HOST \
 		CONFIG_KERNEL_DEBUG_INFO CONFIG_KERNEL_DEBUG_INFO_BTF \
@@ -66,20 +68,25 @@ if grep -Fqx 'CONFIG_PACKAGE_daed=y' "$config"; then
 		CONFIG_KERNEL_BPF_EVENTS CONFIG_KERNEL_BPF_STREAM_PARSER \
 		CONFIG_KERNEL_XDP_SOCKETS CONFIG_PACKAGE_kmod-sched-bpf \
 		CONFIG_PACKAGE_kmod-veth CONFIG_PACKAGE_kmod-xdp-sockets-diag \
-		CONFIG_PACKAGE_daed-geoip CONFIG_PACKAGE_daed-geosite CONFIG_PACKAGE_luci-app-daed
+		CONFIG_DAE_USE_KERNEL_BTF CONFIG_PACKAGE_v2ray-geoip CONFIG_PACKAGE_v2ray-geosite \
+		CONFIG_PACKAGE_luci-app-daede CONFIG_PACKAGE_luci-app-daede_dae
 	do
 		require_y "$symbol"
 	done
 	! grep -Fqx 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y' "$config" || {
-		echo 'daed requires full BTF debug information' >&2; exit 1
+		echo 'dae requires full BTF debug information' >&2; exit 1
 	}
+	[ "$(readlink -f package/feeds/daede/dae)" = "$PWD/feeds/daede/dae" ] || {
+		echo 'dae must come from the pinned daede source feed' >&2; exit 1
+	}
+	! grep -Eq '^CONFIG_(DAE_USE_VMLINUX_BTF|PACKAGE_luci-app-daede_daed)=y$' "$config" || exit 1
 else
-	! grep -Eq '^CONFIG_PACKAGE_(daed.*|luci-app-daed)=[ym]$' "$config" || {
-		echo 'Incomplete daed selection; use the experimental configuration fragment' >&2; exit 1
+	! grep -Eq '^CONFIG_PACKAGE_(dae|luci-app-daede)=[ym]$' "$config" || {
+		echo 'Incomplete dae selection; use the experimental configuration fragment' >&2; exit 1
 	}
 fi
-if [ "${RC01_WITH_DAED:-$with_daed}" != "$with_daed" ]; then
-	echo 'Generated daed selection does not match the requested variant' >&2; exit 1
+if [ "${RC01_WITH_DAE:-$with_dae}" != "$with_dae" ]; then
+	echo 'Generated dae selection does not match the requested variant' >&2; exit 1
 fi
 
 grep -Fq 'ATH12K_PPE_DS_SUPPORT' package/kernel/mac80211/ath.mk || {
@@ -88,4 +95,4 @@ grep -Fq 'ATH12K_PPE_DS_SUPPORT' package/kernel/mac80211/ath.mk || {
 grep -Fq 'DEVICE_DTS_CONFIG_ALIASES := config@al02-c4' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'IMAGE_SIZE := 122880k' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'fw_env_strict_crc_required()' package/boot/uboot-tools/patches/015-envtools-strict-crc.patch || exit 1
-echo "RC01 configuration validation passed (daed test build: $with_daed)"
+echo "RC01 configuration validation passed (dae test build: $with_dae)"

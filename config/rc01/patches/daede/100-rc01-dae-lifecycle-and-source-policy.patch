@@ -1,0 +1,384 @@
+From: IllyasvielEin
+Subject: [PATCH] RC01: reap dae before runtime cleanup and keep source updates
+
+Based on kenzok8/openwrt-daede 1eedcafd1cd4d8a89ac928be6608df76ffb38f78.
+The guard's signal/reap ordering follows that project's daed-guard.
+Retain upstream copyright, licenses, and source provenance.
+
+diff --git a/dae/Makefile b/dae/Makefile
+index f92c4c5..07a5052 100644
+--- a/dae/Makefile
++++ b/dae/Makefile
+@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
+ 
+ PKG_NAME:=dae
+ PKG_VERSION:=2026.10.30
+-PKG_RELEASE:=1
++PKG_RELEASE:=2
+ 
+ PKG_SOURCE:=dae-src-2026.10.30-55c59e68c059.tar.gz
+ PKG_SOURCE_URL:=https://github.com/kenzok8/openwrt-daede/releases/download/dae-src
+@@ -137,6 +137,7 @@ define Package/dae/install
+ 
+ 	$(INSTALL_DIR) $(1)/etc/init.d
+ 	$(INSTALL_BIN) $(CURDIR)/files/dae.init $(1)/etc/init.d/dae
++	$(INSTALL_BIN) $(CURDIR)/files/dae-guard $(1)/usr/bin/dae-guard
+ endef
+ 
+ $(eval $(call GoBinPackage,dae))
+diff --git a/dae/files/dae-guard b/dae/files/dae-guard
+new file mode 100644
+index 0000000..ee6af8f
+--- /dev/null
++++ b/dae/files/dae-guard
+@@ -0,0 +1,109 @@
++#!/bin/sh
++# SPDX-License-Identifier: AGPL-3.0-only
++# RC01 lifecycle guard. Signal/reap ordering follows kenzok8/openwrt-daede's
++# daed-guard at 1eedcafd1cd4d8a89ac928be6608df76ffb38f78.
++# dae owns TC/BPF detach. Never remove shared BPF pins or unrelated links.
++
++dae_guard_cleanup() {
++	local rc namespaces links pid pids
++	# Refuse a second proxy instance or cleanup while another core is alive.
++	pidof dae daed mihomo >/dev/null 2>&1
++	rc=$?
++	case "$rc" in
++		0) logger -t dae-init 'another proxy is running; leaving runtime state untouched'; return 1 ;;
++		1) ;;
++		*) logger -t dae-init 'cannot verify proxy processes; refusing cleanup'; return 1 ;;
++	esac
++	namespaces=$(ip netns list) || return 1
++	links=$(ip -o link show) || return 1
++	if printf '%s\n' "$namespaces" | grep -Eq '^daens([[:space:]]|$)'; then
++		# No userspace core is alive. Only reap the reserved dae namespace.
++		pids=$(ip netns pids daens) || return 1
++		for pid in $pids; do
++			case "$pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
++			kill "$pid" 2>/dev/null || true
++		done
++		pids=$(ip netns pids daens) || return 1
++		if [ -n "$pids" ]; then
++			sleep 1
++			pids=$(ip netns pids daens) || return 1
++			for pid in $pids; do
++				case "$pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
++				kill -9 "$pid" 2>/dev/null || true
++			done
++		fi
++		ip netns del daens || return 1
++	fi
++	if printf '%s\n' "$links" | grep -Eq '^[0-9]+: dae0(@[^:]+)?:'; then
++		ip link del dae0 || return 1
++	fi
++}
++
++dae_guard_main() {
++	dae_guard_cleanup || return 1
++	child_pid=
++	pending_signal=
++	shutdown_signal=
++	shutdown_elapsed=0
++	forced_kill=0
++	child_term_timeout=20
++
++	forward_signal() {
++		local sig="$1"
++		if [ -z "$child_pid" ]; then
++			pending_signal="$sig"
++			return
++		fi
++		case "$sig" in
++			TERM|INT|QUIT)
++				if [ -z "$shutdown_signal" ]; then
++					shutdown_signal="$sig"
++					shutdown_elapsed=0
++				fi ;;
++		esac
++		kill -"$sig" "$child_pid" 2>/dev/null || true
++	}
++	child_is_running() {
++		local state
++		kill -0 "$child_pid" 2>/dev/null || return 1
++		state=$(awk '{ print $3 }' "/proc/$child_pid/stat" 2>/dev/null)
++		[ "$state" != Z ]
++	}
++	trap 'forward_signal TERM' TERM
++	trap 'forward_signal INT' INT
++	trap 'forward_signal HUP' HUP
++	trap 'forward_signal QUIT' QUIT
++	if [ -n "$pending_signal" ]; then
++		trap - TERM INT HUP QUIT
++		return 1
++	fi
++	"${DAE_GUARD_PROGRAM:-/usr/bin/dae}" "$@" &
++	child_pid=$!
++	if [ -n "$pending_signal" ]; then
++		forward_signal "$pending_signal"
++	fi
++	local status=0 cleanup_status=0
++	while :; do
++		if [ -n "$shutdown_signal" ] && child_is_running; then
++			if [ "$shutdown_elapsed" -ge "$child_term_timeout" ] && [ "$forced_kill" -eq 0 ]; then
++				logger -t dae-init 'core did not exit within 20s; killing it; TC/BPF state needs inspection'
++				kill -KILL "$child_pid" 2>/dev/null || true
++				forced_kill=1
++			fi
++			sleep 1
++			shutdown_elapsed=$((shutdown_elapsed + 1))
++			continue
++		fi
++		wait "$child_pid" 2>/dev/null
++		status=$?
++		child_is_running || break
++	done
++	child_pid=
++	trap - TERM INT HUP QUIT
++	# Cleanup happens only after wait has reaped the core, before procd respawn.
++	dae_guard_cleanup || cleanup_status=$?
++	[ "$status" -eq 0 ] || return "$status"
++	return "$cleanup_status"
++}
++
++[ "${DAE_GUARD_LIBRARY:-0}" = 1 ] || dae_guard_main "$@"
+diff --git a/dae/files/dae.init b/dae/files/dae.init
+index 394897e..44d179d 100644
+--- a/dae/files/dae.init
++++ b/dae/files/dae.init
+@@ -28,7 +28,7 @@ start_service() {
+ 
+ 	procd_open_instance "$CONF"
+ 	procd_set_param env DAE_LOCATION_ASSET="/usr/share/v2ray" TZ="$(uci -q get system.@system[0].zonename)"
+-	procd_set_param command "$PROG" run
++	procd_set_param command /usr/bin/dae-guard run
+ 	procd_append_param command --config "$config_file"
+ 	procd_append_param command --logfile "$LOG_DIR/dae.log"
+ 	procd_append_param command --logfile-maxbackups "$log_maxbackups"
+@@ -36,28 +36,17 @@ start_service() {
+ 
+ 	procd_set_param limits core="unlimited"
+ 	procd_set_param limits nofile="1000000 1000000"
+-	procd_set_param respawn
++	procd_set_param term_timeout 30
++	procd_set_param respawn 3600 5 5
+ 	# procd_set_param stdout 1
+ 	procd_set_param stderr 1
+ 
+ 	procd_close_instance
+ }
+ 
++# procd terminates the guard; it forwards TERM and waits before cleanup.
+ stop_service() {
+-	rm -rf "$LOG_DIR"
+-	# kill lingering procs in daens: TERM first, then KILL for stubborn ones
+-	for pid in $(ip netns pids daens 2>/dev/null); do kill "$pid" 2>/dev/null; done
+-	if [ -n "$(ip netns pids daens 2>/dev/null)" ]; then
+-		sleep 1
+-		for pid in $(ip netns pids daens 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
+-	fi
+-	# cleanup daens netns; ip-full needed for netns, busybox fallback via umount
+-	if ! ip netns del daens 2>/dev/null; then
+-		umount /run/netns/daens 2>/dev/null
+-		rm -f /run/netns/daens
+-	fi
+-	# clean orphaned dae0
+-	ip link del dae0 2>/dev/null || true
++	:
+ }
+ 
+ service_triggers() {
+diff --git a/luci-app-daede/Makefile b/luci-app-daede/Makefile
+index 6514a54..6dc9c30 100644
+--- a/luci-app-daede/Makefile
++++ b/luci-app-daede/Makefile
+@@ -6,9 +6,10 @@ include $(TOPDIR)/rules.mk
+ 
+ PKG_NAME:=luci-app-daede
+ PKG_VERSION:=1.15
+-PKG_RELEASE:=13
++PKG_RELEASE:=14
+ PKG_MAINTAINER:=kenzok8
+ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
++PKG_BUILD_DEPENDS:=luci-base/host
+ 
+ include $(INCLUDE_DIR)/package.mk
+ 
+diff --git a/luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js b/luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js
+index f141f74..4e8d1c8 100644
+--- a/luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js
++++ b/luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js
+@@ -34,7 +34,7 @@ const BACKENDS = {
+ 		pkg: 'dae',
+ 		config: '/etc/dae/config.dae',
+ 		hasWebUI: false,
+-		useNetns: false
++		useNetns: true
+ 	}
+ };
+ 
+diff --git a/luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js b/luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js
+index c144f24..9bad036 100644
+--- a/luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js
++++ b/luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js
+@@ -429,6 +429,9 @@ return view.extend({
+ 						meta = _('installed') + ': ' + entry.r.installed + ' · ' + _('up to date');
+ 						btn.disabled = true;
+ 					}
++					// RC01 keeps core/UI in SquashFS and updates them by source build.
++					btn.disabled = true;
++					btn.textContent = '随固件更新';
+ 					const uncertain = entry.r.installed && (indexState !== 'success' || !entry.r.latest);
+ 					pkgBody.appendChild(mkRow(
+ 						updatable ? '↑' : (uncertain ? '⚠' : (entry.r.installed ? '✓' : '✗')),
+diff --git a/luci-app-daede/root/etc/config/daede b/luci-app-daede/root/etc/config/daede
+index a5b9a64..5084c5b 100644
+--- a/luci-app-daede/root/etc/config/daede
++++ b/luci-app-daede/root/etc/config/daede
+@@ -1,2 +1,5 @@
+ config daede 'config'
+-	option active_backend 'daed'
++	option active_backend 'dae'
++	# Match the v2fly data built into this firmware.
++	option geoip_url 'https://github.com/v2fly/geoip/releases/latest/download/geoip.dat'
++	option geosite_url 'https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat'
+diff --git a/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh b/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh
+index 1c0e47a..48a927d 100755
+--- a/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh
++++ b/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh
+@@ -1,132 +1,5 @@
+ #!/bin/sh
+-# update-pkg.sh <dae|daed|luci-app-daede>
+-# Refresh package indexes and upgrade the named package via apk (25.12+) or
+-# opkg (24.10). Forks the work to background so the LuCI RPC call returns
+-# immediately; the result is streamed to /tmp/luci-app-daede.pkg.<name>.log.
+-
+-PKG="$1"
+-case "$PKG" in
+-	dae|daed|luci-app-daede) ;;
+-	*)
+-		echo "usage: $0 <dae|daed|luci-app-daede>" >&2
+-		exit 64
+-		;;
+-esac
+-
+-# run from a /tmp copy so upgrading luci-app-daede (which replaces this script)
+-# can't corrupt the in-flight upgrade
+-case "$0" in
+-	/tmp/.daede-upd-*) ;;
+-	*)
+-		_self="/tmp/.daede-upd-$$"
+-		cp "$0" "$_self" 2>/dev/null && exec sh "$_self" "$@"
+-		;;
+-esac
+-
+-LOCK="/tmp/luci-app-daede.pkg-${PKG}.lock"
+-LOG="/tmp/luci-app-daede.pkg-${PKG}.log"
+-
+-if [ -f "$LOCK" ]; then
+-	mtime=$(date -r "$LOCK" +%s 2>/dev/null || echo 0)
+-	age=$(( $(date +%s) - mtime ))
+-	if [ "$age" -lt 300 ]; then
+-		echo "${PKG} update already in progress (PID $(cat "$LOCK" 2>/dev/null), age ${age}s)" >&2
+-		exit 75
+-	fi
+-	rm -f "$LOCK"
+-fi
+-
+-if ! ( set -C; echo "$$" >"$LOCK" ) 2>/dev/null; then
+-	echo "${PKG} update already in progress" >&2
+-	exit 75
+-fi
+-
+-(
+-	exec >"$LOG" 2>&1
+-	trap 'rm -f "$LOCK"; [ "${0#/tmp/.daede-upd-}" != "$0" ] && rm -f "$0"' EXIT INT TERM
+-
+-	echo "$(date '+%F %T') begin upgrade: $PKG"
+-
+-	if command -v apk >/dev/null 2>&1; then
+-		# shared apk lock with the bg index refresh (avoid "Unable to lock database")
+-		(
+-			flock 9 || exit 1
+-			if ! apk info -e "$PKG" >/dev/null 2>&1; then
+-				echo "result: $PKG 未通过包管理器安装，不能在线升级"
+-				exit 1
+-			fi
+-			if ! apk update 2>&1; then
+-				echo "result: 软件源刷新失败，请检查网络和软件源配置"
+-				exit 1
+-			fi
+-			ver=$(apk list -a "$PKG" 2>/dev/null | awk -v p="$PKG" '$1 ~ "^" p "-[0-9]" { v=$1; sub("^" p "-", "", v); print v }' | sort -V | tail -1)
+-			if [ -n "$ver" ]; then
+-				constraint="$PKG=$ver"
+-			else
+-				echo "result: 软件源中没有找到 $PKG，请检查网络或软件源配置"
+-				exit 1
+-			fi
+-			installed=$(apk list -I "$PKG" 2>/dev/null | awk -v p="$PKG" '$1 ~ "^" p "-[0-9]" { v=$1; sub("^" p "-", "", v); print v; exit }')
+-			if [ -n "$installed" ] && [ "$(printf '%s\n%s\n' "$ver" "$installed" | sort -V | tail -1)" = "$installed" ]; then
+-				echo "result: $PKG 已安装版本不低于软件源版本，无需升级"
+-				exit 2
+-			fi
+-
+-			echo "--- apk add -s $constraint ---"
+-			if ! apk add -s "$constraint" 2>&1; then
+-				echo "note: apk 预检失败，通常是系统上其它软件包的问题，继续尝试升级"
+-			fi
+-			echo "--- apk add $constraint ---"
+-			apk add "$constraint" 2>&1
+-			add_rc=$?
+-			[ "$add_rc" -eq 0 ] || exit 1
+-			if ! apk list -I "$PKG" 2>/dev/null | awk -v p="$PKG" -v v="$ver" '$1 == p "-" v { found = 1 } END { exit !found }'; then
+-				echo "result: $PKG was not upgraded to $ver"
+-				exit 1
+-			fi
+-			exit 0
+-		) 9>/tmp/luci-app-daede.apk.lock
+-		rc=$?
+-		if [ "$rc" = 2 ]; then
+-			:
+-		elif [ "$rc" != 0 ]; then
+-			:
+-		elif apk list -u 2>/dev/null | grep -q "^${PKG}-"; then
+-			echo "result: $PKG still has a pending upgrade"
+-			rc=1
+-		else
+-			echo "result: $PKG is at the latest available version"
+-			rc=0
+-		fi
+-	elif command -v opkg >/dev/null 2>&1; then
+-		echo "--- opkg update ---"
+-		if opkg update 2>&1; then
+-			echo "--- opkg upgrade $PKG ---"
+-			opkg upgrade "$PKG" 2>&1
+-			rc=$?
+-		else
+-			echo "result: 软件源刷新失败，请检查网络和软件源配置"
+-			rc=1
+-		fi
+-	else
+-		echo "no package manager found"
+-		rc=3
+-	fi
+-
+-	if [ "$rc" = 0 ]; then
+-		echo "$(date '+%F %T') ✓ 完成"
+-	elif [ "$rc" = 2 ]; then
+-		echo "$(date '+%F %T') ✓ 无需升级"
+-	else
+-		echo "$(date '+%F %T') ✗ 失败 (rc=$rc)"
+-	fi
+-
+-	# luci-app-daede upgrade replaces ACL JSON — reload rpcd so changes apply.
+-	if [ "$PKG" = "luci-app-daede" ] && [ "$rc" = "0" ]; then
+-		echo "reloading rpcd to pick up new ACL"
+-		/etc/init.d/rpcd reload 2>&1
+-	fi
+-) </dev/null >/dev/null 2>&1 &
+-
+-echo "started in background, see $LOG"
+-exit 0
++# SPDX-License-Identifier: Apache-2.0
++# RC01 source policy: replace core/UI through a reviewed firmware build.
++echo 'RC01: online core/UI upgrades are disabled; rebuild the pinned firmware.' >&2
++exit 1

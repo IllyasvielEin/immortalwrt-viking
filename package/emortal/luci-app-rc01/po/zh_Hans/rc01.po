@@ -184,8 +184,8 @@ msgstr "旁路由网络应保持手动管理"
 msgid "Validate the proxy with flow offload disabled before testing acceleration coexistence"
 msgstr "先在关闭 flow offload 的条件下验证代理，再测试与加速共存"
 
-msgid "daed requires runtime kernel BTF"
-msgstr "daed 需要运行内核提供 BTF"
+msgid "dae/daed requires runtime kernel BTF"
+msgstr "dae/daed 需要运行内核提供 BTF"
 
 msgid "Read-only preflight does not test DNS, routing, TCP/UDP, IPv6 or leak protection"
 msgstr "只读预检未测试 DNS、路由、TCP/UDP、IPv6 或防泄漏"

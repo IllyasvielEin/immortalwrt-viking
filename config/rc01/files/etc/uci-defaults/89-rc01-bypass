@@ -47,8 +47,10 @@ uci commit firewall
 
 # Installed for later use, with no unattended VPN/proxy startup.
 [ ! -x /etc/init.d/tailscale ] || /etc/init.d/tailscale disable
-if [ -x /etc/init.d/daed ]; then
-	uci -q set daed.config.enabled='0'
-	uci -q commit daed
+if [ -x /etc/init.d/dae ]; then
+	uci -q set dae.config.enabled='0'
+	uci -q set daede.config.active_backend='dae'
+	uci -q commit dae
+	uci -q commit daede
 fi
 exit 0

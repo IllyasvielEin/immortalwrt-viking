@@ -26,7 +26,7 @@
 自动合并上游、发布 Release、上传路由器或刷机步骤。将工作流提交到自己的
 fork 默认分支后，可以在 Actions 中手动启动。
 
-`config/rc01/feeds.conf` 固定四个 feed 的提交；Nikki 固定v1.26.2，源码构建
+`config/rc01/feeds.conf` 固定五个 feed 的提交；Nikki 固定v1.26.2，源码构建
 Mihomo 1.19.32。准备脚本仅安装所选软件及依赖，移除会造成Kconfig循环的alpha核心
 定义，并记录一处使用 `SOURCE_DATE_EPOCH` 的Mihomo构建时间修改。
 
@@ -46,12 +46,13 @@ make -j4
 python3 -B scripts/verify-rc01-images.py bin/targets/qualcommbe/ipq95xx
 ```
 
-需要与AX6000的旧daed做对照时，可在Actions手动选择 `include_daed`，
-或在本地把第一条命令换成 `RC01_WITH_DAED=true sh scripts/prepare-rc01.sh`。
-该选项合并 `config/rc01/daed.config`，启用主机LLVM、完整BTF、cgroup/BPF事件、
-stream parser、veth及相关TC/XDP模块，并选入daed及其LuCI和地理数据库。
-本地需要可用的clang/LLVM；Actions已安装。它仍保留Nikki，首启daed的
-`enabled=0`，不自动接管流量。测试产物以 `daed-test` 标注。
+在Actions选择 `include_dae`，或本地使用
+`RC01_WITH_DAE=true sh scripts/prepare-rc01.sh`，构建 **dae + luci-app-daede** 实验版。
+此选项替代此前的旧daed实验配置，合并 `config/rc01/dae.config`，启用主机LLVM、
+完整内核BTF、cgroup/BPF事件、stream parser、veth及TC/XDP模块。
+它仍保留Nikki，两者首启均不接管流量；产物以 `dae-test` 标注。
+本地需要clang/LLVM，当前锁定的Go工具链已为1.27。源码更新脚本不执行上游一键安装器，
+不启用公共二进制feed；核心和LuCI随固件重编升级，地理数据库可以单独更新。
 
 准备脚本会重建生成的 feeds 包链接、`feeds.conf`、`.config` 和 `files` 中的RC01
 覆盖文件；不要在这些生成位置保存个人配置。版本源文件分别位于
@@ -62,7 +63,7 @@ Actions 使用Ubuntu24.04、4个编译任务和独立的下载/ccache缓存。�
 factory.ubi、sysupgrade.bin、完整配置、diffconfig、feeds锁、manifest、校验和、
 提交及构建时间记录、Nikki配方差异和本次构建的APK包及公钥；不上传签名私钥。
 本固件没有启用未经核对的公共APK源，后续安装应使用同一构建的包归档或经过验证的源。
-daed测试构建额外校验实际内核配置和 `vmlinux` 的BTF段；只勾选LuCI软件包不算通过。
+dae测试构建额外校验实际内核配置和 `vmlinux` 的BTF段；只勾选LuCI软件包不算通过。
 两种构建都遵守同一个32 MiB data卷LEB预算，超限时失败，不自动削减预留空间。
 
 ## 启动和存储检查
@@ -87,7 +88,7 @@ overlay另存一份大文件；默认通过重编固件升级核心，需要独�
 - Router Tool保留，自动路由预设关闭，平台PPE默认设置仍初始化一次。后续手动修改
   offload不会被每次重载覆盖。LuCI保存路径同样遵守手动管理选项。
 - 三路无线在首次生成配置时即关闭，没有SSID密码、订阅或代理账号预置。
-- Nikki和Mihomo默认选入构建，但未配置代理接管。NAS、UPnP不选入；daed仅为可选测试构建。
+- Nikki和Mihomo默认选入构建，但未配置代理接管。NAS、UPnP不选入；dae/daede仅为可选测试构建。
 
 不能保留QWRT的eth接口配置跨驱动升级。单客户端代理验证应同时检查DNS、IPv6和
 同网段回程；关闭RC01自己的RA不会阻止GS7的RA抵达同一二层网络的客户端。
@@ -118,7 +119,7 @@ PPE转发加速也不代表Mihomo、dae、WireGuard或Tailscale的加密由PPE�
 自用镜像包含 `luci-app-rc01`，入口为 **状态 → RC01 硬件状态**。每5秒读取一次
 温区、EMC风扇、网口、分区与UBI卷、overlay可用空间、PPE活跃流、无线禁用配置和
 核心进程RSS；刷新失败后清除旧读数。中文语言总开关及相关翻译包由构建校验强制确认。
-缺少可选daed时界面显示“本次构建未选入”，不会把它当成必需硬件故障。
+缺少可选dae/daed时界面显示“本次构建未选入”，不会把它当成必需硬件故障。
 
 安装本固件后，可使用以下只读命令；输出直接写到终端，不生成报告文件：
 
@@ -126,12 +127,13 @@ PPE转发加速也不代表Mihomo、dae、WireGuard或Tailscale的加密由PPE�
 rc01-check status
 rc01-check check hardware
 rc01-check check nikki
+rc01-check check dae
 rc01-check check daed
 ```
 
 `status` 输出JSON快照；`check` 输出所选预检项，发现错误时退出码为1，参数错误为2。
 警告不会被当成已验证的兼容性结论。代理预检检查核心可执行性、双核心或启用状态冲突、
-手动网络管理及offload基线；daed还要求运行内核的BTF文件。
+手动网络管理及offload基线；dae/daed还要求运行内核的BTF文件。
 不会启动/停止代理、加载或卸载驱动、改防火墙、改风扇、发送测速流量或刷写分区。
 
 RPC仅开放 `rc01.status` 的读取权限，没有执行命令、UCI写入或启停服务的接口。
@@ -141,23 +143,31 @@ CRC检查仍由已有升级前检查执行。无线禁用配置不能替代实�
 端口未插线或速率不可读也不会被误报为硬件损坏。硬件故障、内核BPF加载和流量验收仍需
 在后续独立实机测试中确认。
 
-## daed核查与试验顺序
+## dae/daede源码与试验顺序
 
-2026-11-02核查：AX6000锁定feed和本仓库锁定feed均提供daed **1.27.0**。
-追踪其git子模块得到 `wing=6bb6a310ef3d98bea691fd5955cc703306835546`，
-`dae-core=7e67e31e241a6d2cc5f2b5ff228b4fb5faf6d24a`，对应 **dae 1.1.0rc1**。
-它不是当前独立dae的版本。官方daed与dae-wing仓库已归档，daed最后发布v2.1.1；
-dae仓库仍在维护。本次没有擅自追踪main或把package版本号改成最新版。
+2026-11-02接入 `kenzok8/openwrt-daede` 固定提交
+`1eedcafd1cd4d8a89ac928be6608df76ffb38f78`：dae **2026.10.30-r2**、LuCI **1.15-r14**，
+release增加用于区分本地修补。核心使用官方dae加olicesx性能分支整合源码，outbound与
+quic-go也有固定性能分支，不能称为纯官方dae。源包完整SHA256在配方中，组件提交在
+feed的 `ci/pins.env`；CI产物同时保存该锁和本地补丁。保留来源、原作者与许可。
 
-RC01的Linux6.18.55满足该核心的最低5.17门槛，但原最小配置缺少完整BTF及BPF事件等
-前提；不能只据内核版本认定可用。社区存在daed1.27.0内存持续增长的报告，涉及ARM64
-及x86用户，不能视为本机已复现。另有新版daed1.28/dae main在6.18 IPQ6010上的
-网络命名空间故障报告，版本与硬件均不同，不能直接套在此构建。
+本地补丁位于 `config/rc01/patches/daede/`，由准备脚本按固定HEAD幂等应用：
+- dae由guard托管，TERM转发后最多等待20秒，回收核心后再清理保留名称daens/dae0；
+  发现其他代理进程或不能核实状态时拒绝清理/启动，不删除共享BPF pin或其他TC规则。
+  核心负责TC/BPF脱附，强制终止后仍需单独核对TC状态。
+- 使用本次实际内核的BTF，不选另编影子内核的vmlinux-btf包。
+- LuCI默认后端为dae，默认地理数据库更新源与镜像内v2fly数据一致，规则使用cn。
+- 禁止LuCI在线升级核心/UI，防止脱离源码锁定并在overlay复制ROM大文件。
+
+旧实验项使用daed1.27.0与归档dae-wing；本次不再选择它，也不同时安装旧luci-app-daed。
+本次LuCI已包括中文资源，支持节点转换及表单配置；Clash YAML转换不等于迁移完整
+Mihomo分流、分组和DNS配置。当前QWRT5.4不适用于此核心；试验平台为新固件的6.18。
+配置或编译通过均不表示RC01/PPE/无线DS已实机兼容。
 
 试验按以下顺序，涉及实机操作时单独执行：
 
 1. 首次完整构建先通过编译内核/BTF、镜像和容量检查；不要将“配置通过”称为“构建通过”。
-2. 保持Nikki/daed都未接管，核对基础网络与恢复入口。每次只启动一个透明代理，切换前停掉
+2. 保持Nikki/dae都未接管，核对基础网络与恢复入口。每次只启动一个透明代理，切换前停掉
    旧服务并核对TC/BPF、nft规则、DNS监听和策略路由；安装在同一镜像不等于同时运行。
 3. 选一个测试客户端、保留其他客户端原网关。以软件/硬件flow offload关闭为代理基线，
    验证旁路由LAN接口与本机出站接口绑定，不能将被禁用的 `network.wan` 当作实际上联。
@@ -167,22 +177,15 @@ RC01的Linux6.18.55满足该核心的最低5.17门槛，但原最小配置缺少
 5. 保持新连接测试方法一致，再对照软件offload、PPE与无线DS。未证明代理流量正确排除前
    不承诺全加速共存，也不为测代理而卸载PPE驱动或破坏LAN硬件网桥。
 6. 通过前述项目后做24–48小时内存、连接反复建立、DNS缓存及冷启动检查。
-   RSS持续增长、接管漏流量、DNS失联、内核异常或管理不可达时停止daed试验并恢复Nikki基线；
+   RSS持续增长、接管漏流量、DNS失联、内核异常或管理不可达时停止dae试验并恢复Nikki基线；
    zram不能当作内存泄漏的修复。
 
-若长期使用eBPF代理优先级较高，再评估维护中的独立dae及 `luci-app-dae`，或对daed新版本
-做单独移植。两者的UI、核心、配置和数据库不能仅改一个版本号替换；本阶段不将其冒充为
-已验收的RC01增强软件。在检查的官方仓库、issues与Viking资料中，未找到这套RC01/6.18.55/
-PPE/daed组合的直接实机验收记录，未覆盖私有群聊与未索引帖子。
-
 核查来源：
-
-- [AX6000实际配置](https://github.com/IllyasvielEin/immortalwrt-mt798x/blob/6eeefe96793e0ab0181d6b9d97ed6b9b63e84126/defconfig/mt7986-ax6000.config)
-- [daed官方仓库及归档状态](https://github.com/daeuniverse/daed)、[dae-wing](https://github.com/daeuniverse/dae-wing)、[dae核心与内核要求](https://github.com/daeuniverse/dae/blob/main/docs/en/README.md)
-- [daed1.27内存增长报告#998](https://github.com/daeuniverse/dae/issues/998)
-- [新版dae在6.18/IPQ6010的命名空间报告#1136](https://github.com/daeuniverse/dae/issues/1136)
+- [固定源码及组件锁](https://github.com/kenzok8/openwrt-daede/blob/1eedcafd1cd4d8a89ac928be6608df76ffb38f78/ci/pins.env)
+- [发布版跨架构CI](https://github.com/kenzok8/openwrt-daede/actions/runs/41186972600)
+- [重启/命名空间问题#13](https://github.com/kenzok8/openwrt-daede/issues/13)
+- [规则与geosite不匹配#109](https://github.com/kenzok8/openwrt-daede/issues/109)
 - [单接口旁路接管报告#1032](https://github.com/daeuniverse/dae/issues/1032)
-- [本基线的qca-ppe-qos适用目标](https://github.com/VIKINGYFY/immortalwrt/blob/e5b0e82156513e81b6b712e4498ab15fd3a28571/package/network/config/qca-ppe-qos/Makefile)
 
 ## 风扇与实机验收
 

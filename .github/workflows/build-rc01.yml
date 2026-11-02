@@ -3,8 +3,8 @@ name: Build Xiaomi RC01 firmware
 on:
   workflow_dispatch:
     inputs:
-      include_daed:
-        description: 'Experimental daed 1.27.0 build (archived upstream; runtime unverified)'
+      include_dae:
+        description: 'Experimental dae 2026.10.30 + daede UI (runtime unverified)'
         type: boolean
         required: true
         default: false
@@ -20,7 +20,7 @@ env:
   TARGET_DIR: bin/targets/qualcommbe/ipq95xx
   CCACHE_MAXSIZE: 3G
   TZ: Asia/Singapore
-  RC01_WITH_DAED: ${{ inputs.include_daed }}
+  RC01_WITH_DAE: ${{ inputs.include_dae }}
 
 jobs:
   build:
@@ -62,18 +62,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dl
-          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/daed.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}
+          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}
           restore-keys: |
-            rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/daed.config', 'defconfig/qualcommbe-rc01.config') }}-
+            rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-
             rc01-dl-${{ runner.os }}-
 
       - name: Restore compiler cache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: rc01-ccache-${{ runner.os }}-${{ inputs.include_daed }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/daed.config', 'target/linux/generic/kernel-6.18') }}-${{ github.run_id }}
+          key: rc01-ccache-${{ runner.os }}-${{ inputs.include_dae }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config', 'target/linux/generic/kernel-6.18') }}-${{ github.run_id }}
           restore-keys: |
-            rc01-ccache-${{ runner.os }}-${{ inputs.include_daed }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/daed.config', 'target/linux/generic/kernel-6.18') }}-
+            rc01-ccache-${{ runner.os }}-${{ inputs.include_dae }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config', 'target/linux/generic/kernel-6.18') }}-
 
       - name: Run offline regression checks
         run: python3 -B -m unittest discover -s tests/rc01 -v
@@ -113,10 +113,10 @@ jobs:
           done
           ath12k_wifi7="$(find build_dir -type f -name ath12k_wifi7.ko -print -quit)"
           grep -aq 'unsupported-mlo' "$ath12k_wifi7"
-          if [ "$RC01_WITH_DAED" = true ]; then
+          if [ "$RC01_WITH_DAE" = true ]; then
             kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
             test -n "$kernel_dir"
-            sh scripts/validate-rc01-daed-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
+            sh scripts/validate-rc01-dae-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
           fi
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
           UCODE="$PWD/staging_dir/hostpkg/bin/ucode" python3 -B -m unittest discover -s tests/rc01 -v
@@ -136,18 +136,23 @@ jobs:
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
             echo "kernel=$(cat target/linux/generic/kernel-6.18)"
             echo "physical_acceptance=not-performed"
-            echo "daed_test_build=$RC01_WITH_DAED"
-            for feed in packages luci routing nikki; do
+            echo "dae_test_build=$RC01_WITH_DAE"
+            for feed in packages luci routing nikki daede; do
               echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
             done
           } > "$TARGET_DIR/rc01-build-metadata.txt"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
+          if [ "$RC01_WITH_DAE" = true ]; then
+            cp feeds/daede/ci/pins.env "$TARGET_DIR/rc01-daede-upstream.lock"
+            cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
+            cp feeds/daede/dae/Makefile "$TARGET_DIR/rc01-dae.Makefile"
+          fi
           (cd "$TARGET_DIR"; sha256sum *xiaomi_be10000-squashfs-* > rc01-images.sha256)
 
       - name: Upload verified images and build metadata
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-duv2-120m-${{ inputs.include_daed && 'daed-test' || 'nikki' }}-${{ github.run_number }}
+          name: rc01-duv2-120m-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |

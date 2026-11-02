@@ -51,7 +51,7 @@ function contents(state) {
 	];
 	for (const preflight of state.preflight) {
 		nodes.push(E('h3', {}, `${_('Preflight')}: ${preflight.target}`));
-		if (preflight.target === 'daed' && !state.proxy.daed_installed) {
+		if (['dae', 'daed'].includes(preflight.target) && !state.proxy[preflight.target + '_installed']) {
 			nodes.push(E('p', {}, _('Not included in this build')));
 			continue;
 		}

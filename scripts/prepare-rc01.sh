@@ -3,10 +3,13 @@
 set -eu
 
 cd "$(dirname "$0")/.."
-with_daed="${RC01_WITH_DAED:-false}"
-case "$with_daed" in
+[ -z "${RC01_WITH_DAED+x}" ] || {
+	echo 'RC01_WITH_DAED was replaced by RC01_WITH_DAE (dae + daede)' >&2; exit 1
+}
+with_dae="${RC01_WITH_DAE:-false}"
+case "$with_dae" in
 	true|false) ;;
-	*) echo 'RC01_WITH_DAED must be true or false' >&2; exit 1 ;;
+	*) echo 'RC01_WITH_DAE must be true or false' >&2; exit 1 ;;
 esac
 cp config/rc01/feeds.conf feeds.conf
 ./scripts/feeds update -a
@@ -18,8 +21,11 @@ cp config/rc01/feeds.conf feeds.conf
 	luci-app-nikki luci-i18n-nikki-zh-cn \
 	luci-proto-wireguard luci-app-tailscale-community luci-i18n-tailscale-community-zh-cn \
 	luci-app-cpufreq luci-i18n-cpufreq-zh-cn conntrack iperf3 pciutils usbutils
-if [ "$with_daed" = true ]; then
-	./scripts/feeds install luci-app-daed luci-i18n-daed-zh-cn
+if [ "$with_dae" = true ]; then
+	# Override the old dae provider before resolving the UI dependency.
+	sh scripts/patch-rc01-daede.sh feeds/daede
+	./scripts/feeds uninstall dae daed luci-app-dae luci-app-daed
+	./scripts/feeds install -f -p daede dae luci-app-daede
 fi
 
 # Nikki's stable and alpha providers have symmetric CONFLICTS. Keeping both
@@ -60,10 +66,12 @@ mkdir -p files
 cp -a config/rc01/files/. files/
 chmod 755 files/etc/board.d/99-rc01-wireless files/etc/uci-defaults/89-rc01-bypass
 cp defconfig/qualcommbe-rc01.config .config
-if [ "$with_daed" = true ]; then
+if [ "$with_dae" = true ]; then
 	# Replace symbols rather than creating contradictory duplicate entries.
-	./scripts/kconfig.pl + .config config/rc01/daed.config > .config.rc01
+	./scripts/kconfig.pl + .config config/rc01/dae.config > .config.rc01
 	mv .config.rc01 .config
 fi
 make defconfig
-RC01_WITH_DAED="$with_daed" sh scripts/validate-rc01-config.sh .config
+RC01_WITH_DAE="$with_dae" sh scripts/validate-rc01-config.sh .config
+# Parse expanded install recipes before spending time compiling a toolchain.
+make -C package/emortal/rc01-platform TOPDIR="$PWD" -n compile >/dev/null

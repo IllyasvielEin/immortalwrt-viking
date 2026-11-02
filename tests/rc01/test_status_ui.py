@@ -26,13 +26,14 @@ class StatusInterfaces(unittest.TestCase):
                 return { schema: 1, preflight: [
                   { target: 'hardware', passed: true, checks: [] },
                   { target: 'nikki', passed: true, checks: [] },
+                  { target: 'dae', passed: false, checks: [] },
                   { target: 'daed', passed: false, checks: [] }
                 ] };
             }\n''')
             command = [UCODE, "-L", str(path / "*.uc")]
             cli = ROOT / "package/emortal/rc01-platform/files/rc01-check"
             for args, code in [(["status"], 0), (["check", "hardware"], 0),
-                               (["check", "daed"], 1), (["check", "invalid"], 2),
+                               (["check", "dae"], 1), (["check", "daed"], 1), (["check", "invalid"], 2),
                                (["status", "nikki"], 2)]:
                 result = subprocess.run(command + [str(cli)] + args, text=True, capture_output=True)
                 self.assertEqual(result.returncode, code, result.stderr)
