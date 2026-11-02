@@ -1,0 +1,187 @@
+name: Build Xiaomi RC01 firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_daed:
+        description: 'Experimental daed 1.27.0 build (archived upstream; runtime unverified)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc01-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TARGET_DIR: bin/targets/qualcommbe/ipq95xx
+  CCACHE_MAXSIZE: 3G
+  TZ: Asia/Singapore
+  RC01_WITH_DAED: ${{ inputs.include_daed }}
+
+jobs:
+  build:
+    name: RC01 Du v2 / 120 MiB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout custom source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record source time
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+
+      - name: Reclaim runner space
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo docker system prune --all --force --volumes || true
+          df -h
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential clang llvm flex bison gawk gcc-multilib gettext git \
+            libncurses-dev libssl-dev zlib1g-dev python3-dev python3-setuptools \
+            python3-pyelftools python3-cryptography rsync swig unzip file wget \
+            pkg-config ca-certificates xz-utils zstd device-tree-compiler shellcheck
+
+      - name: Restore source downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/daed.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}
+          restore-keys: |
+            rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/daed.config', 'defconfig/qualcommbe-rc01.config') }}-
+            rc01-dl-${{ runner.os }}-
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: rc01-ccache-${{ runner.os }}-${{ inputs.include_daed }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/daed.config', 'target/linux/generic/kernel-6.18') }}-${{ github.run_id }}
+          restore-keys: |
+            rc01-ccache-${{ runner.os }}-${{ inputs.include_daed }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/daed.config', 'target/linux/generic/kernel-6.18') }}-
+
+      - name: Run offline regression checks
+        run: python3 -B -m unittest discover -s tests/rc01 -v
+
+      - name: Prepare locked feeds and configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/prepare-rc01.sh 2>&1 | tee prepare.log
+          ./scripts/diffconfig.sh > rc01.diffconfig
+
+      - name: Download package sources
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! make -j4 download 2>&1 | tee download.log; then
+            make -j1 V=s download 2>&1 | tee -a download.log
+          fi
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! make -j4 2>&1 | tee build.log; then
+            make -j1 V=s 2>&1 | tee -a build.log
+          fi
+
+      - name: Verify boot compatibility and image budget
+        run: python3 -B scripts/verify-rc01-images.py "$TARGET_DIR"
+
+      - name: Verify native driver artifacts and runtime scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in ath12k.ko ath12k_wifi7.ko qcom-ppe.ko emc2305.ko; do
+            test -n "$(find build_dir -type f -name "$module" -print -quit)"
+          done
+          ath12k_wifi7="$(find build_dir -type f -name ath12k_wifi7.ko -print -quit)"
+          grep -aq 'unsupported-mlo' "$ath12k_wifi7"
+          if [ "$RC01_WITH_DAED" = true ]; then
+            kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
+            test -n "$kernel_dir"
+            sh scripts/validate-rc01-daed-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
+          fi
+          test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
+          UCODE="$PWD/staging_dir/hostpkg/bin/ucode" python3 -B -m unittest discover -s tests/rc01 -v
+
+      - name: Record build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .config "$TARGET_DIR/rc01.config"
+          cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
+          cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "source_tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "viking_baseline=e5b0e82156513e81b6b712e4498ab15fd3a28571"
+            echo "source_date_epoch=$SOURCE_DATE_EPOCH"
+            echo "kernel=$(cat target/linux/generic/kernel-6.18)"
+            echo "physical_acceptance=not-performed"
+            echo "daed_test_build=$RC01_WITH_DAED"
+            for feed in packages luci routing nikki; do
+              echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
+            done
+          } > "$TARGET_DIR/rc01-build-metadata.txt"
+          git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
+          (cd "$TARGET_DIR"; sha256sum *xiaomi_be10000-squashfs-* > rc01-images.sha256)
+
+      - name: Upload verified images and build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-duv2-120m-${{ inputs.include_daed && 'daed-test' || 'nikki' }}-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.TARGET_DIR }}/*xiaomi_be10000-squashfs-*
+            ${{ env.TARGET_DIR }}/rc01*
+            ${{ env.TARGET_DIR }}/*.manifest
+            ${{ env.TARGET_DIR }}/config.buildinfo
+            ${{ env.TARGET_DIR }}/feeds.buildinfo
+            ${{ env.TARGET_DIR }}/version.buildinfo
+            ${{ env.TARGET_DIR }}/profiles.json
+            ${{ env.TARGET_DIR }}/sha256sums
+
+      - name: Upload matching package archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-packages-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            bin/packages/**/*.apk
+            ${{ env.TARGET_DIR }}/packages/*.apk
+            key-build.pub
+            key-build.ucert
+            public-key.pem
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-failure-logs-${{ github.run_number }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            prepare.log
+            download.log
+            build.log
+            logs

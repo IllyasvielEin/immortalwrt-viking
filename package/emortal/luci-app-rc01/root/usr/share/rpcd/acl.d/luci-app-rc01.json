@@ -1,0 +1,8 @@
+{
+  "luci-app-rc01": {
+    "description": "Read RC01 hardware and proxy preflight status",
+    "read": {
+      "ubus": { "rc01": [ "status" ] }
+    }
+  }
+}

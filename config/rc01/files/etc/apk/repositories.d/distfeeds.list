@@ -1,0 +1,3 @@
+# This source build has no verified matching public binary repository.
+# Use the APK archives from the same RC01 CI build, or configure a repository
+# whose userspace and kernel ABI have been verified for this exact image.

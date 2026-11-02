@@ -84,7 +84,7 @@ try {
 		die('Mode switch refused: an AP snapshot exists while AP mode is disabled; restore AP mode and use LuCI to switch back');
 	if (ap) check_snapshot(uci, read_snapshot(uci.get('router-tool', 'main', 'ap_state'), 'ap'));
 	let upstream = [];
-	if (!ap) {
+	if (!ap && uci.get('router-tool', 'main', 'auto_network') != '0') {
 		try {
 			let bus = connect();
 			let status = bus?.call('network.interface.wan', 'status', {});
@@ -140,7 +140,8 @@ try {
 		save_transaction(transaction_path, pending);
 		changed = commit(pending);
 	}
-	let mode = ap ? 'ap' : uci.get('network', 'wan', 'proto') == 'pppoe' ? 'main' : 'sub';
+	let mode = ap ? 'ap' : uci.get('router-tool', 'main', 'auto_network') == '0' ? 'manual' :
+		uci.get('network', 'wan', 'proto') == 'pppoe' ? 'main' : 'sub';
 	let status = sprintf('%J', { mode: missing_snapshot ? 'ap-pending' : mode,
 		lan_proto: uci.get('network', 'lan', 'proto'), lan_address: uci.get('network', 'lan', 'ipaddr') });
 	if (readfile('/var/run/router-tool-status') != status) {

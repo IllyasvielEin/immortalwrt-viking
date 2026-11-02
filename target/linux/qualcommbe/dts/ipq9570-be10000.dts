@@ -167,12 +167,78 @@
 	};
 };
 
-/* Stock probes several alternative fan controllers on this bus. */
+/* EMC2301 at 0x2f was verified on this RC01 running QWRT. */
 &blsp1_i2c3 {
 	pinctrl-0 = <&i2c3_default>;
 	pinctrl-names = "default";
 	clock-frequency = <100000>;
 	status = "okay";
+
+	rc01_fan_controller: fan-controller@2f {
+		compatible = "microchip,emc2301", "microchip,emc2305";
+		reg = <0x2f>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		#pwm-cells = <3>;
+
+		rc01_fan: fan@0 {
+			reg = <0>;
+			/* Match the driver's default 26 kHz, normal, open-drain PWM. */
+			pwms = <&rc01_fan_controller 26000 0 0>;
+			#cooling-cells = <2>;
+		};
+	};
+};
+
+/* Keep the original critical trip and CPU throttling zones intact. */
+&{/thermal-zones/nss-top-thermal} {
+	polling-delay = <1000>;
+	polling-delay-passive = <1000>;
+
+	trips {
+		rc01_fan_base: fan-base {
+			temperature = <0>;
+			hysteresis = <0>;
+			type = "active";
+		};
+
+		rc01_fan_warm: fan-warm {
+			temperature = <50000>;
+			hysteresis = <3000>;
+			type = "active";
+		};
+
+		rc01_fan_hot: fan-hot {
+			temperature = <60000>;
+			hysteresis = <3000>;
+			type = "active";
+		};
+
+		rc01_fan_full: fan-full {
+			temperature = <70000>;
+			hysteresis = <3000>;
+			type = "active";
+		};
+	};
+
+	cooling-maps {
+		fan-base {
+			trip = <&rc01_fan_base>;
+			cooling-device = <&rc01_fan 3 3>;
+		};
+		fan-warm {
+			trip = <&rc01_fan_warm>;
+			cooling-device = <&rc01_fan 5 5>;
+		};
+		fan-hot {
+			trip = <&rc01_fan_hot>;
+			cooling-device = <&rc01_fan 7 7>;
+		};
+		fan-full {
+			trip = <&rc01_fan_full>;
+			cooling-device = <&rc01_fan 10 10>;
+		};
+	};
 };
 
 &blsp1_i2c4 {

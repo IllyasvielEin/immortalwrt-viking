@@ -119,7 +119,12 @@ define Device/xiaomi_be10000
 	$(call Device/xiaomi_be10000-common)
 	DEVICE_MODEL := BE10000
 	SOC := ipq9570
-	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000
+	# Du v2 selects C4 explicitly; retain C6 for other bootloader setups.
+	DEVICE_DTS_CONFIG_ALIASES := config@al02-c4
+	# This profile targets the merged 120 MiB RC01 MIBIB layout.
+	IMAGE_SIZE := 122880k
+	NAND_SIZE := 256m
+	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000 rc01-platform
 endef
 TARGET_DEVICES += xiaomi_be10000
 

@@ -1,0 +1,8 @@
+{
+  "admin/status/rc01": {
+    "title": "RC01 Hardware",
+    "order": 95,
+    "action": { "type": "view", "path": "status/rc01" },
+    "depends": { "acl": [ "luci-app-rc01" ] }
+  }
+}

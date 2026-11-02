@@ -1,0 +1,60 @@
+Subject: [PATCH] tools: env: reject invalid environment CRCs on RC01
+
+The RC01 bootloader uses a 64 KiB environment in a larger NAND partition.
+A stale or incorrect map must not turn a fw_setenv operation into a write
+of the tools-only build's default environment. Enforce strict CRCs on RC01
+and allow other callers to opt in. Leave other boards' defaults unchanged.
+
+--- a/tools/env/fw_env.c
++++ b/tools/env/fw_env.c
+@@ -1396,6 +1396,26 @@ static int flash_io(int mode, void *buf,
+ 	return rc;
+ }
+ 
++static int fw_env_strict_crc_required(void)
++{
++	const char *strict = getenv("FW_ENV_STRICT_CRC");
++	char board[64] = { 0 };
++	FILE *file;
++
++	if (strict && !strcmp(strict, "1"))
++		return 1;
++
++	file = fopen("/tmp/sysinfo/board_name", "r");
++	if (!file)
++		return 0;
++	if (!fgets(board, sizeof(board), file))
++		board[0] = '\0';
++	fclose(file);
++
++	return !strcmp(board, "xiaomi,be10000\n") ||
++	       !strcmp(board, "xiaomi,be10000");
++}
++
+ /*
+  * Prevent confusion if running from erased flash memory
+  */
+@@ -1438,6 +1458,11 @@ int fw_env_open(struct env_opts *opts)
+ 		crc0 = crc32(0, (uint8_t *)single->data, ENV_SIZE);
+ 		crc0_ok = (crc0 == single->crc);
+ 		if (!crc0_ok) {
++			if (fw_env_strict_crc_required()) {
++				fprintf(stderr, "Error: invalid environment CRC; refusing defaults\n");
++				ret = -EBADMSG;
++				goto open_cleanup;
++			}
+ 			fprintf(stderr,
+ 				"Warning: Bad CRC, using default environment\n");
+ 			memcpy(single->data, default_environment,
+@@ -1511,6 +1536,11 @@ int fw_env_open(struct env_opts *opts)
+ 		} else if (!crc0_ok && crc1_ok) {
+ 			dev_current = 1;
+ 		} else if (!crc0_ok && !crc1_ok) {
++			if (fw_env_strict_crc_required()) {
++				fprintf(stderr, "Error: invalid environment CRC; refusing defaults\n");
++				ret = -EBADMSG;
++				goto open_cleanup;
++			}
+ 			fprintf(stderr,
+ 				"Warning: Bad CRC, using default environment\n");
+ 			memcpy(redundant0->data, default_environment,

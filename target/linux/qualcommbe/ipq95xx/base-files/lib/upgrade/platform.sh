@@ -2,10 +2,14 @@ PART_NAME=firmware
 REQUIRE_IMAGE_METADATA=1
 
 RAMFS_COPY_BIN='fw_printenv fw_setenv head cmp sha256sum tr mktemp'
-RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock'
+RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock /tmp/sysinfo/board_name'
 
 platform_check_image() {
 	case "$(board_name)" in
+	xiaomi,be10000)
+		rc01_check_image "$1"
+		return $?
+		;;
 	linksys,ln6001)
 		ln6001_preflight "$1" || {
 			echo "LN6001 A/B preflight failed" >&2
@@ -36,9 +40,13 @@ platform_do_upgrade() {
 	linksys,ln6001)
 		ln6001_do_upgrade "$1" || return 1
 		;;
+	xiaomi,be10000)
+		# Recheck inside the upgrade ramfs before the first NAND write.
+		rc01_check_layout || return 1
+		nand_do_upgrade "$1"
+		;;
 	xiaomi,be7000|\
 	xiaomi,be7000-pro|\
-	xiaomi,be10000|\
 	xiaomi,be10000-pro)
 		nand_do_upgrade "$1"
 		;;

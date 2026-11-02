@@ -83,3 +83,9 @@ msgstr ""
 #: package/emortal/luci-app-router-tool/htdocs/luci-static/resources/tools/router-tool.js:561
 msgid "Relay AP mode"
 msgstr ""
+
+msgid "Automatic routed presets"
+msgstr ""
+
+msgid "Apply main-router or sub-router presets automatically. Disable for a manually configured bypass router; platform acceleration defaults remain available."
+msgstr ""

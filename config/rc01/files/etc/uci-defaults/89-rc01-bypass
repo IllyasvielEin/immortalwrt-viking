@@ -1,0 +1,54 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+. /lib/functions.sh
+[ "$(board_name)" = xiaomi,be10000 ] || exit 0
+
+# Fresh-install defaults for this RC01. No old QWRT interface names or secrets.
+uci -q batch <<'EOF'
+set router-tool.main=settings
+set router-tool.main.auto_network='0'
+set network.lan.proto='static'
+set network.lan.device='br-lan'
+set network.lan.ipaddr='192.168.50.3/24'
+delete network.lan.netmask
+set network.lan.gateway='192.168.50.1'
+delete network.lan.dns
+add_list network.lan.dns='192.168.50.1'
+delete network.lan.ip6assign
+delete network.lan.ip6hint
+set network.lan.delegate='0'
+set network.wan.auto='0'
+set network.wan6.auto='0'
+set dhcp.lan.ignore='1'
+set dhcp.lan.dhcpv4='disabled'
+set dhcp.lan.ra='disabled'
+set dhcp.lan.dhcpv6='disabled'
+set dhcp.lan.ndp='disabled'
+set dhcp.@dnsmasq[0].cachesize='8192'
+set dhcp.@dnsmasq[0].ednspacket_max='1232'
+set dhcp.@dnsmasq[0].localservice='1'
+commit router-tool
+commit network
+commit dhcp
+EOF
+
+# The board defaults already bridge lan1..lan4 and sfp, reserving wan (10G RJ45).
+# Keep LAN forwarding but do not impose whole-LAN SNAT before proxy validation.
+config_load firewall
+rc01_lan_zone() {
+	local name
+	config_get name "$1" name
+	[ "$name" = lan ] || return 0
+	uci set "firewall.$1.forward=ACCEPT"
+	uci set "firewall.$1.masq=0"
+}
+config_foreach rc01_lan_zone zone
+uci commit firewall
+
+# Installed for later use, with no unattended VPN/proxy startup.
+[ ! -x /etc/init.d/tailscale ] || /etc/init.d/tailscale disable
+if [ -x /etc/init.d/daed ]; then
+	uci -q set daed.config.enabled='0'
+	uci -q commit daed
+fi
+exit 0

@@ -1,5 +1,17 @@
 # Router Tool wireless defaults
 
+## Manual network management
+
+Set `router-tool.main.auto_network='0'`, or disable **Automatic routed presets**
+in Network → Interfaces, to retain manual LAN/WAN, DHCP/RA and firewall-zone
+configuration. Platform offload/steering defaults still initialize once, and
+later explicit acceleration choices remain authoritative. Wireless defaults
+are independent. The default is `1`, preserving existing routed presets.
+
+This option does not convert a network to a bypass router or restore a previous
+snapshot. Set the address, services and port roles explicitly. Relay AP mode
+remains an explicit, separate mode switch.
+
 Build systems may set the optional wireless defaults in `/etc/config/router-tool`:
 
 ```uci

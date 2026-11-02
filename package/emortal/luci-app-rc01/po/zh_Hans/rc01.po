@@ -1,0 +1,191 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: zh_Hans\n"
+
+msgid "RC01 Hardware"
+msgstr "RC01 硬件状态"
+
+msgid "Unknown"
+msgstr "未知"
+
+msgid "Invalid RC01 status response"
+msgstr "RC01 状态响应无效"
+
+msgid "Read-only status. No service, network or fan settings are changed. Preflight does not replace traffic or hardware acceptance."
+msgstr "此页只读，不修改服务、网络或风扇设置。预检不能替代流量测试和硬件验收。"
+
+msgid "Temperature and fan"
+msgstr "温度与风扇"
+
+msgid "Sensor"
+msgstr "传感器"
+
+msgid "Temperature (C)"
+msgstr "温度（℃）"
+
+msgid "Fan"
+msgstr "风扇"
+
+msgid "RPM"
+msgstr "转速（RPM）"
+
+msgid "PWM (0-255)"
+msgstr "PWM（0–255）"
+
+msgid "Fault"
+msgstr "故障标记"
+
+msgid "Ethernet ports"
+msgstr "有线端口"
+
+msgid "Port"
+msgstr "端口"
+
+msgid "Device"
+msgstr "设备"
+
+msgid "Link"
+msgstr "链路"
+
+msgid "Speed (Mbps)"
+msgstr "速率（Mbps）"
+
+msgid "Duplex"
+msgstr "双工"
+
+msgid "Present"
+msgstr "存在"
+
+msgid "Missing"
+msgstr "缺失"
+
+msgid "Up"
+msgstr "已连接"
+
+msgid "Down"
+msgstr "未连接"
+
+msgid "Storage and acceleration"
+msgstr "存储与加速"
+
+msgid "Item"
+msgstr "项目"
+
+msgid "Value"
+msgstr "数值"
+
+msgid "Rootfs partition (MiB)"
+msgstr "Rootfs 分区（MiB）"
+
+msgid "Environment map"
+msgstr "环境区映射"
+
+msgid "64 KiB map matches"
+msgstr "符合 64 KiB 映射"
+
+msgid "Mismatch or unavailable"
+msgstr "不匹配或不可读"
+
+msgid "Overlay available (MiB)"
+msgstr "Overlay 可用空间（MiB）"
+
+msgid "PPE active flows"
+msgstr "PPE 活跃流数"
+
+msgid "Kernel BTF"
+msgstr "内核 BTF"
+
+msgid "Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures."
+msgstr "此处不读取环境内容或校验 CRC。PPE 活跃流为零可能正常；硬件转发的流量可能不会出现在抓包中。"
+
+msgid "Proxy processes"
+msgstr "代理及相关进程"
+
+msgid "Process"
+msgstr "进程"
+
+msgid "PID"
+msgstr "PID"
+
+msgid "RSS (KiB)"
+msgstr "常驻内存（KiB）"
+
+msgid "Preflight"
+msgstr "预检"
+
+msgid "Result"
+msgstr "结果"
+
+msgid "Check"
+msgstr "检查项"
+
+msgid "RC01 status is unavailable. Previous values are no longer current."
+msgstr "当前无法获取 RC01 状态，原有读数已失效。"
+
+msgid "Wireless configuration"
+msgstr "无线配置"
+
+msgid "Radio"
+msgstr "射频"
+
+msgid "Configured state"
+msgstr "配置状态"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Enabled"
+msgstr "已启用"
+
+msgid "Configured state does not confirm whether a radio is transmitting."
+msgstr "配置状态不能证明射频实际是否正在发射。"
+
+msgid "Not included in this build"
+msgstr "本次构建未选入"
+
+msgid "Requires Xiaomi RC01 / BE10000"
+msgstr "需要小米 RC01 / BE10000"
+
+msgid "Requires the verified 120 MiB NAND layout"
+msgstr "需要已核实的 120 MiB NAND 分区布局"
+
+msgid "Requires the 64 KiB environment map; CRC is checked separately during upgrade"
+msgstr "需要 64 KiB 环境映射；CRC 在升级前单独校验"
+
+msgid "Requires kernel/rootfs/rootfs_data at UBI0 IDs 0/1/2"
+msgstr "UBI0 的 0/1/2 号卷应为 kernel/rootfs/rootfs_data"
+
+msgid "NAND uncorrectable ECC counter"
+msgstr "NAND 不可纠正 ECC 计数"
+
+msgid "Requires one healthy EMC2301 at address 0x2f"
+msgstr "需要唯一且运行正常的 0x2f EMC2301 风扇控制器"
+
+msgid "Requires a valid NSS temperature below the 75 C guard threshold"
+msgstr "需要有效的 NSS 温度，且低于 75℃ 保护阈值"
+
+msgid "Requires lan1..lan4, sfp and wan net devices; cables may be disconnected"
+msgstr "需要 lan1..lan4、sfp、wan 网络设备；允许未插网线"
+
+msgid "Native PPE module presence; zero or unavailable counters do not prove a fault"
+msgstr "检查原生 PPE 模块；计数为零或不可读不代表驱动故障"
+
+msgid "Run only one transparent proxy at a time"
+msgstr "同一时间只运行一个透明代理"
+
+msgid "Requested proxy core is installed"
+msgstr "所选代理核心存在且可执行"
+
+msgid "Stop and disable the other proxy before switching"
+msgstr "切换前应停止并禁用另一个代理"
+
+msgid "Bypass networking should remain manually managed"
+msgstr "旁路由网络应保持手动管理"
+
+msgid "Validate the proxy with flow offload disabled before testing acceleration coexistence"
+msgstr "先在关闭 flow offload 的条件下验证代理，再测试与加速共存"
+
+msgid "daed requires runtime kernel BTF"
+msgstr "daed 需要运行内核提供 BTF"
+
+msgid "Read-only preflight does not test DNS, routing, TCP/UDP, IPv6 or leak protection"
+msgstr "只读预检未测试 DNS、路由、TCP/UDP、IPv6 或防泄漏"

@@ -21,6 +21,7 @@ usage() {
 	printf "\n\t-A ==> set architecture to 'arch'"
 	printf "\n\t-C ==> set compression type 'comp'"
 	printf "\n\t-c ==> set config name 'config'"
+	printf "\n\t-b ==> add a config alias referring to the same images (repeatable)"
 	printf "\n\t-a ==> set load address to 'addr' (hex)"
 	printf "\n\t-e ==> set entry point to 'entry' (hex)"
 	printf "\n\t-f ==> set device tree compatible string"
@@ -48,12 +49,14 @@ HASH=sha1
 LOADABLES=
 DTOVERLAY=
 DTADDR=
+CONFIG_ALIASES=
 
-while getopts ":A:a:c:C:D:d:e:f:i:k:l:n:o:O:v:r:s:H:" OPTION
+while getopts ":A:a:b:c:C:D:d:e:f:i:k:l:n:o:O:v:r:s:H:" OPTION
 do
 	case $OPTION in
 		A ) ARCH=$OPTARG;;
 		a ) LOAD_ADDR=$OPTARG;;
+		b ) CONFIG_ALIASES="$CONFIG_ALIASES $OPTARG";;
 		c ) CONFIG=$OPTARG;;
 		C ) COMPRESS=$OPTARG;;
 		D ) DEVICE=$OPTARG;;
@@ -196,6 +199,34 @@ OVCONFIGS=""
 	"
 done
 
+# Every alias is a complete configuration, not an overlay or another payload.
+CONFIG_NODES=
+CONFIG_NAMES=
+for name in "$CONFIG" $CONFIG_ALIASES; do
+	case "$name" in
+		''|*[!a-zA-Z0-9,._+@-]*)
+			echo "Invalid FIT configuration name: $name" >&2
+			exit 1
+			;;
+	esac
+	case " $CONFIG_NAMES " in
+		*" $name "*)
+			echo "Duplicate FIT configuration name: $name" >&2
+			exit 1
+			;;
+	esac
+	CONFIG_NAMES="$CONFIG_NAMES $name"
+	CONFIG_NODES="$CONFIG_NODES
+		$name {
+			description = \"OpenWrt ${DEVICE}\";
+			kernel = \"kernel${REFERENCE_CHAR}1\";
+			${FDT_PROP}
+			${LOADABLES:+loadables = ${LOADABLES};}
+			${COMPATIBLE_PROP}
+			${INITRD_PROP}
+		};"
+done
+
 # Create a default, fully populated DTS file
 DATA="/dts-v1/;
 
@@ -228,14 +259,7 @@ ${ROOTFS_NODE}
 
 	configurations {
 		default = \"${CONFIG}\";
-		${CONFIG} {
-			description = \"OpenWrt ${DEVICE}\";
-			kernel = \"kernel${REFERENCE_CHAR}1\";
-			${FDT_PROP}
-			${LOADABLES:+loadables = ${LOADABLES};}
-			${COMPATIBLE_PROP}
-			${INITRD_PROP}
-		};
+		${CONFIG_NODES}
 		${OVCONFIGS}
 	};
 };"

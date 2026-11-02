@@ -6,6 +6,10 @@ import { board_wlan } from 'wifi.utils';
 const bands_order = [ "60G", "6G", "5G", "2G" ];
 const htmode_order = [ "EHT", "HE", "VHT", "HT" ];
 
+// RC01 is staged as a wired bypass router. Disable newly generated APs
+// before netifd can start them; later user edits remain authoritative.
+const initially_disabled = trim(readfile('/tmp/sysinfo/board_name') || '') == 'xiaomi,be10000';
+
 let wlan = board_wlan();
 if (!wlan)
 	exit(0);
@@ -129,6 +133,7 @@ set ${s}.channel='${channel}'
 set ${s}.htmode='${htmode}'
 set ${s}.country='${country || 'CN'}'
 set ${s}.num_global_macaddr='${num_global_macaddr || ''}'
+${initially_disabled ? `set ${s}.disabled='1'` : ''}
 
 set ${si}=wifi-iface
 set ${si}.device='${name}'
@@ -137,7 +142,7 @@ set ${si}.mode='ap'
 set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
 set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
 set ${si}.key='${defaults?.key || '12345678'}'
-set ${si}.disabled='0'
+set ${si}.disabled='${initially_disabled ? '1' : '0'}'
 
 `);
 		config[name] = {};

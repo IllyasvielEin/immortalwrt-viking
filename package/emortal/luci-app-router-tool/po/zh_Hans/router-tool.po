@@ -87,3 +87,9 @@ msgstr "读取以太网端口分配与路由器工具预设"
 #: package/emortal/luci-app-router-tool/htdocs/luci-static/resources/tools/router-tool.js:561
 msgid "Relay AP mode"
 msgstr "中继AP模式"
+
+msgid "Automatic routed presets"
+msgstr "自动应用路由预设"
+
+msgid "Apply main-router or sub-router presets automatically. Disable for a manually configured bypass router; platform acceleration defaults remain available."
+msgstr "自动应用主路由或下级路由预设。手动配置旁路由时可关闭此项，平台加速默认设置仍可用。"

@@ -422,7 +422,8 @@ function avoidSubnetConflict(context) {
 }
 
 function synchronize(sid, context) {
-	if (uci.get('router-tool', 'main', 'ap_mode') == '1') return;
+	if (uci.get('router-tool', 'main', 'ap_mode') == '1' ||
+		uci.get('router-tool', 'main', 'auto_network') == '0') return;
 	const role = uci.get('network', 'wan', 'proto') == 'pppoe' ? 'main' : 'sub';
 	previousSnapshot = readSnapshot(sid, 'state', uci.get('router-tool', 'main', 'auto_role'));
 	const beforeLan = previousSnapshot?.lan;
@@ -556,7 +557,10 @@ return baseclass.extend({
 			const option = map._routerToolOption;
 			const enabled = uci.get('router-tool', 'main', 'ap_mode') == '1';
 			const selected = option ? option.formvalue(sid) == '1' : enabled;
-			const retained = retainedOptions(map, sid, enabled);
+			const autoOption = map._routerToolAutoNetwork;
+			const automatic = autoOption ? autoOption.formvalue(sid) != '0' :
+				uci.get('router-tool', 'main', 'auto_network') != '0';
+			const retained = automatic || enabled ? retainedOptions(map, sid, enabled) : [];
 			// Preserve the page's base before form parsing. The save callback
 			// rebases unrelated external edits and rejects overlapping changes.
 			const before = copy(uci.state.values);
@@ -567,7 +571,7 @@ return baseclass.extend({
 				// or inactive fields. Explicit active edits remain user changes.
 				for (const o of retained)
 					if (uci.get(o.config, o.sid, o.key) == null) uci.set(o.config, o.sid, o.key, copy(o.expected));
-				return verifyLiveSnapshot(sid, selected, enabled, before).then(() => {
+				return (automatic || selected || enabled ? verifyLiveSnapshot(sid, selected, enabled, before) : Promise.resolve()).then(() => {
 				if (sid && selected != enabled) {
 					if (selected) enableAp(sid, context);
 					else disableAp(sid);
@@ -598,6 +602,15 @@ return baseclass.extend({
 	},
 
 	addGlobal(section) {
+		const auto = section.option(form.Flag, 'router_tool_auto_network', _('Automatic routed presets'),
+			_('Apply main-router or sub-router presets automatically. Disable for a manually configured bypass router; platform acceleration defaults remain available.'));
+		auto.default = '1';
+		auto.rmempty = false;
+		auto.uciconfig = 'router-tool';
+		auto.ucisection = 'main';
+		auto.ucioption = 'auto_network';
+		auto.load = function() { return uci.get('router-tool', 'main', 'auto_network') ?? '1'; };
+		section.map._routerToolAutoNetwork = auto;
 		const o = section.option(form.Flag, 'router_tool_ap', _('Relay AP mode'),
 			_('Manually enable to bridge all Ethernet ports and obtain IPv4/IPv6 from the upstream router; disable to restore the previous settings. When disabled, PPPoE automatically uses main-router mode and other WAN protocols use sub-router mode.') + ' ' +
 			_('Manual changes are preserved. Concurrent edits to the same settings or incompatible device assignments stop the switch.'));

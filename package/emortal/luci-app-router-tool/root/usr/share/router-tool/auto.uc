@@ -110,7 +110,8 @@ export function synchronize(uci, data, upstream4, target) {
 	let role = uci.get('network', 'wan', 'proto') == 'pppoe' ? 'main' : 'sub';
 	let previous = uci.get('router-tool', 'main', 'auto_role');
 	let saved = uci.get('router-tool', 'main', 'state');
-	let state = previous || saved ? read_snapshot(saved, previous) : null;
+	let manual = uci.get('router-tool', 'main', 'auto_network') == '0';
+	let state = !manual && (previous || saved) ? read_snapshot(saved, previous) : null;
 	let context = state?.lan;
 	if (context && !equal(context, lan_context(uci))) state.manual_lan = true;
 	previous_state = state;
@@ -131,7 +132,9 @@ export function synchronize(uci, data, upstream4, target) {
 		set('firewall', firewall, defaults.firewall);
 		set('router-tool', 'main', { offload_defaults_done: '1' });
 	}
-	if (ap) return keys(changed);
+	// Manual network management retains platform offload/steering defaults,
+	// but leaves addressing, DHCP/RA, zones and WAN ownership to the user.
+	if (ap || manual) return keys(changed);
 	if (previous != role) {
 		let context = previous_state?.lan;
 		let manual_lan = !!previous_state?.manual_lan || context && !equal(context, lan_context(uci));

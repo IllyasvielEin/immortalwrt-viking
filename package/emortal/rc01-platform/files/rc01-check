@@ -1,0 +1,16 @@
+#!/usr/bin/ucode
+// SPDX-License-Identifier: GPL-2.0-only
+import { cursor } from 'uci';
+import { snapshot } from 'rc01.platform';
+
+let action = ARGV[0] || 'status';
+let target = ARGV[1] || 'hardware';
+if (length(ARGV) > 2 || (action == 'status' && length(ARGV) > 1) || index([ 'status', 'check' ], action) < 0 ||
+	index([ 'hardware', 'nikki', 'daed' ], target) < 0) {
+	warn('Usage: rc01-check [status | check [hardware|nikki|daed]]\n');
+	exit(2);
+}
+let state = snapshot(cursor());
+let result = filter(state.preflight, p => p.target == target)[0];
+print(sprintf('%J\n', action == 'status' ? state : result));
+exit(action == 'check' && !result.passed ? 1 : 0);
