@@ -184,6 +184,43 @@ class Images(unittest.TestCase):
         with self.assertRaisesRegex(images.VerificationError, "payload mismatch"):
             images.verify_factory(path, kernel, root[:-1] + b"x")
 
+    def test_sysupgrade_zero_padding_is_distinct_from_ubi_erased_padding(self):
+        kernel, root = self.fit(), rootfs(4097)
+        path = self.factory(kernel, root)
+        padded = root + b"\0" * 1023
+        images.verify_factory(path, kernel, padded)
+        with self.assertRaisesRegex(images.VerificationError, "rootfs padding"):
+            images.verify_factory(path, kernel, padded[:-1] + b"x")
+        # Never strip meaningful trailing zeroes from the filesystem itself.
+        damaged = bytearray(path.read_bytes())
+        damaged[3 * images.PEB + 4096 + len(root) - 1] = 1
+        path.write_bytes(damaged)
+        with self.assertRaisesRegex(images.VerificationError, "payload mismatch"):
+            images.verify_factory(path, kernel, padded)
+
+    @unittest.skipUnless(shutil.which("ubinize"), "ubinize is required for real packaging regression")
+    def test_real_ubinize_and_sysupgrade_scripts_match_for_unaligned_rootfs(self):
+        kernel = self.fit()
+        kernel_path = self.work / "kernel"
+        kernel_path.write_bytes(kernel)
+        env = os.environ | {"TOPDIR": str(ROOT), "SOURCE_DATE_EPOCH": "1793618500"}
+        for size in [4097, images.LEB + 1]:
+            root = rootfs(size)
+            root_path = self.work / "root"
+            root_path.write_bytes(root)
+            factory = self.work / "real-factory.ubi"
+            upgrade = self.work / "real-sysupgrade.bin"
+            for command in [
+                ["sh", str(ROOT / "scripts/ubinize-image.sh"), "--kernel", str(kernel_path),
+                 "--rootfs", str(root_path), str(factory), "-p", "128KiB", "-m", "2048"],
+                ["sh", str(ROOT / "scripts/sysupgrade-tar.sh"), "--board", "xiaomi_be10000",
+                 "--kernel", str(kernel_path), "--rootfs", str(root_path), str(upgrade)],
+            ]:
+                subprocess.run(command, env=env, check=True, capture_output=True)
+            actual_kernel, actual_root = images.read_sysupgrade(upgrade)
+            self.assertEqual(actual_root, root + b"\0" * ((-size) % 1024))
+            images.verify_factory(factory, actual_kernel, actual_root)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -66,6 +66,15 @@ factory.ubi、sysupgrade.bin、完整配置、diffconfig、feeds锁、manifest�
 dae测试构建额外校验实际内核配置和 `vmlinux` 的BTF段；只勾选LuCI软件包不算通过。
 两种构建都遵守同一个32 MiB data卷LEB预算，超限时失败，不自动削减预留空间。
 
+编译完成后，先保存 `rc01-unverified-images`（7天，未验收）和对应APK包，
+再执行原生模块/内核检查及镜像验收。下载和ccache在正常失败后也保存，
+避免只有整个任务成功才产生缓存。未验收镜像不能当成可刷写产物。
+
+仅镜像验收脚本需要修正时，可手动运行 `.github/workflows/verify-rc01.yml`，
+填写原构建的 `source_run_id`，下载原产物并重新检查，不执行编译。
+该流程核对原始提交、校验和，并要求原任务的原生模块/实际内核检查已经通过；
+通过后记录原构建与本次验收代码的两个提交。没有保存候选镜像的旧任务无法恢复。
+
 ## 启动和存储检查
 
 C4、C6是两个完整FIT配置节点，引用同一份kernel/DTB，不额外复制载荷。
@@ -74,6 +83,8 @@ C4、C6是两个完整FIT配置节点，引用同一份kernel/DTB，不额外复
 
 CI检查FIT引用与hash、ARM64 Image头及解压内存边界、RC01设备树与温控映射、
 UBI EC/VID/卷表CRC、kernel/rootfs卷编号，以及factory和sysupgrade载荷一致性。
+SquashFS按superblock的bytes_used逐字节比较；sysupgrade仅允许标准1KiB对齐的
+补零，factory剩余LEB空间仍必须是擦除态0xff，不忽略文件系统正文的末尾零字节。
 容量检查保留整片256 MiB NAND的坏块预算、UBI开销和至少32 MiB的data卷LEB空间。
 后者不等于UBIFS最终可用容量。系统内升级也重新检查布局和FIT配置。
 

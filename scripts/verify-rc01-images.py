@@ -203,6 +203,15 @@ def ubi_crc(data: bytes) -> int:
 
 
 def verify_factory(path: Path, kernel: bytes, root: bytes) -> dict:
+    # mksquashfs uses -nopad. sysupgrade-tar.sh adds zeroes to a 1 KiB
+    # boundary, whereas ubinize stores the raw filesystem followed by 0xff.
+    require(len(root) >= 96 and root[:4] == b"hsqs", "rootfs is not SquashFS")
+    used = struct.unpack_from("<Q", root, 40)[0]
+    require(96 <= used <= len(root), "invalid SquashFS byte count")
+    require(len(root) == (used + 1023) // 1024 * 1024,
+            "unexpected sysupgrade rootfs alignment")
+    require(root[used:] == b"\0" * (len(root) - used),
+            "unexpected sysupgrade rootfs padding")
     blob = path.read_bytes()
     require(bool(blob) and len(blob) % PEB == 0, "factory UBI is not PEB-aligned")
     require(len(blob) <= (PARTITION_PEBS - RESERVE_PEBS) * PEB, "factory UBI exceeds NAND budget")
@@ -240,11 +249,12 @@ def verify_factory(path: Path, kernel: bytes, root: bytes) -> dict:
             if index == 2:
                 require(record[144] & 1, "rootfs_data must autoresize")
     require(tables[0][:3 * 172] == tables[1][:3 * 172], "UBI volume-table copies differ")
-    for index, expected in ((0, kernel), (1, root)):
+    for index, expected in ((0, kernel), (1, root[:used])):
         blocks = volumes.get(index, {})
         require(sorted(blocks) == list(range(len(blocks))) and bool(blocks), "incomplete UBI payload")
         actual = b"".join(blocks[number] for number in sorted(blocks))
-        require(actual[:len(expected)] == expected, "factory/sysupgrade payload mismatch")
+        name = "kernel" if index == 0 else "rootfs"
+        require(actual[:len(expected)] == expected, f"factory/sysupgrade {name} payload mismatch")
         require(actual[len(expected):].strip(b"\xff") == b"", "unexpected data after UBI payload")
     return {"factory_bytes": len(blob), "ubi_volume_ids": {"kernel": 0, "rootfs": 1, "rootfs_data": 2}}
 

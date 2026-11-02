@@ -1,0 +1,75 @@
+name: Revalidate preserved RC01 images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'Build run containing rc01-unverified-images; no recompilation'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout verification code
+        uses: actions/checkout@v4
+
+      - name: Check original build provenance and native acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          source_commit="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" --jq .head_sha)"
+          echo "SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
+          native_ok="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?per_page=100" --jq 'any(.jobs[].steps[]; .name == "Verify native driver artifacts and runtime scripts" and .conclusion == "success")')"
+          [ "$native_ok" = true ] || {
+            echo 'Original compiled-kernel, module and runtime checks did not pass; image-only revalidation cannot replace them.' >&2
+            exit 1
+          }
+
+      - name: Download preserved candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: rc01-unverified-images
+          path: candidate
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install image test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends device-tree-compiler mtd-utils
+
+      - name: Run image regression checks
+        run: python3 -B -m unittest discover -s tests/rc01 -p test_images.py -v
+
+      - name: Verify preserved images without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fqx "source_commit=$SOURCE_COMMIT" candidate/rc01-build-metadata.txt
+          (cd candidate; sha256sum -c rc01-images.sha256)
+          python3 -B scripts/verify-rc01-images.py candidate > candidate/rc01-revalidation.json
+          {
+            echo "original_run=$SOURCE_RUN_ID"
+            echo "original_source=$SOURCE_COMMIT"
+            echo "verifier_commit=$(git rev-parse HEAD)"
+            echo 'physical_acceptance=not-performed'
+          } > candidate/rc01-revalidation-source.txt
+
+      - name: Upload revalidated images
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-revalidated-${{ inputs.source_run_id }}-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: candidate/
