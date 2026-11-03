@@ -1,12 +1,18 @@
 """Exercise read-only preflight and fan fault handling against fake sysfs."""
 from pathlib import Path
 import os
+import io
+import shlex
+import shutil
+import tarfile
 import subprocess
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ROOT / "package/emortal/rc01-platform/files"
+BUSYBOX = os.environ.get("BUSYBOX") or shutil.which("busybox")
+DTC, FDTGET = shutil.which("dtc"), shutil.which("fdtget")
 
 
 class Runtime(unittest.TestCase):
@@ -103,6 +109,55 @@ class Runtime(unittest.TestCase):
     def test_changed_rootfs_volume_id_is_rejected(self):
         self.layout(); self.write("sys/class/ubi/ubi0_1/name", "ubootenv")
         self.assertNotEqual(self.preflight().returncode, 0)
+
+    def upgrade_image(self, kernel_names=("sysupgrade-xiaomi_be10000/kernel",)):
+        self.layout()
+        source = self.write("image.dts", '''/dts-v1/;
+/ {
+    configurations {
+        config@al02-c4 { kernel = "kernel-1"; fdt = "fdt-1"; };
+        config@al02-c6 { kernel = "kernel-1"; fdt = "fdt-1"; };
+    };
+};''')
+        fit = self.work / "kernel.fit"
+        subprocess.run([DTC, "-I", "dts", "-O", "dtb", "-o", str(fit), str(source)],
+                       check=True, capture_output=True)
+        image = self.work / "sysupgrade.bin"
+        with tarfile.open(image, "w", format=tarfile.USTAR_FORMAT) as archive:
+            entries = [(name, fit.read_bytes()) for name in kernel_names]
+            entries.append(("sysupgrade-xiaomi_be10000/root", b"hsqs" + b"x" * 4092))
+            for name, data in entries:
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+        tools = self.work / "tools"
+        tools.mkdir(exist_ok=True)
+        for applet in ("awk", "tar"):
+            wrapper = tools / applet
+            wrapper.write_text("#!/bin/sh\nexec " + shlex.quote(BUSYBOX) + " " + applet + ' "$@"\n')
+            wrapper.chmod(0o755)
+        command = '. ' + shlex.quote(str(FILES / "rc01.sh")) + '; get_image() { cat "$1"; };'
+        command += ' fw_printenv() { [ "$FW_ENV_STRICT_CRC" = 1 ] || return 1; case "$2" in machid) echo 8050301;; config_name) return 1;; esac; };'
+        command += " rc01_check_image " + shlex.quote(str(image))
+        return subprocess.run([BUSYBOX, "ash", "-c", command],
+            env=self.env | {"PATH": str(tools) + os.pathsep + os.environ["PATH"]},
+            capture_output=True, text=True)
+
+    @unittest.skipUnless(BUSYBOX and DTC and FDTGET, "BusyBox, dtc and fdtget required for upgrade checks")
+    def test_busybox_accepts_the_shipped_image_preflight(self):
+        result = self.upgrade_image()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("bad regex", result.stderr)
+
+    @unittest.skipUnless(BUSYBOX and DTC and FDTGET, "BusyBox, dtc and fdtget required for upgrade checks")
+    def test_busybox_rejects_missing_nested_and_duplicate_kernel_members(self):
+        for names in [(), ("sysupgrade-/kernel",), ("sysupgrade-device/nested/kernel",),
+                      ("sysupgrade-xiaomi_be10000/kernel", "sysupgrade-xiaomi_be10000/kernel")]:
+            with self.subTest(names=names):
+                result = self.upgrade_image(names)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("expected exactly one sysupgrade kernel", result.stderr)
+                self.assertNotIn("bad regex", result.stderr)
 
 
 if __name__ == "__main__":

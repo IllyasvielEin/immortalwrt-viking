@@ -78,7 +78,7 @@ rc01_check_image() (
 	get_image "$1" | tar -tf - > "$work/members" || {
 		rc01_fail 'not a readable sysupgrade tar'; exit 1
 	}
-	directory="$(awk '/^sysupgrade-[^/]+\/kernel$/ { sub(/\/kernel$/, ""); dir=$0; count++ }
+	directory="$(awk '/^sysupgrade-[^\/]+\/kernel$/ { sub(/\/kernel$/, ""); dir=$0; count++ }
 		END { if (count == 1) print dir; else exit 1 }' "$work/members")" || {
 		rc01_fail 'expected exactly one sysupgrade kernel'; exit 1
 	}
