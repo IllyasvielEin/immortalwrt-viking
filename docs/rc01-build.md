@@ -93,7 +93,11 @@ overlay另存一份大文件；默认通过重编固件升级核心，需要独�
 
 ## 首次启动的网络和代理
 
-- LAN为 `192.168.50.3/24`，网关/DNS为GS7 `192.168.50.1`。
+- 本 `rc01/dhcp-diagnostic` 分支以 `b83446a5dd` 为对照，LAN作为DHCP客户端从
+  GS7获取地址、网关和DNS，客户端hostname为 `RC01-DHCP-test`，不再固定 `.50.3`。
+  这是启动诊断构建；在GS7租约中按hostname和实际MAC查找地址。
+  这里的DHCP指RC01获取自身管理地址，RC01的LAN DHCP服务器仍关闭。
+  驱动、NAND修复、设备树、软件选项与feeds锁均沿用对照版本；不代表已通过实机启动验收。
 - `lan1..lan4` 和 `sfp` 在LAN桥内；10G电口 `wan` 保留且不自动启动，WAN6同样关闭。
 - DHCPv4/v6、RA、NDP关闭，不对整个LAN强加SNAT；ICMP redirect关闭。
 - Router Tool保留，自动路由预设关闭，平台PPE默认设置仍初始化一次。后续手动修改

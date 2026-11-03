@@ -1,4 +1,4 @@
-name: Build Xiaomi RC01 firmware
+name: Build Xiaomi RC01 DHCP diagnostic firmware
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ env:
 
 jobs:
   build:
-    name: RC01 Du v2 / 120 MiB
+    name: RC01 Du v2 / 120 MiB / DHCP client
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -111,6 +111,7 @@ jobs:
           cp .config "$TARGET_DIR/rc01.config"
           cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
           cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
+          cp files/etc/uci-defaults/89-rc01-bypass "$TARGET_DIR/rc01-network-defaults.sh"
           {
             echo "repository=$GITHUB_REPOSITORY"
             echo "source_commit=$(git rev-parse HEAD)"
@@ -119,6 +120,9 @@ jobs:
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
             echo "kernel=$(cat target/linux/generic/kernel-6.18)"
             echo "physical_acceptance=not-performed"
+            echo "diagnostic_base=b83446a5dd3cda74d8c10831699f1cd1d8056c79"
+            echo "lan_address_mode=dhcp-client"
+            echo "dhcp_client_hostname=RC01-DHCP-test"
             echo "dae_test_build=$RC01_WITH_DAE"
             echo "nand_id_workaround=spi-device-prefix-max-3"
             echo "nand_probe_diagnostics=true"
@@ -183,7 +187,7 @@ jobs:
       - name: Upload verified images and build metadata
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-duv2-120m-nand-id-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
+          name: rc01-duv2-120m-dhcp-client-nand-id-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |

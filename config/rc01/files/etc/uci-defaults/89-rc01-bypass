@@ -3,17 +3,18 @@
 . /lib/functions.sh
 [ "$(board_name)" = xiaomi,be10000 ] || exit 0
 
-# Fresh-install defaults for this RC01. No old QWRT interface names or secrets.
+# DHCP-client diagnostic: obtain the LAN management address from the upstream.
+# Keep the LAN DHCP server and unattended proxy/VPN services disabled.
 uci -q batch <<'EOF'
 set router-tool.main=settings
 set router-tool.main.auto_network='0'
-set network.lan.proto='static'
+set network.lan.proto='dhcp'
 set network.lan.device='br-lan'
-set network.lan.ipaddr='192.168.50.3/24'
+delete network.lan.ipaddr
 delete network.lan.netmask
-set network.lan.gateway='192.168.50.1'
+delete network.lan.gateway
 delete network.lan.dns
-add_list network.lan.dns='192.168.50.1'
+set network.lan.hostname='RC01-DHCP-test'
 delete network.lan.ip6assign
 delete network.lan.ip6hint
 set network.lan.delegate='0'
