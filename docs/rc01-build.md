@@ -76,6 +76,34 @@ python3 -B scripts/verify-rc01-images.py bin/targets/qualcommbe/ipq95xx
 `defconfig/qualcommbe-rc01.config` 和 `config/rc01/`。跟进上游、升级feeds或Nikki时，
 更新锁定提交并重新运行检查，不能只给旧镜像混装新内核模块。
 
+后续正常构建统一使用长期分支 `rc01/custom`；GitHub缓存只允许当前分支和默认分支
+共享，历史 sibling 分支的缓存不会因快进或相同key自动迁移。
+
+Actions 的 `go_bootstrap` 默认 `external`：下载并核对官方 Go 1.24.13 linux-amd64
+归档的固定SHA256，在独立空目录解压，再从锁定源码编译最终 Go 1.27.3。
+这跳过原有多级bootstrap链，不替换固件中的代理程序或功能。
+下载、校验或版本检查失败时在正式编译前停止；显式选择 `source` 才回到原有源码链，
+不在已有构建产物上自动切换。packages feed中的两处实际Go调用均强制
+`GOTOOLCHAIN=local`，保留模块校验。完整 `tmp/go-build` 缓存暂不启用，
+因为共用目录含CGO结果，其外部C依赖闭包尚未完成审查。
+
+`cold_cache=true` 跳过下载和ccache恢复/保存，使用全新的本地缓存；不设置
+`GOCACHE=off`。先 lookup-only 确定期望key，再精确恢复并核对实际返回key；恢复异常会清除
+对应不完整目录并禁止当轮保存，正常首次miss则可从全新目录建立缓存。
+ccache采用 `compiler_check=content` 和新命名空间 `rc01-ccache-v2-content`，
+保留3G上限、不放宽校验；旧mtime条目不算新模式的热缓存。
+缓存key含run attempt，兼容前缀限定runner架构、目标和工具链配方指纹。
+
+每轮独立记录并行编译和串行重试的退出码与耗时，在额外验收编译前汇总ccache
+stats log、恢复matched-key、runner资源，以及构建实际解析的host/cross/BPF工具路径、
+内容身份和版本。统计单独上传，普通编译或验收失败保留原失败状态；缓存上传失败
+只记录警告。新增优化仍须由后续正常构建测量冷/热缓存净收益，不预承诺节省比例。
+
+官方依据：[GitHub缓存范围](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)、
+[ccache参数](https://ccache.dev/manual/latest.html#_configuration_options)、
+[Go源码安装](https://go.dev/doc/install/source)、
+[Go缓存与CGO限制](https://go.dev/cmd/go/#hdr-Build_and_test_caching)。
+
 Actions 使用Ubuntu24.04、4个编译任务和独立的下载/ccache缓存。产物包含
 factory.ubi、sysupgrade.bin、完整配置、diffconfig、feeds锁、manifest、校验和、
 提交及构建时间记录、Nikki配方差异和本次构建的APK包及公钥；不上传签名私钥。

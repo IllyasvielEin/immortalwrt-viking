@@ -8,6 +8,19 @@ on:
         type: boolean
         required: true
         default: false
+      go_bootstrap:
+        description: 'Go bootstrap: verified official binary or full source chain'
+        type: choice
+        required: true
+        default: external
+        options:
+          - external
+          - source
+      cold_cache:
+        description: 'Skip download/ccache restore and save; use fresh local caches'
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +32,8 @@ concurrency:
 env:
   TARGET_DIR: bin/targets/qualcommbe/ipq95xx
   CCACHE_MAXSIZE: 3G
+  CCACHE_COMPILERCHECK: content
+  RC01_GO_BOOTSTRAP_MODE: ${{ inputs.go_bootstrap }}
   TZ: Asia/Singapore
   RC01_WITH_DAE: ${{ inputs.include_dae }}
 
@@ -58,27 +73,82 @@ jobs:
             python3-pyelftools python3-cryptography rsync swig unzip file wget \
             pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils shellcheck
 
-      - name: Restore source downloads
-        id: downloads_cache
+      - name: Look up source downloads
+        id: downloads_lookup
+        if: ${{ !inputs.cold_cache }}
+        continue-on-error: true
         uses: actions/cache/restore@v4
         with:
           path: dl
-          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}
+          lookup-only: true
+          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-
             rc01-dl-${{ runner.os }}-
 
-      - name: Restore compiler cache
-        id: compiler_cache
+
+      - name: Restore source downloads
+        id: downloads_cache
+        if: ${{ !inputs.cold_cache && steps.downloads_lookup.outputs.cache-matched-key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: dl
+          key: ${{ steps.downloads_lookup.outputs.cache-matched-key }}
+
+      - name: Look up compiler cache
+        id: compiler_lookup
+        if: ${{ !inputs.cold_cache }}
+        continue-on-error: true
         uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: rc01-ccache-${{ runner.os }}-${{ inputs.include_dae }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config', 'target/linux/generic/kernel-6.18') }}-${{ github.run_id }}
+          lookup-only: true
+          key: rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            rc01-ccache-${{ runner.os }}-${{ inputs.include_dae }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config', 'target/linux/generic/kernel-6.18') }}-
+            rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config') }}-
+            rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-
+
+
+      - name: Restore compiler cache
+        id: compiler_cache
+        if: ${{ !inputs.cold_cache && steps.compiler_lookup.outputs.cache-matched-key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ${{ steps.compiler_lookup.outputs.cache-matched-key }}
+
+      - name: Discard incomplete cache restores or select cold mode
+        id: cache_state
+        shell: bash
+        env:
+          RC01_COLD_CACHE: ${{ inputs.cold_cache }}
+          RC01_DOWNLOADS_LOOKUP_OUTCOME: ${{ steps.downloads_lookup.outcome }}
+          RC01_DOWNLOADS_EXPECTED_KEY: ${{ steps.downloads_lookup.outputs.cache-matched-key }}
+          RC01_DOWNLOADS_RESTORE_OUTCOME: ${{ steps.downloads_cache.outcome }}
+          RC01_DOWNLOADS_RESTORED_KEY: ${{ steps.downloads_cache.outputs.cache-matched-key }}
+          RC01_COMPILER_LOOKUP_OUTCOME: ${{ steps.compiler_lookup.outcome }}
+          RC01_COMPILER_EXPECTED_KEY: ${{ steps.compiler_lookup.outputs.cache-matched-key }}
+          RC01_COMPILER_RESTORE_OUTCOME: ${{ steps.compiler_cache.outcome }}
+          RC01_COMPILER_RESTORED_KEY: ${{ steps.compiler_cache.outputs.cache-matched-key }}
+        run: python3 -B scripts/rc01-ci-cache.py
 
       - name: Run offline regression checks
         run: python3 -B -m unittest discover -s tests/rc01 -v
+
+      - name: Select and verify Go bootstrap before configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RC01_GO_BOOTSTRAP_MODE" in
+            external)
+              bootstrap_root="$(python3 -B scripts/rc01-go-bootstrap.py install "$RUNNER_TEMP/rc01-go-bootstrap")"
+              echo "RC01_GO_BOOTSTRAP_ROOT=$bootstrap_root" >> "$GITHUB_ENV"
+              ;;
+            source) echo 'RC01_GO_BOOTSTRAP_ROOT=' >> "$GITHUB_ENV" ;;
+            *) echo 'Invalid bootstrap mode' >&2; exit 1 ;;
+          esac
 
       - name: Prepare locked feeds and configuration
         shell: bash
@@ -88,6 +158,7 @@ jobs:
           ./scripts/diffconfig.sh > rc01.diffconfig
 
       - name: Download package sources
+        id: downloads
         shell: bash
         run: |
           set -o pipefail
@@ -95,20 +166,59 @@ jobs:
             make -j1 V=s download 2>&1 | tee -a download.log
           fi
 
+      - name: Initialize build observations
+        id: build_metrics
+        shell: bash
+        env:
+          RC01_COLD_CACHE: ${{ inputs.cold_cache }}
+          RC01_DOWNLOADS_MATCHED_KEY: ${{ steps.downloads_cache.outputs.cache-matched-key }}
+          RC01_COMPILER_MATCHED_KEY: ${{ steps.compiler_cache.outputs.cache-matched-key }}
+          RC01_DOWNLOADS_CACHE_OUTCOME: ${{ steps.downloads_cache.outcome }}
+          RC01_COMPILER_CACHE_OUTCOME: ${{ steps.compiler_cache.outcome }}
+        run: python3 -B scripts/rc01-ci-metrics.py prepare "$RUNNER_TEMP/rc01-metrics"
+
       - name: Build firmware
         id: firmware
         shell: bash
-        run: |
-          set -o pipefail
-          if ! make -j4 2>&1 | tee build.log; then
-            make -j1 V=s 2>&1 | tee -a build.log
-          fi
+        run: python3 -B scripts/rc01-ci-build.py
+
+      - name: Record compiler/cache statistics before acceptance builds
+        if: ${{ !cancelled() && steps.build_metrics.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          RC01_COLD_CACHE: ${{ inputs.cold_cache }}
+          RC01_DOWNLOADS_MATCHED_KEY: ${{ steps.downloads_cache.outputs.cache-matched-key }}
+          RC01_COMPILER_MATCHED_KEY: ${{ steps.compiler_cache.outputs.cache-matched-key }}
+          RC01_DOWNLOADS_CACHE_OUTCOME: ${{ steps.downloads_cache.outcome }}
+          RC01_COMPILER_CACHE_OUTCOME: ${{ steps.compiler_cache.outcome }}
+        run: python3 -B scripts/rc01-ci-metrics.py report "$RUNNER_TEMP/rc01-metrics"
+
+      - name: Upload build observations
+        if: ${{ !cancelled() && steps.build_metrics.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-build-observations-${{ github.run_number }}-${{ github.run_attempt }}
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/rc01-metrics/
+            rc01-build-timings.json
 
       - name: Record build inputs
         shell: bash
         run: |
           set -euo pipefail
+          go_compiler="$(GOTOOLCHAIN=local GOENV=off staging_dir/hostpkg/lib/go-1.27/bin/go version)"
           cp .config "$TARGET_DIR/rc01.config"
+          if [ -f rc01-build-timings.json ]; then
+            cp rc01-build-timings.json "$TARGET_DIR/rc01-build-timings.json"
+          fi
+          for phase in prepare report; do
+            if [ -f "$RUNNER_TEMP/rc01-metrics/$phase.json" ]; then
+              cp "$RUNNER_TEMP/rc01-metrics/$phase.json" "$TARGET_DIR/rc01-ci-$phase.json"
+            fi
+          done
           cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
           cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
           cp files/etc/uci-defaults/89-rc01-bypass "$TARGET_DIR/rc01-network-defaults.sh"
@@ -122,6 +232,14 @@ jobs:
             echo "ppe_ds_nodes_ipq9574=3"
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
             echo "kernel=$(cat target/linux/generic/kernel-6.18)"
+            echo "go_bootstrap_mode=$RC01_GO_BOOTSTRAP_MODE"
+            echo "go_bootstrap_version=1.24.13"
+            if [ "$RC01_GO_BOOTSTRAP_MODE" = external ]; then
+              echo "go_bootstrap_archive_sha256=1fc94b57134d51669c72173ad5d49fd62afb0f1db9bf3f798fd98ee423f8d730"
+            fi
+            echo "go_compiler=$go_compiler"
+            echo "ccache_compiler_check=$CCACHE_COMPILERCHECK"
+            echo "cold_cache=${{ inputs.cold_cache }}"
             echo "physical_acceptance=not-performed"
             echo "boot_verified_base=43fc40c991523305d8ec5ff1b5714f063dfeb091"
             echo "lan_address_mode=dhcp-client"
@@ -137,6 +255,7 @@ jobs:
           cp target/linux/qualcommbe/patches-6.18/0411-mtd-spinand-qpic-four-byte-id.patch "$TARGET_DIR/rc01-nand-id-workaround.patch"
           cp target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch "$TARGET_DIR/rc01-nand-probe-diagnostics.patch"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
+          git -C feeds/packages diff -- lang/golang/golang-compiler.mk lang/golang/golang-host-build.mk > "$TARGET_DIR/rc01-go-build.patch"
           if [ "$RC01_WITH_DAE" = true ]; then
             cp feeds/daede/ci/pins.env "$TARGET_DIR/rc01-daede-upstream.lock"
             cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
@@ -171,6 +290,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$(GOTOOLCHAIN=local GOENV=off staging_dir/hostpkg/lib/go-1.27/bin/go version)" = 'go version go1.27.3 linux/amd64'
           for module in ath12k.ko ath12k_wifi7.ko qcom-ppe.ko emc2305.ko; do
             test -n "$(find build_dir -type f -name "$module" -print -quit)"
           done
@@ -218,15 +338,17 @@ jobs:
             logs
 
       - name: Save downloads even after validation failure
-        if: ${{ !cancelled() && steps.downloads_cache.outputs.cache-primary-key != '' }}
+        if: ${{ !cancelled() && !inputs.cold_cache && steps.cache_state.outputs.downloads_save == 'true' && steps.downloads.outcome == 'success' && steps.build_metrics.outcome == 'success' && (steps.firmware.outcome == 'success' || steps.firmware.outcome == 'failure') }}
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: dl
-          key: ${{ steps.downloads_cache.outputs.cache-primary-key }}
+          key: ${{ steps.downloads_lookup.outputs.cache-primary-key }}
 
       - name: Save compiler objects even after validation failure
-        if: ${{ !cancelled() && steps.compiler_cache.outputs.cache-primary-key != '' }}
+        if: ${{ !cancelled() && !inputs.cold_cache && steps.cache_state.outputs.compiler_save == 'true' && steps.build_metrics.outcome == 'success' && (steps.firmware.outcome == 'success' || steps.firmware.outcome == 'failure') }}
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ steps.compiler_cache.outputs.cache-primary-key }}
+          key: ${{ steps.compiler_lookup.outputs.cache-primary-key }}

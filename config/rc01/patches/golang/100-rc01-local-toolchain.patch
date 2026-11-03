@@ -1,0 +1,37 @@
+From: RC01 local integration
+Subject: [PATCH] RC01: keep compiler and host Go toolchain selection local
+
+Local source: RC01 CI bootstrap integration, based on
+https://github.com/immortalwrt/packages at
+48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd.
+
+The feed unexports GOTOOLCHAIN in golang-values.mk. Pass it explicitly
+at the compiler and host build calls, as the target build already does.
+Preserve the upstream authors' copyright and GPL-2.0-only notices.
+This does not change the final Go version or module verification policy.
+
+diff --git a/lang/golang/golang-compiler.mk b/lang/golang/golang-compiler.mk
+--- a/lang/golang/golang-compiler.mk
++++ b/lang/golang/golang-compiler.mk
+@@ -21,7 +21,7 @@
+ # 2: additional environment variables (optional)
+ define GoCompiler/Default/Make
+ 	cd "$(1)/src" ; \
+-	$(2) $(BASH) make.bash \
++	$(2) GOTOOLCHAIN=local $(BASH) make.bash \
+ 		$(if $(findstring s,$(OPENWRT_VERBOSE)),-v) \
+ 		--no-banner
+ endef
+diff --git a/lang/golang/golang-host-build.mk b/lang/golang/golang-host-build.mk
+--- a/lang/golang/golang-host-build.mk
++++ b/lang/golang/golang-host-build.mk
+@@ -88,7 +88,8 @@
+ 	GOPATH="$(GO_HOST_BUILD_DIR)" \
+ 	GOCACHE="$(GO_BUILD_CACHE_DIR)" \
+ 	GOMODCACHE="$(GO_MOD_CACHE_DIR)" \
+-	GOENV=off
++	GOENV=off \
++	GOTOOLCHAIN=local
+ 
+ GO_HOST_VARS= \
+ 	$(GO_HOST_TARGET_VARS) \

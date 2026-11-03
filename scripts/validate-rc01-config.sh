@@ -5,6 +5,9 @@ cd "$(dirname "$0")/.."
 config="${1:-.config}"
 [ -f "$config" ] || { echo "Configuration not found: $config" >&2; exit 1; }
 
+# Check actual Kconfig output and the external binary, not only the CI environment.
+python3 -B scripts/rc01-go-bootstrap.py validate-config "$config"
+
 require_y() {
 	grep -Fqx "$1=y" "$config" || { echo "Required symbol is not enabled: $1" >&2; exit 1; }
 }

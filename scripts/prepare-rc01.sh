@@ -42,6 +42,9 @@ while read -r type name url; do
 	}
 done < config/rc01/feeds.conf
 
+# Keep Go toolchain selection local at the pinned feed call sites.
+sh scripts/patch-rc01-golang.sh feeds/packages
+
 # Retain Nikki's source and attribution; make only this recorded local patch.
 core_makefile=feeds/nikki/mihomo-meta/Makefile
 old='PKG_BUILD_TIME:=$(shell date -u -Iseconds)'
@@ -71,6 +74,8 @@ if [ "$with_dae" = true ]; then
 	./scripts/kconfig.pl + .config config/rc01/dae.config > .config.rc01
 	mv .config.rc01 .config
 fi
+# Override the combined fragments, then verify the normalized selection below.
+python3 -B scripts/rc01-go-bootstrap.py configure .config
 make defconfig
 RC01_WITH_DAE="$with_dae" sh scripts/validate-rc01-config.sh .config
 # Parse expanded install recipes before spending time compiling a toolchain.
