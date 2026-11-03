@@ -3,7 +3,7 @@
 . /lib/functions.sh
 [ "$(board_name)" = xiaomi,be10000 ] || exit 0
 
-# DHCP-client diagnostic: obtain the LAN management address from the upstream.
+# Obtain the LAN management address from the upstream DHCP server.
 # Keep the LAN DHCP server and unattended proxy/VPN services disabled.
 uci -q batch <<'EOF'
 set router-tool.main=settings
@@ -14,7 +14,8 @@ delete network.lan.ipaddr
 delete network.lan.netmask
 delete network.lan.gateway
 delete network.lan.dns
-set network.lan.hostname='RC01-DHCP-test'
+set network.lan.hostname='RC01'
+set system.@system[0].hostname='RC01'
 delete network.lan.ip6assign
 delete network.lan.ip6hint
 set network.lan.delegate='0'
@@ -28,9 +29,19 @@ set dhcp.lan.ndp='disabled'
 set dhcp.@dnsmasq[0].cachesize='8192'
 set dhcp.@dnsmasq[0].ednspacket_max='1232'
 set dhcp.@dnsmasq[0].localservice='1'
+set tailscale.settings=settings
+set tailscale.settings.service_enabled='0'
+delete uhttpd.main.listen_https
+add_list uhttpd.main.listen_https='0.0.0.0:443'
+add_list uhttpd.main.listen_https='[::]:443'
+set uhttpd.main.redirect_https='0'
+set uhttpd.defaults.commonname='RC01'
 commit router-tool
 commit network
 commit dhcp
+commit system
+commit tailscale
+commit uhttpd
 EOF
 
 # The board defaults already bridge lan1..lan4 and sfp, reserving wan (10G RJ45).
@@ -47,7 +58,9 @@ config_foreach rc01_lan_zone zone
 uci commit firewall
 
 # Installed for later use, with no unattended VPN/proxy startup.
-[ ! -x /etc/init.d/tailscale ] || /etc/init.d/tailscale disable
+for service in tailscale tailscale-settings; do
+	[ ! -x "/etc/init.d/$service" ] || "/etc/init.d/$service" disable
+done
 if [ -x /etc/init.d/dae ]; then
 	uci -q set dae.config.enabled='0'
 	uci -q set daede.config.active_backend='dae'

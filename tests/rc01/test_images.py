@@ -25,7 +25,7 @@ DTB_SOURCE = '''/dts-v1/;
         compatible = "microchip,emc2301", "microchip,emc2305";
         reg = <0x2f>;
         #address-cells = <1>; #size-cells = <0>; #pwm-cells = <3>;
-        fan: fan@0 { reg = <0>; #cooling-cells = <2>; };
+        fan: fan@0 { reg = <0>; pwms = <&controller 26000 0 1>; #cooling-cells = <2>; };
     };
     thermal-zones {
         nss-top-thermal {
@@ -96,6 +96,42 @@ class Images(unittest.TestCase):
     def test_aliases_boot_same_payload(self):
         result = images.verify_fit(self.fit())
         self.assertEqual(result["fit_configs"], list(images.CONFIGS))
+
+    def test_fan_pwm_modes_references_and_cells_are_validated(self):
+        valid = "pwms = <&controller 26000 0 1>;"
+        variants = {
+            "missing": "",
+            "open-drain": "pwms = <&controller 26000 0 0>;",
+            "inverted": "pwms = <&controller 26000 1 1>;",
+            "wrong-frequency-argument": "pwms = <&controller 19530 0 1>;",
+            "wrong-controller": "pwms = <0x12345 26000 0 1>;",
+            "too-few-cells": "pwms = <&controller 26000 0>;",
+            "too-many-cells": "pwms = <&controller 26000 0 1 1>;",
+        }
+        for label, value in variants.items():
+            with self.subTest(label=label):
+                blob = self.compile(DTB_SOURCE.replace(valid, value), label).read_bytes()
+                with self.assertRaises(images.VerificationError):
+                    images.verify_thermal_dtb(blob)
+
+    def test_fan_controller_and_bus_must_be_available(self):
+        variants = [
+            DTB_SOURCE.replace("controller: fan-controller@2f {",
+                               'controller: fan-controller@2f { status = "disabled";'),
+            DTB_SOURCE.replace("controller: fan-controller@2f {",
+                               'i2c { status = "disabled"; controller: fan-controller@2f {')
+                      .replace("    thermal-zones {", "    };\n    thermal-zones {"),
+            DTB_SOURCE.replace('"microchip,emc2301", "microchip,emc2305"',
+                               '"microchip,emc2301"'),
+            DTB_SOURCE.replace("#pwm-cells = <3>", "#pwm-cells = <2>"),
+            DTB_SOURCE.replace("fan: fan@0 { reg = <0>", "fan: fan@0 { reg = <1>"),
+            DTB_SOURCE.replace("#cooling-cells = <2>", "#cooling-cells = <1>"),
+        ]
+        for index, source in enumerate(variants):
+            with self.subTest(index=index):
+                blob = self.compile(source, f"fan-device-{index}").read_bytes()
+                with self.assertRaises(images.VerificationError):
+                    images.verify_thermal_dtb(blob)
 
     def test_c6_only_is_rejected(self):
         with self.assertRaisesRegex(images.VerificationError, "config@al02-c4"):

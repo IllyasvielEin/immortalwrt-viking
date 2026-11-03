@@ -126,8 +126,22 @@ def verify_thermal_dtb(blob: bytes) -> None:
                    if "compatible" in props and "microchip,emc2301" in tree.strings(node, "compatible")]
     require(len(controllers) == 1, "expected one EMC2301 controller")
     controller = controllers[0]
+    require(tree.strings(controller, "compatible") == ["microchip,emc2301", "microchip,emc2305"],
+            "unexpected fan-controller compatible fallback")
     require(tree.cells(controller, "reg") == (0x2F,), "wrong fan-controller address")
+    require(tree.cells(controller, "#pwm-cells") == (3,), "fan-controller requires three PWM cells")
+    controller_phandle = tree.cells(controller, "phandle")
+    require(len(controller_phandle) == 1, "invalid fan-controller phandle")
     fan = controller + "/fan@0"
+    require(tree.cells(fan, "reg") == (0,), "fan must use channel zero")
+    require(tree.cells(fan, "#cooling-cells") == (2,), "fan requires two cooling cells")
+    require(tree.cells(fan, "pwms") == (controller_phandle[0], 26000, 0, 1),
+            "fan PWM must reference its controller with arguments 26000/normal/push-pull")
+    parts = fan.split("/")
+    for count in range(1, len(parts) + 1):
+        parent = "/".join(parts[:count]) or "/"
+        require(tree.nodes[parent].get("status", b"okay\0") in (b"okay\0", b"ok\0"),
+                f"fan device path is disabled: {parent}")
     phandle = tree.cells(fan, "phandle")
     require(len(phandle) == 1, "invalid fan phandle")
     zone = "/thermal-zones/nss-top-thermal"

@@ -183,8 +183,10 @@
 
 		rc01_fan: fan@0 {
 			reg = <0>;
-			/* Match the driver's default 26 kHz, normal, open-drain PWM. */
-			pwms = <&rc01_fan_controller 26000 0 0>;
+			/* QWRT 0726/1007 use push-pull output on channel 0.
+			 * Linux 6.18 does not apply the frequency argument to hardware.
+			 */
+			pwms = <&rc01_fan_controller 26000 0 1>;
 			#cooling-cells = <2>;
 		};
 	};

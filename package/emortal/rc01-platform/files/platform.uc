@@ -17,6 +17,24 @@ function numeric(path) {
 	return number(text(path));
 }
 
+function ppe_counts(value) {
+	let fields = value == null ? [] : split(value, /\s+/);
+	if (length(fields) == 1 && number(fields[0]) != null)
+		return { total: number(fields[0]) };
+	if (length(fields) != 3 || number(fields[0]) == null || number(fields[1]) == null)
+		return null;
+	let usage = split(fields[2], '/');
+	let total = number(usage[0]);
+	if (total == null || length(usage) > 2) return null;
+	let result = { ipv4: number(fields[0]), ipv6: number(fields[1]), total };
+	if (length(usage) == 2) {
+		let capacity = number(usage[1]);
+		if (capacity == null || capacity == 0 || total > capacity) return null;
+		result.capacity = capacity;
+	}
+	return result;
+}
+
 function enabled(value) {
 	return value == '1' || value == 'true' || value == 'yes' || value == 'on';
 }
@@ -92,13 +110,7 @@ export function collect(root, uci) {
 	let rootfs = partition(root, 'rootfs');
 	let env = partition(root, '0:appsblenv');
 	let ubi = root + '/sys/class/ubi/ubi0';
-	let active = text(root + '/sys/kernel/debug/ppe/active_flows');
-	let counts = active == null ? [] : split(active, /\s+/);
-	let ppe_flows = null;
-	if ((length(counts) == 1 || length(counts) == 3) &&
-		!length(filter(counts, v => number(v) == null)))
-		ppe_flows = length(counts) == 3 ? { ipv4: number(counts[0]), ipv6: number(counts[1]), total: number(counts[2]) }
-			: { total: number(counts[0]) };
+	let ppe_flows = ppe_counts(text(root + '/sys/kernel/debug/ppe/active_flows'));
 	let overlay = statvfs(root + '/overlay');
 	return {
 		schema: 1, board, supported: board == 'xiaomi,be10000',

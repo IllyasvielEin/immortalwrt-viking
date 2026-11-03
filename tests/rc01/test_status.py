@@ -49,7 +49,7 @@ class Status(unittest.TestCase):
             self.write(f"sys/class/net/{port}/speed", -1)
             self.write(f"sys/class/net/{port}/operstate", "down")
         self.write("sys/module/qcom_ppe/refcnt", 1)
-        self.write("sys/kernel/debug/ppe/active_flows", "0 0 0")
+        self.write("sys/kernel/debug/ppe/active_flows", "0 0 0/4096")
         self.write("usr/libexec/mihomo", "test executable placeholder")
 
     def write(self, name, value):
@@ -146,6 +146,29 @@ class Status(unittest.TestCase):
         result = self.run_status()
         self.assertTrue(result["result"]["passed"])
         self.assertIsNone(result["state"]["ppe"]["active_flows"])
+
+    def test_ppe_kernel_counters_include_total_and_capacity(self):
+        result = self.run_status()["state"]["ppe"]["active_flows"]
+        self.assertEqual(result, {"ipv4": 0, "ipv6": 0, "total": 0, "capacity": 4096})
+        self.write("sys/kernel/debug/ppe/active_flows", "12 3 15/4096")
+        self.assertEqual(self.run_status()["state"]["ppe"]["active_flows"],
+                         {"ipv4": 12, "ipv6": 3, "total": 15, "capacity": 4096})
+
+    def test_legacy_ppe_counter_formats_remain_readable(self):
+        for text, expected in [("15", {"total": 15}),
+                               ("12 3 15", {"ipv4": 12, "ipv6": 3, "total": 15})]:
+            with self.subTest(text=text):
+                self.write("sys/kernel/debug/ppe/active_flows", text)
+                self.assertEqual(self.run_status()["state"]["ppe"]["active_flows"], expected)
+
+    def test_malformed_ppe_counts_are_unknown_without_failing_hardware(self):
+        for text in ("", "bad", "0 0 bad/4096", "0 0 0/0", "0 0 4097/4096",
+                     "0 0 0/", "0 0 0/4096/1", "-1 0 0/4096"):
+            with self.subTest(text=text):
+                self.write("sys/kernel/debug/ppe/active_flows", text)
+                result = self.run_status()
+                self.assertIsNone(result["state"]["ppe"]["active_flows"])
+                self.assertTrue(result["result"]["passed"])
 
     def test_non_executable_proxy_is_not_reported_installed(self):
         (self.root / "usr/libexec/mihomo").chmod(0o644)
