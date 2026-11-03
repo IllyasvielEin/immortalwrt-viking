@@ -119,6 +119,34 @@ def verify_hashes(fdt: Fdt, path: str, data: bytes) -> None:
     require(crypto, f"no cryptographic hash for {path}")
 
 
+def verify_enabled_path(tree: Fdt, node: str) -> None:
+    parts = node.split("/")
+    for count in range(1, len(parts) + 1):
+        parent = "/".join(parts[:count]) or "/"
+        require(tree.nodes[parent].get("status", b"okay\0") in (b"okay\0", b"ok\0"),
+                f"device path is disabled: {parent}")
+
+
+def verify_ppe_dtb(blob: bytes) -> None:
+    tree = Fdt(blob)
+    devices = [node for node, props in tree.nodes.items()
+               if "compatible" in props and "qcom,ipq9574-ppe" in tree.strings(node, "compatible")]
+    require(len(devices) == 1, "expected one IPQ9574 PPE controller")
+    edma = devices[0] + "/ethernet-dma"
+    names = tree.strings(edma, "interrupt-names")
+    interrupts = tree.cells(edma, "interrupts")
+    require(len(set(names)) == len(names) and len(interrupts) == 3 * len(names),
+            "invalid PPE EDMA IRQ names or cells")
+    for prefix, first_irq in (("rxdesc", 332), ("rxfill", 356), ("txcmpl", 364)):
+        for ring in (1, 2, 3):
+            name = f"{prefix}_{ring}"
+            require(name in names, f"missing PPE DS IRQ {name}")
+            offset = 3 * names.index(name)
+            require(interrupts[offset:offset + 3] == (0, first_irq + ring - 1, 4),
+                    f"wrong PPE DS IRQ {name}")
+    verify_enabled_path(tree, edma)
+
+
 def verify_thermal_dtb(blob: bytes) -> None:
     tree = Fdt(blob)
     require("xiaomi,be10000" in tree.strings("/", "compatible"), "DTB is not RC01")
@@ -137,11 +165,7 @@ def verify_thermal_dtb(blob: bytes) -> None:
     require(tree.cells(fan, "#cooling-cells") == (2,), "fan requires two cooling cells")
     require(tree.cells(fan, "pwms") == (controller_phandle[0], 26000, 0, 1),
             "fan PWM must reference its controller with arguments 26000/normal/push-pull")
-    parts = fan.split("/")
-    for count in range(1, len(parts) + 1):
-        parent = "/".join(parts[:count]) or "/"
-        require(tree.nodes[parent].get("status", b"okay\0") in (b"okay\0", b"ok\0"),
-                f"fan device path is disabled: {parent}")
+    verify_enabled_path(tree, fan)
     phandle = tree.cells(fan, "phandle")
     require(len(phandle) == 1, "invalid fan phandle")
     zone = "/thermal-zones/nss-top-thermal"
@@ -183,7 +207,9 @@ def verify_fit(blob: bytes) -> dict:
     require(load[0] >= 0x40000000 and (load[0] - text_offset) % 0x200000 == 0, "ARM64 alignment mismatch")
     require(image_size >= len(image) and load[0] + image_size <= 0x4A100000, "kernel footprint overlaps bootloader memory")
     verify_thermal_dtb(dtb)
-    return {"fit_configs": list(CONFIGS), "load_address": hex(load[0]), "kernel_memory_bytes": image_size}
+    verify_ppe_dtb(dtb)
+    return {"fit_configs": list(CONFIGS), "load_address": hex(load[0]), "kernel_memory_bytes": image_size,
+            "ppe_ds_irq_rings": 3}
 
 
 def image_budget(kernel: bytes, root: bytes) -> dict:

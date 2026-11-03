@@ -27,6 +27,17 @@ DTB_SOURCE = '''/dts-v1/;
         #address-cells = <1>; #size-cells = <0>; #pwm-cells = <3>;
         fan: fan@0 { reg = <0>; pwms = <&controller 26000 0 1>; #cooling-cells = <2>; };
     };
+    ppe {
+        compatible = "qcom,ipq9574-ppe";
+        ethernet-dma {
+            interrupt-names = "rxdesc_1", "rxdesc_2", "rxdesc_3",
+                              "rxfill_1", "rxfill_2", "rxfill_3",
+                              "txcmpl_1", "txcmpl_2", "txcmpl_3";
+            interrupts = <0 332 4>, <0 333 4>, <0 334 4>,
+                         <0 356 4>, <0 357 4>, <0 358 4>,
+                         <0 364 4>, <0 365 4>, <0 366 4>;
+        };
+    };
     thermal-zones {
         nss-top-thermal {
             polling-delay = <1000>;
@@ -132,6 +143,28 @@ class Images(unittest.TestCase):
                 blob = self.compile(source, f"fan-device-{index}").read_bytes()
                 with self.assertRaises(images.VerificationError):
                     images.verify_thermal_dtb(blob)
+
+    def test_three_ds_rings_have_matching_irqs(self):
+        blob = self.compile(DTB_SOURCE, "ppe-valid").read_bytes()
+        images.verify_ppe_dtb(blob)
+        self.assertEqual(images.verify_fit(self.fit())["ppe_ds_irq_rings"], 3)
+
+    def test_missing_invalid_or_disabled_ds_irq_resources_are_rejected(self):
+        variants = {
+            "wrong-soc": DTB_SOURCE.replace("qcom,ipq9574-ppe", "qcom,ipq5332-ppe"),
+            "missing-ring-three": DTB_SOURCE.replace('"rxdesc_3"', '"not-rxdesc_3"'),
+            "duplicate-name": DTB_SOURCE.replace('"rxdesc_3"', '"rxdesc_2"'),
+            "wrong-third-ring-irq": DTB_SOURCE.replace("<0 334 4>", "<0 335 4>"),
+            "wrong-trigger": DTB_SOURCE.replace("<0 366 4>", "<0 366 1>"),
+            "missing-third-ring-cells": DTB_SOURCE.replace(", <0 358 4>", ""),
+            "disabled-edma": DTB_SOURCE.replace("ethernet-dma {", 'ethernet-dma { status = "disabled";'),
+            "disabled-ppe": DTB_SOURCE.replace("    ppe {", '    ppe { status = "disabled";'),
+        }
+        for name, source in variants.items():
+            with self.subTest(name=name):
+                blob = self.compile(source, name).read_bytes()
+                with self.assertRaises(images.VerificationError):
+                    images.verify_ppe_dtb(blob)
 
     def test_c6_only_is_rejected(self):
         with self.assertRaisesRegex(images.VerificationError, "config@al02-c4"):
