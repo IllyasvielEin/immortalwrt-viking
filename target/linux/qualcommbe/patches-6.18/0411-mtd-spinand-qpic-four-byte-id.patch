@@ -1,0 +1,32 @@
+From: Ziyang Huang <hzyitc@outlook.com>
+Date: Wed, 28 Oct 2026 13:34:14 +0800
+Subject: [PATCH] mtd: spinand: allow four-byte QPIC NAND identification
+
+QPIC transports READID through one 32-bit NAND_READ_ID register. Compare
+at most the three device bytes available after the manufacturer byte.
+This lets the ESMT entry match before falling through to a shorter
+GigaDevice entry with different geometry.
+
+SPI-only extraction of qualcommax/0411-mtd-qpic-four-byte-nand-id.patch;
+the raw NAND hunk is deliberately excluded. This target-local workaround
+relaxes SPI NAND comparisons throughout the qualcommbe kernel, not only
+for QPIC. Recheck prefix collisions when updating the device tables.
+No ECC parameters or chip geometry definitions are changed.
+
+Original-commit: cf5225a6e279995a574a5ed97cb227b5e076ed8e
+SPDX-License-Identifier: GPL-2.0-only
+
+Signed-off-by: Ziyang Huang <hzyitc@outlook.com>
+Signed-off-by: ViKing <viking.yfy@qq.com>
+
+--- a/drivers/mtd/nand/spi/core.c
++++ b/drivers/mtd/nand/spi/core.c
+@@ -1409,7 +1409,7 @@ int spinand_match_and_init(struct spinan
+ 		if (rdid_method != info->devid.method)
+ 			continue;
+ 
+-		if (memcmp(id + 1, info->devid.id, info->devid.len))
++		if (memcmp(id + 1, info->devid.id, min(3, info->devid.len)))
+ 			continue;
+ 
+ 		nand->memorg = table[i].memorg;

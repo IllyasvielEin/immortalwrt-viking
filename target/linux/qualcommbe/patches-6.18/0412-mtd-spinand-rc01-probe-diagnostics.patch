@@ -1,0 +1,52 @@
+Subject: [PATCH] mtd: spinand: log RC01 probe identity and effective ECC
+
+Log the four bytes actually returned by QPIC, the matching table entry,
+and the effective ECC configuration. Do not present the unfilled fifth
+scratch byte as hardware data. Messages are limited to READID and probe
+initialization; no page contents, calibration data, or environment values
+are logged. These diagnostics do not change controller transactions.
+
+SPDX-License-Identifier: GPL-2.0-only
+
+--- a/drivers/mtd/nand/spi/core.c
++++ b/drivers/mtd/nand/spi/core.c
+@@ -1443,6 +1443,13 @@
+ 
+ 		spinand->ssdr_op_templates.update_cache = op;
+ 
++		dev_info(&spinand->spimem->spi->dev,
++			 "rc01-nand: matched model=%s method=%u table-id=%u compared-id=%u size-bytes=%llu\n",
++			 info->model, (unsigned int)rdid_method,
++			 (unsigned int)info->devid.len,
++			 (unsigned int)min(3, info->devid.len),
++			 (unsigned long long)nanddev_size(nand));
++
+ 		return 0;
+ 	}
+ 
+--- a/drivers/spi/spi-qpic-snand.c
++++ b/drivers/spi/spi-qpic-snand.c
+@@ -388,8 +388,10 @@
+ 	snandc->regs->erased_cw_detect_cfg_clr = cpu_to_le32(CLR_ERASED_PAGE_DET);
+ 	snandc->regs->erased_cw_detect_cfg_set = cpu_to_le32(SET_ERASED_PAGE_DET);
+ 
+-	dev_dbg(snandc->dev, "ECC strength: %u bits per %u bytes\n",
+-		ecc_cfg->strength, ecc_cfg->step_size);
++	dev_info(snandc->dev,
++		 "rc01-nand: ECC strength=%u step=%u page=%u oob=%u\n",
++		 ecc_cfg->strength, ecc_cfg->step_size,
++		 mtd->writesize, mtd->oobsize);
+ 
+ 	snandc->qspi->ecc = ecc_cfg;
+ 
+@@ -1432,6 +1434,10 @@
+ 	if (copy) {
+ 		qcom_nandc_dev_to_mem(snandc, true);
+ 		memcpy(op->data.buf.in, snandc->reg_read_buf, snandc->buf_count);
++		dev_info(snandc->dev,
++			 "rc01-nand: QPIC READID addr-bytes=%u dummy-bytes=%u requested=%u valid=4 raw=%4phN\n",
++			 op->addr.nbytes, op->dummy.nbytes, op->data.nbytes,
++			 op->data.buf.in);
+ 	}
+ 
+ 	if (copy_ftr) {

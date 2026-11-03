@@ -120,10 +120,14 @@ jobs:
             echo "kernel=$(cat target/linux/generic/kernel-6.18)"
             echo "physical_acceptance=not-performed"
             echo "dae_test_build=$RC01_WITH_DAE"
+            echo "nand_id_workaround=spi-device-prefix-max-3"
+            echo "nand_probe_diagnostics=true"
             for feed in packages luci routing nikki daede; do
               echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
             done
           } > "$TARGET_DIR/rc01-build-metadata.txt"
+          cp target/linux/qualcommbe/patches-6.18/0411-mtd-spinand-qpic-four-byte-id.patch "$TARGET_DIR/rc01-nand-id-workaround.patch"
+          cp target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch "$TARGET_DIR/rc01-nand-probe-diagnostics.patch"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
           if [ "$RC01_WITH_DAE" = true ]; then
             cp feeds/daede/ci/pins.env "$TARGET_DIR/rc01-daede-upstream.lock"
@@ -164,9 +168,10 @@ jobs:
           done
           ath12k_wifi7="$(find build_dir -type f -name ath12k_wifi7.ko -print -quit)"
           grep -aq 'unsupported-mlo' "$ath12k_wifi7"
+          kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
+          test -n "$kernel_dir"
+          sh scripts/validate-rc01-nand.sh "$kernel_dir" "$kernel_dir/vmlinux"
           if [ "$RC01_WITH_DAE" = true ]; then
-            kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
-            test -n "$kernel_dir"
             sh scripts/validate-rc01-dae-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
           fi
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
@@ -178,7 +183,7 @@ jobs:
       - name: Upload verified images and build metadata
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-duv2-120m-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
+          name: rc01-duv2-120m-nand-id-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |
