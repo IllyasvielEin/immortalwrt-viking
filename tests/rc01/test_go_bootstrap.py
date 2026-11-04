@@ -256,6 +256,11 @@ class BootstrapTests(unittest.TestCase):
         executable("scripts/feeds", ":\n")
         for name in ("golang", "daede"):
             executable(f"scripts/patch-rc01-{name}.sh", f'echo patch-{name} >> "$RC01_TEST_EVENTS"\n')
+        (project / "scripts/patch-rc01-packages.py").write_text(
+            "import os\nfrom pathlib import Path\n"
+            "with Path(os.environ['RC01_TEST_EVENTS']).open('a') as events:\n"
+            "    events.write('patch-packages\\n')\n"
+        )
         executable("scripts/validate-rc01-config.sh",
                    'exec "$RC01_TEST_PYTHON" -B scripts/rc01-go-bootstrap.py validate-config "$1"\n')
         executable("test-bin/python3", 'exec "$RC01_TEST_PYTHON" -B "$@"\n')
@@ -287,7 +292,7 @@ esac
                 self.assertEqual(result.returncode, 0, result.stderr)
                 bootstrap.validate_config(project / ".config", selected)
                 self.assertEqual(events.read_text().splitlines(),
-                                 ["patch-daede", "feed-head", "patch-golang", "defconfig", "recipe-parse"])
+                                 ["patch-daede", "feed-head", "patch-golang", "patch-packages", "defconfig", "recipe-parse"])
         result = prepare({"RC01_GO_BOOTSTRAP_ROOT": str(root), "RC01_TEST_MANGLE_CONFIG": "1"})
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("recipe-parse", events.read_text())

@@ -1,0 +1,39 @@
+{
+  "packages": [
+    {
+      "feed": "packages",
+      "feed_revision": "48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd",
+      "path": "net/tailscale/Makefile",
+      "patch": "100-tailscale-1.104.5.patch",
+      "version": "1.104.5",
+      "source_commit": "73a48057aaf5f60e4f770b398e9b7af576b01dbe",
+      "source_url": "https://codeload.github.com/tailscale/tailscale/tar.gz/v1.104.5?",
+      "source_sha256": "0704fa4ce8624463ce421f45f0d20ae8d710b9ee7354eaa1f4a772e9a3cd4ded",
+      "released": "2026-11-03",
+      "go": "1.27.3",
+      "baseline_sha256": "746e344e165c04fc28c0f8032ca6b2a4ec1b1aed56af1a67bc0832d7595bdf28",
+      "applied_sha256": "03c5731b5dd0929dcf9cee4f4554bd05614af36b94f0b441f7060483bfc49bc0",
+      "go_mod_sha256": "f7bccfa7a419a6d375dd2d81911d1d701ca79e0d7f080916d21ad1dd15bf34e6",
+      "source_archive": "tailscale-1.104.5.tar.gz",
+      "source_hash_method": "upstream codeload tar.gz"
+    },
+    {
+      "feed": "nikki",
+      "feed_revision": "78e1a751d55ed0762811f054ee699049473da7b8",
+      "path": "mihomo-meta/Makefile",
+      "patch": "110-mihomo-1.19.33.patch",
+      "version": "1.19.33",
+      "source_commit": "3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8",
+      "source_url": "https://github.com/MetaCubeX/mihomo.git",
+      "source_sha256": "8adee049a9c1f653b9c52fbf20fec74da56288961f857289d540193f38c0fa44",
+      "source_epoch": 1792597918,
+      "released": "2026-10-21",
+      "go": "1.20",
+      "baseline_sha256": "5350d891680f502835a9fa07e9ccd1745a890e292754fe90ae6550e54edcf303",
+      "applied_sha256": "7819b99814a1f50b8253debab3d3002e46afe7dce8b2119016ad41bfc4befcc4",
+      "go_mod_sha256": "444c571a66165f4cc86143314e6791d06528513b7b0f546e656155310c172964",
+      "source_archive": "mihomo-meta-1.19.33.tar.gz",
+      "source_hash_method": "OpenWrt dl_tar_pack: umask 022, git core.abbrev 8, commit epoch, sorted tar uid/gid 0, gzip -n; cross-checked with dl_github_archive.py"
+    }
+  ]
+}

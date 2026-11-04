@@ -65,6 +65,9 @@ else
 	}
 fi
 
+# Replay reviewed package source updates after the feed and timestamp guards.
+python3 -B scripts/patch-rc01-packages.py feeds/packages feeds/nikki
+
 mkdir -p files
 cp -a config/rc01/files/. files/
 chmod 755 files/etc/board.d/99-rc01-wireless files/etc/uci-defaults/89-rc01-bypass
