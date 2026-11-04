@@ -29,6 +29,10 @@ set dhcp.lan.ndp='disabled'
 set dhcp.@dnsmasq[0].cachesize='8192'
 set dhcp.@dnsmasq[0].ednspacket_max='1232'
 set dhcp.@dnsmasq[0].localservice='1'
+delete dhcp.@dnsmasq[0].min_cache_ttl
+delete dhcp.@dnsmasq[0].use_stale_cache
+set dhcp.@dnsmasq[0].nonegcache='0'
+set dhcp.@dnsmasq[0].dns_redirect='0'
 set tailscale.settings=settings
 set tailscale.settings.service_enabled='0'
 delete uhttpd.main.listen_https

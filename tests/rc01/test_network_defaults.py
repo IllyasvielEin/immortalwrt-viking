@@ -82,6 +82,20 @@ class DHCPDefaultsTests(unittest.TestCase):
             self.assertEqual(state[f"network.{interface}.auto"], "0")
         self.assertEqual(state["router-tool.main.auto_network"], "0")
 
+    def test_inherited_dns_ttl_and_hijack_presets_are_removed(self):
+        state = self.apply_writes(self.run_defaults(), {
+            "dhcp.@dnsmasq[0].min_cache_ttl": "3600",
+            "dhcp.@dnsmasq[0].use_stale_cache": "3600",
+            "dhcp.@dnsmasq[0].nonegcache": "1",
+            "dhcp.@dnsmasq[0].dns_redirect": "1",
+        })
+        for option in ("min_cache_ttl", "use_stale_cache"):
+            self.assertNotIn(f"dhcp.@dnsmasq[0].{option}", state)
+        for option in ("nonegcache", "dns_redirect"):
+            self.assertEqual(state[f"dhcp.@dnsmasq[0].{option}"], "0")
+        self.assertEqual(state["dhcp.@dnsmasq[0].cachesize"], "8192")
+        self.assertEqual(state["dhcp.@dnsmasq[0].ednspacket_max"], "1232")
+
     def test_tailscale_main_and_helper_remain_disabled(self):
         state = self.apply_writes(self.run_defaults(), {})
         self.assertEqual(state["tailscale.settings.service_enabled"], "0")
