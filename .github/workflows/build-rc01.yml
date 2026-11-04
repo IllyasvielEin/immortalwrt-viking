@@ -324,7 +324,15 @@ jobs:
           python3 -B scripts/validate-rc01-platform.py "$kernel_dir" "$wireless_dir" > "$TARGET_DIR/rc01-platform-validation.json"
           UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
             RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
-            python3 -B -m unittest discover -s tests/rc01 -v
+            python3 -B - <<'PYTEST'
+          import sys
+          import unittest
+          suite = unittest.defaultTestLoader.discover("tests/rc01")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if result.skipped:
+              print("Post-build regression checks must not be skipped.", file=sys.stderr)
+          sys.exit(not result.wasSuccessful() or bool(result.skipped))
+          PYTEST
 
       - name: Verify boot compatibility and image budget
         shell: bash
