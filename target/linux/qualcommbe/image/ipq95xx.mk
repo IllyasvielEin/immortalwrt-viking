@@ -59,7 +59,7 @@ define Device/qcom_rdp433
 endef
 TARGET_DEVICES += qcom_rdp433
 
-define Device/nokia_beacon10
+define Device/nokia_beacon-10
 	$(call Device/FitImage)
 	$(call Device/EmmcImage)
 	DEVICE_VENDOR := Nokia
@@ -67,13 +67,13 @@ define Device/nokia_beacon10
 	DEVICE_DTS_CONFIG := config@al02-c2
 	KERNEL_SIZE := 10240k
 	SOC := ipq9574
-	SUPPORTED_DEVICES += nokia,beacon10
+	SUPPORTED_DEVICES += nokia,beacon-10
 	DEVICE_PACKAGES := -kmod-ath12k kmod-ath11k-ahb kmod-ath11k-pci \
 		ath11k-firmware-ipq9574-ddwrt ath11k-firmware-qcn9074-ddwrt \
-		ipq-wifi-nokia_beacon10 kmod-phy-realtek rtl826x-firmware
+		ipq-wifi-nokia_beacon-10 kmod-phy-realtek rtl826x-firmware
 	IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-rootfs | append-metadata
 endef
-TARGET_DEVICES += nokia_beacon10
+TARGET_DEVICES += nokia_beacon-10
 
 define Device/xiaomi_be7000-common
 	$(call Device/FitImage)
@@ -95,20 +95,20 @@ define Device/xiaomi_be7000
 endef
 TARGET_DEVICES += xiaomi_be7000
 
-define Device/xiaomi_be7000-pro
+define Device/xiaomi_be7000-es
 	$(call Device/xiaomi_be7000-common)
-	DEVICE_MODEL := BE7000 Pro
+	DEVICE_MODEL := BE7000 ES
 	SOC := ipq9574
-	DEVICE_PACKAGES += ipq-wifi-xiaomi_be7000-pro
-	SUPPORTED_DEVICES += xiaomi,be7000-pro
+	DEVICE_PACKAGES += ipq-wifi-xiaomi_be7000-es
+	SUPPORTED_DEVICES += xiaomi,be7000-es
 endef
-TARGET_DEVICES += xiaomi_be7000-pro
+TARGET_DEVICES += xiaomi_be7000-es
 
 define Device/xiaomi_be10000-common
 	$(call Device/FitImage)
 	$(call Device/UbiFit)
 	DEVICE_VENDOR := Xiaomi
-	DEVICE_DTS_CONFIG := config@al02-c6
+	DEVICE_DTS_CONFIG := config@al02-c4
 	BLOCKSIZE := 128k
 	PAGESIZE := 2048
 	DEVICE_PACKAGES := ath12k-firmware-qcn9274-ddwrt \
@@ -120,7 +120,7 @@ define Device/xiaomi_be10000
 	DEVICE_MODEL := BE10000
 	SOC := ipq9570
 	# Du v2 selects C4 explicitly; retain C6 for other bootloader setups.
-	DEVICE_DTS_CONFIG_ALIASES := config@al02-c4
+	DEVICE_DTS_CONFIG_ALIASES := config@al02-c6
 	# This profile targets the merged 120 MiB RC01 MIBIB layout.
 	IMAGE_SIZE := 122880k
 	NAND_SIZE := 256m
@@ -128,10 +128,10 @@ define Device/xiaomi_be10000
 endef
 TARGET_DEVICES += xiaomi_be10000
 
-define Device/xiaomi_be10000-pro
+define Device/xiaomi_be10000-es
 	$(call Device/xiaomi_be10000-common)
-	DEVICE_MODEL := BE10000 Pro
+	DEVICE_MODEL := BE10000 ES
 	SOC := ipq9574
-	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000-pro
+	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000-es
 endef
-TARGET_DEVICES += xiaomi_be10000-pro
+TARGET_DEVICES += xiaomi_be10000-es

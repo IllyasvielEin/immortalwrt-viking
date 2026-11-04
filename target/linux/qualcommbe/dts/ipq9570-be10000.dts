@@ -19,7 +19,7 @@
 	};
 
 	chosen {
-		bootargs-append = " root=/dev/ubiblock0_1";
+		bootargs-append = " root=/dev/ubiblock0_1 cma=320M";
 	};
 
 	regulator_fixed_3p3: regulator-3p3 {
@@ -118,31 +118,6 @@
 			reg = <0x0 0x49b00000 0x0 0x00600000>;
 			no-map;
 		};
-
-		/* Firmware-private host DDR remains separate for each radio. */
-		wifi_2g_mem: wifi@50000000 {
-			reg = <0x0 0x50000000 0x0 0x04000000>;
-			no-map;
-		};
-
-		wifi_5gh_mem: wifi@54000000 {
-			reg = <0x0 0x54000000 0x0 0x04000000>;
-			no-map;
-		};
-
-		wifi_5gl_mem: wifi@58000000 {
-			reg = <0x0 0x58000000 0x0 0x04000000>;
-			no-map;
-		};
-
-		/* All three devices in the WSI group share global MLO memory. */
-		mlo_mem: mlo-global@5c000000 {
-			reg = <0x0 0x5c000000 0x0 0x01200000>;
-			no-map;
-		};
-
-
-
 	};
 
 	sfp: sfp {
@@ -260,6 +235,9 @@
 	aqr113c: ethernet-phy@0 {
 		compatible = "ethernet-phy-ieee802.3-c45";
 		reg = <0>;
+		reset-gpios = <&tlmm 61 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <100000>;
 		nvmem-cells = <&aqr_fw>;
 		nvmem-cell-names = "firmware";
 	};
@@ -309,25 +287,25 @@
 
 &ppe_port1 {
 	label = "lan1";
-	nvmem-cells = <&macaddr_art_0 1>;
+	nvmem-cells = <&macaddr_art_6 0>;
 	nvmem-cell-names = "mac-address";
 };
 
 &ppe_port2 {
 	label = "lan2";
-	nvmem-cells = <&macaddr_art_0 1>;
+	nvmem-cells = <&macaddr_art_6 0>;
 	nvmem-cell-names = "mac-address";
 };
 
 &ppe_port3 {
 	label = "lan3";
-	nvmem-cells = <&macaddr_art_0 1>;
+	nvmem-cells = <&macaddr_art_6 0>;
 	nvmem-cell-names = "mac-address";
 };
 
 &ppe_port4 {
 	label = "lan4";
-	nvmem-cells = <&macaddr_art_0 1>;
+	nvmem-cells = <&macaddr_art_6 0>;
 	nvmem-cell-names = "mac-address";
 };
 
@@ -359,7 +337,7 @@
 			pcs-handle = <&pcs2_ch0>;
 			managed = "in-band-status";
 			sfp = <&sfp>;
-			nvmem-cells = <&macaddr_art_0 1>;
+			nvmem-cells = <&macaddr_art_6 0>;
 			nvmem-cell-names = "mac-address";
 			clocks = <&nsscc NSS_CC_PORT6_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT6_RX_CLK>,
@@ -474,18 +452,6 @@
 						#nvmem-cell-cells = <1>;
 					};
 
-					macaddr_art_c: macaddr@c {
-						compatible = "mac-base";
-						reg = <0xc 0x6>;
-						#nvmem-cell-cells = <1>;
-					};
-
-					macaddr_art_12: macaddr@12 {
-						compatible = "mac-base";
-						reg = <0x12 0x6>;
-						#nvmem-cell-cells = <1>;
-					};
-
 					caldata_art_1000: calibration@1000 {
 						reg = <0x1000 0x20000>;
 					};
@@ -589,10 +555,8 @@
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
 	qcom,force-unique-qrtr-id;
-	nvmem-cells = <&macaddr_art_6 0>;
+	nvmem-cells = <&macaddr_art_6 2>;
 	nvmem-cell-names = "mac-address";
-	memory-region = <&wifi_2g_mem>, <&mlo_mem>;
-	memory-region-names = "host-ddr-mem", "mlo-global-mem";
 };
 
 &wifi2 {
@@ -600,10 +564,8 @@
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
 	qcom,force-unique-qrtr-id;
-	nvmem-cells = <&macaddr_art_12 0>;
+	nvmem-cells = <&macaddr_art_6 3>;
 	nvmem-cell-names = "mac-address";
-	memory-region = <&wifi_5gh_mem>, <&mlo_mem>;
-	memory-region-names = "host-ddr-mem", "mlo-global-mem";
 };
 
 &wifi3 {
@@ -611,8 +573,6 @@
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
 	qcom,force-unique-qrtr-id;
-	nvmem-cells = <&macaddr_art_c 0>;
+	nvmem-cells = <&macaddr_art_6 4>;
 	nvmem-cell-names = "mac-address";
-	memory-region = <&wifi_5gl_mem>, <&mlo_mem>;
-	memory-region-names = "host-ddr-mem", "mlo-global-mem";
 };

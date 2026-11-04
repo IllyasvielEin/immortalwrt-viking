@@ -221,17 +221,33 @@ jobs:
           done
           cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
           cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
+          cp scripts/rc01-platform-sources.json "$TARGET_DIR/rc01-platform-sources.json"
+          cp config/rc01/patches/packages/manifest.json "$TARGET_DIR/rc01-package-sources.json"
+          python3 -B scripts/rc01-source-metadata.py "$TARGET_DIR/rc01-source-metadata.json"
+          cp -a config/rc01/patches/packages "$TARGET_DIR/rc01-package-patches"
           cp files/etc/uci-defaults/89-rc01-bypass "$TARGET_DIR/rc01-network-defaults.sh"
           {
             echo "repository=$GITHUB_REPOSITORY"
             echo "source_commit=$(git rev-parse HEAD)"
             echo "source_tree=$(git rev-parse 'HEAD^{tree}')"
             echo "viking_baseline=e5b0e82156513e81b6b712e4498ab15fd3a28571"
-            echo "viking_reviewed_head=a8d4a44c8ede4c703e8866fbf709b34dd1506294"
+            echo "viking_reviewed_head=ec73307670005a1f00cbeb039dc90709fa2a871e"
+            echo "viking_integration=selected-commits"
+            echo "viking_full_merge=false"
+            echo "viking_selected_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd,f120d87c9200ae1ddad9a1d9996d51cf0fb14709,1e95b974f6e040e24a26800d5aa9dcc9e0f592d8,6149690bf77473633aaf820d6569c97a9f2908ab,490d9e9cb2131a989551a055c0e84f70174e3787,490a5b388762702dd68b81472095f8773265adc9,7e8c4cef998c6789a29d2253b21a2721e3f19044,ec73307670005a1f00cbeb039dc90709fa2a871e,90f54dddcf833c2ddde722dd8b298ec54c59eb98"
             echo "viking_followup_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd"
             echo "ppe_ds_nodes_ipq9574=3"
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
-            echo "kernel=$(cat target/linux/generic/kernel-6.18)"
+            echo "kernel=6.18.60"
+            echo "kernel_source_sha256=3c2f44ef6acc021a7ad444d9a2e6ec1ef488ff09368793d0004a6080f69d621e"
+            echo "mac80211=7.2-r35"
+            echo "ipq_wifi=7@5363395811fb3c72da0e62304a26d995c0f9c675"
+            echo "mihomo=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/mihomo-meta/Makefile)"
+            echo "tailscale=$(sed -n 's/^PKG_VERSION:=//p' feeds/packages/net/tailscale/Makefile)"
+            echo "nikki=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/nikki/Makefile)"
+            echo "dnsmasq=2.93-r10@10fbc39cf57220eb93f61ce282d7561750f8d29d"
+            echo "rc01_cma_mib=320"
+            echo "qcn9274_hw1_mlo=false"
             echo "go_bootstrap_mode=$RC01_GO_BOOTSTRAP_MODE"
             echo "go_bootstrap_version=1.24.13"
             if [ "$RC01_GO_BOOTSTRAP_MODE" = external ]; then
@@ -261,7 +277,7 @@ jobs:
             cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
             cp feeds/daede/dae/Makefile "$TARGET_DIR/rc01-dae.Makefile"
           fi
-          (cd "$TARGET_DIR"; sha256sum *xiaomi_be10000-squashfs-* > rc01-images.sha256)
+          (cd "$TARGET_DIR"; sha256sum -- *xiaomi_be10000-squashfs-* > rc01-images.sha256)
 
       - name: Preserve unverified images before acceptance checks
         if: ${{ !cancelled() && steps.firmware.outcome == 'success' }}
@@ -303,10 +319,18 @@ jobs:
             sh scripts/validate-rc01-dae-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
           fi
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
-          UCODE="$PWD/staging_dir/hostpkg/bin/ucode" python3 -B -m unittest discover -s tests/rc01 -v
+          wireless_dir="$(find build_dir -type d -path '*/backports-7.2' -print -quit)"
+          test -n "$wireless_dir"
+          python3 -B scripts/validate-rc01-platform.py "$kernel_dir" "$wireless_dir" > "$TARGET_DIR/rc01-platform-validation.json"
+          UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
+            RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
+            python3 -B -m unittest discover -s tests/rc01 -v
 
       - name: Verify boot compatibility and image budget
-        run: python3 -B scripts/verify-rc01-images.py "$TARGET_DIR"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-rc01-images.py "$TARGET_DIR" | tee "$TARGET_DIR/rc01-image-validation.json"
 
       - name: Upload verified images and build metadata
         uses: actions/upload-artifact@v4

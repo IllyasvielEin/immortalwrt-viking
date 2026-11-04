@@ -104,6 +104,50 @@ print('manual-preset-check:ok\n');
             self.assertIn("set wireless.radio0.disabled='1'", result.stdout)
             self.assertIn("set wireless.default_radio0.disabled='1'", result.stdout)
 
+    @unittest.skipUnless(UCODE, "ucode is required for restricted-band defaults regression")
+    def test_restricted_high_5g_defaults_remain_disabled_and_legal(self):
+        module = TOOL / "root/usr/share/router-tool/wireless.uc"
+        script = f"import {{ synchronize_wireless }} from {json.dumps(str(module))};\n"
+        script += r'''
+let values = {
+  'router-tool': {},
+  wireless: {
+    radio0: { '.name': 'radio0', '.type': 'wifi-device', path: 'pci-high', band: '5g', disabled: '1' },
+    ap0: { '.name': 'ap0', '.type': 'wifi-iface', device: 'radio0', mode: 'ap', disabled: '1',
+           ssid: 'OWRT', key: '12345678', encryption: 'psk2+ccmp' }
+  }
+};
+let cursor = {
+  get: (c, s, k) => values[c]?.[s]?.[k],
+  get_all: (c, s) => values[c]?.[s],
+  get_first: () => 'RC01',
+  foreach: (c, t, fn) => { for (let s, v in values[c] || {}) if (v['.type'] == t) fn(v); },
+  set: (c, s, k, v) => {
+    if (v == null) { values[c][s] = { '.type': k }; return true; }
+    values[c][s][k] = v; return true;
+  },
+  delete: (c, s, k) => { delete values[c][s][k]; return true; }
+};
+let board = { model: { id: 'xiaomi,be10000' }, wlan: {
+  phy2: { path: 'pci-high', info: { bands: { '5G': {
+    default_channel: 100, max_width: 160, modes: ['EHT20', 'EHT40', 'EHT80', 'EHT160']
+  } } } }
+} };
+synchronize_wireless(cursor, board);
+if (values.wireless.radio0.channel != 'auto' || values.wireless.radio0.htmode != 'EHT80')
+  die('high-band card received unsupported low-band defaults');
+if (values.wireless.radio0.disabled != '1' || values.wireless.ap0.disabled != '1')
+  die('defaults enabled an AP');
+if (values['router-tool'].radio0.defaults_done != '1') die('defaults marker missing');
+values.wireless.radio0.channel = '149';
+synchronize_wireless(cursor, board);
+if (values.wireless.radio0.channel != '149') die('saved user channel was overwritten');
+print('restricted-band-check:ok\n');
+'''
+        result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "restricted-band-check:ok\n")
+
 
 if __name__ == "__main__":
     unittest.main()

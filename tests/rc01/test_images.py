@@ -21,6 +21,12 @@ DTB_SOURCE = '''/dts-v1/;
 / {
     #address-cells = <1>; #size-cells = <0>;
     compatible = "xiaomi,be10000", "qcom,ipq9574";
+    reserved-memory {
+        #address-cells = <2>; #size-cells = <2>; ranges;
+        tzapp@49b00000 { reg = <0 0x49b00000 0 0x600000>; no-map; };
+        bootloader@4a100000 { reg = <0 0x4a100000 0 0x400000>; no-map; };
+        secure@48000000 { reg = <0 0x48000000 0 0x100000>; no-map; };
+    };
     controller: fan-controller@2f {
         compatible = "microchip,emc2301", "microchip,emc2305";
         reg = <0x2f>;
@@ -43,10 +49,10 @@ DTB_SOURCE = '''/dts-v1/;
             polling-delay = <1000>;
             trips {
                 nss-top-critical { temperature = <125000>; type = "critical"; };
-                base: fan-base { temperature = <0>; type = "active"; };
-                warm: fan-warm { temperature = <50000>; type = "active"; };
-                hot: fan-hot { temperature = <60000>; type = "active"; };
-                full: fan-full { temperature = <70000>; type = "active"; };
+                base: fan-base { temperature = <0>; hysteresis = <0>; type = "active"; };
+                warm: fan-warm { temperature = <50000>; hysteresis = <3000>; type = "active"; };
+                hot: fan-hot { temperature = <60000>; hysteresis = <3000>; type = "active"; };
+                full: fan-full { temperature = <70000>; hysteresis = <3000>; type = "active"; };
             };
             cooling-maps {
                 fan-base { trip = <&base>; cooling-device = <&fan 3 3>; };
@@ -90,10 +96,10 @@ class Images(unittest.TestCase):
         compressed.write_bytes(gzip.compress(bytes(kernel), mtime=0))
         its = self.work / "image.its"
         cmd = ["sh", str(ROOT / "scripts/mkits.sh"), "-A", "arm64", "-C", "gzip",
-               "-a", load, "-e", load, "-v", "6.18.55", "-k", str(compressed),
-               "-d", str(dtb), "-D", "xiaomi_be10000", "-c", "config@al02-c6", "-o", str(its)]
+               "-a", load, "-e", load, "-v", "6.18.60", "-k", str(compressed),
+               "-d", str(dtb), "-D", "xiaomi_be10000", "-c", "config@al02-c4", "-o", str(its)]
         if alias:
-            cmd += ["-b", "config@al02-c4"]
+            cmd += ["-b", "config@al02-c6"]
         subprocess.run(cmd, check=True, capture_output=True)
         source = its.read_text()
         # mkimage fills these values in production. Fixtures use independently
@@ -166,8 +172,8 @@ class Images(unittest.TestCase):
                 with self.assertRaises(images.VerificationError):
                     images.verify_ppe_dtb(blob)
 
-    def test_c6_only_is_rejected(self):
-        with self.assertRaisesRegex(images.VerificationError, "config@al02-c4"):
+    def test_c4_only_is_rejected(self):
+        with self.assertRaisesRegex(images.VerificationError, "config@al02-c6"):
             images.verify_fit(self.fit(alias=False))
 
     def test_alias_cannot_select_another_dtb(self):
@@ -182,6 +188,23 @@ class Images(unittest.TestCase):
     def test_wrong_arm64_alignment_is_rejected(self):
         with self.assertRaisesRegex(images.VerificationError, "alignment"):
             images.verify_fit(self.fit(load="0x41080000"))
+
+    def test_kernel_avoids_each_actual_reserved_region(self):
+        for load in ("0x48000000", "0x49a00000", "0x4a000000"):
+            with self.subTest(load=load), self.assertRaisesRegex(images.VerificationError, "reserved memory"):
+                images.verify_fit(self.fit(load=load))
+        images.verify_fit(self.fit(load="0x47e00000"))  # Adjacent boundary is valid.
+
+    def test_fdt_reserve_map_also_blocks_kernel_overlap(self):
+        source = DTB_SOURCE.replace('/dts-v1/;', '/dts-v1/; /memreserve/ 0x42000000 0x200000;')
+        tree = images.Fdt(self.compile(source, "reserve-map").read_bytes())
+        with self.assertRaisesRegex(images.VerificationError, "FDT reserve map"):
+            images.verify_kernel_memory(tree, 0x42000000, 1)
+        images.verify_kernel_memory(tree, 0x42200000, 1)
+
+    def test_default_must_select_c4(self):
+        with self.assertRaisesRegex(images.VerificationError, "default must be C4"):
+            images.verify_fit(self.fit(extra='&{/configurations} { default = "config@al02-c6"; };'))
 
     def test_hash_corruption_is_rejected(self):
         blob = self.fit()
@@ -202,7 +225,7 @@ class Images(unittest.TestCase):
     def test_duplicate_alias_is_rejected_by_generator(self):
         result = subprocess.run(["sh", str(ROOT / "scripts/mkits.sh"), "-A", "arm64", "-C", "gzip",
                                  "-a", "0x41000000", "-e", "0x41000000", "-v", "test", "-k", "/dev/null",
-                                 "-c", "config@al02-c6", "-b", "config@al02-c6", "-o", str(self.work / "bad.its")],
+                                 "-c", "config@al02-c4", "-b", "config@al02-c4", "-o", str(self.work / "bad.its")],
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Duplicate", result.stderr)

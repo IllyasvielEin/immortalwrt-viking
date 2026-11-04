@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "upstream": "https://github.com/VIKINGYFY/immortalwrt",
+  "baseline": "e5b0e82156513e81b6b712e4498ab15fd3a28571",
+  "reviewed_head": "ec73307670005a1f00cbeb039dc90709fa2a871e",
+  "integration": "selected-commits",
+  "full_merge": false,
+  "previous_selected_commits": [
+    "4e7173571c64faced3172e51a83fa314d5d5f600",
+    "47ce1cd5dfeffb9c7789c8b637f654098898d6a3",
+    "d58d0507801a3cab73802e6434314eea0596ba31",
+    "5dbfbfe46225e244fe06c42f11b50bc710f731dd"
+  ],
+  "selected_commits": [
+    "f120d87c9200ae1ddad9a1d9996d51cf0fb14709",
+    "1e95b974f6e040e24a26800d5aa9dcc9e0f592d8",
+    "6149690bf77473633aaf820d6569c97a9f2908ab",
+    "490d9e9cb2131a989551a055c0e84f70174e3787",
+    "490a5b388762702dd68b81472095f8773265adc9",
+    "7e8c4cef998c6789a29d2253b21a2721e3f19044",
+    "ec73307670005a1f00cbeb039dc90709fa2a871e",
+    "90f54dddcf833c2ddde722dd8b298ec54c59eb98"
+  ],
+  "excluded_commits": [
+    "6061a61a",
+    "17d1ac",
+    "6c57",
+    "a8d4a44c8ede4c703e8866fbf709b34dd1506294"
+  ],
+  "kernel": {
+    "version": "6.18.60",
+    "url": "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.60.tar.xz",
+    "sha256": "3c2f44ef6acc021a7ad444d9a2e6ec1ef488ff09368793d0004a6080f69d621e",
+    "cve_2026_98432_stable_fix": "a47406c769f72c070386985488f1c4d057df86b2"
+  },
+  "wireless": {
+    "version": "7.2",
+    "release": 35,
+    "sha256": "6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454"
+  },
+  "local_preserved": [
+    "RC01 120MiB layout and 32MiB writable budget",
+    "five-argument 64KiB envtools mapping",
+    "C4 default and C6 same-payload alias",
+    "0411 NAND ID and 0412 probe diagnostics",
+    "push-pull fan and fail-safe guard",
+    "BusyBox awk preflight and ramfs layout recheck",
+    "three PPE DS nodes, identity DMA and quarantine"
+  ],
+  "local_adjustments": [
+    "PCS interface cache updated only after successful mode setup",
+    "6.18.60 duplicate backports removed and affected contexts refreshed"
+  ]
+}

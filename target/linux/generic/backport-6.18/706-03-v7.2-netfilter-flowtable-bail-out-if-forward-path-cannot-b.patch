@@ -15,14 +15,14 @@ entry.
 Link: https://sashiko.dev/#/patchset/20260607094954.48892-15-pablo%40netfilter.org?part=14
 Signed-off-by: Pablo Neira Ayuso <pablo@netfilter.org>
 [ julius: adapt to 6.18, which has no tunnel path; keep the WARN_ON_ONCE() on vlan untag ]
+[ RC01: refresh for 6.18.60; retain the stable zero-encapsulation guard
+  before decrement, without reintroducing the decrement-on-zero underflow. ]
 Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
 ---
- net/netfilter/nf_flow_table_path.c | 72 +++++++++++++++++-------------
- 1 file changed, 42 insertions(+), 30 deletions(-)
 
 --- a/net/netfilter/nf_flow_table_path.c
 +++ b/net/netfilter/nf_flow_table_path.c
-@@ -95,9 +95,9 @@ struct nft_forward_info {
+@@ -95,9 +95,9 @@
  	enum flow_offload_xmit_type xmit_type;
  };
  
@@ -35,7 +35,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  {
  	const struct net_device_path *path;
  	int i;
-@@ -125,10 +125,9 @@ static void nft_dev_path_info(const stru
+@@ -125,10 +125,9 @@
  			}
  
  			/* DEV_PATH_VLAN and DEV_PATH_PPPOE */
@@ -49,7 +49,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  			if (!info->outdev)
  				info->outdev = path->dev;
  			info->encap[info->num_encaps].id = path->encap.id;
-@@ -143,22 +142,23 @@ static void nft_dev_path_info(const stru
+@@ -143,22 +142,23 @@
  
  			switch (path->bridge.vlan_mode) {
  			case DEV_PATH_BR_VLAN_UNTAG_HW:
@@ -71,17 +71,17 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  				info->num_encaps++;
  				break;
  			case DEV_PATH_BR_VLAN_UNTAG:
--				if (WARN_ON_ONCE(info->num_encaps-- == 0)) {
+-				if (info->num_encaps == 0) {
 -					info->indev = NULL;
 -					break;
 -				}
-+				if (WARN_ON_ONCE(info->num_encaps-- == 0))
++				if (info->num_encaps == 0)
 +					return -1;
 +
+ 				info->num_encaps--;
  				break;
  			case DEV_PATH_BR_VLAN_KEEP:
- 				break;
-@@ -166,8 +166,7 @@ static void nft_dev_path_info(const stru
+@@ -167,8 +167,7 @@
  			info->xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
  			break;
  		default:
@@ -91,7 +91,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  		}
  	}
  	if (!info->outdev)
-@@ -178,6 +177,8 @@ static void nft_dev_path_info(const stru
+@@ -179,6 +178,8 @@
  	if (nf_flowtable_hw_offload(flowtable) &&
  	    nft_is_valid_ether_device(info->indev))
  		info->xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
@@ -100,7 +100,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  }
  
  static bool nft_flowtable_find_dev(const struct net_device *dev,
-@@ -197,10 +198,10 @@ static bool nft_flowtable_find_dev(const
+@@ -198,10 +199,10 @@
  	return found;
  }
  
@@ -115,7 +115,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  {
  	const struct dst_entry *dst = route->tuple[dir].dst;
  	struct net_device_path_stack stack;
-@@ -208,15 +209,16 @@ static void nft_dev_forward_path(struct
+@@ -209,14 +210,15 @@
  	unsigned char ha[ETH_ALEN];
  	int i;
  
@@ -130,14 +130,13 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  
  	if (info.outdev)
  		route->tuple[dir].out.ifindex = info.outdev->ifindex;
- 
+-
 -	if (!info.indev || !nft_flowtable_find_dev(info.indev, ft))
 -		return;
--
+ 
  	route->tuple[!dir].in.ifindex = info.indev->ifindex;
  	for (i = 0; i < info.num_encaps; i++) {
- 		route->tuple[!dir].in.encap[i].id = info.encap[i].id;
-@@ -231,6 +233,8 @@ static void nft_dev_forward_path(struct
+@@ -232,6 +234,8 @@
  		route->tuple[dir].out.hw_ifindex = info.hw_outdev->ifindex;
  		route->tuple[dir].xmit_type = info.xmit_type;
  	}
@@ -146,7 +145,7 @@ Signed-off-by: Julius Bairaktaris <julius@bairaktaris.de>
  }
  
  int nft_flow_route(const struct nft_pktinfo *pkt, const struct nf_conn *ct,
-@@ -275,11 +279,19 @@ int nft_flow_route(const struct nft_pkti
+@@ -276,11 +280,19 @@
  	nft_default_forward_path(route, this_dst, dir);
  	nft_default_forward_path(route, other_dst, !dir);
  

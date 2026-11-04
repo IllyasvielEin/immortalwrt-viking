@@ -34,11 +34,22 @@ class Fdt:
 
     def __init__(self, blob: bytes):
         require(len(blob) >= 40, "truncated FDT header")
-        magic, total, start, strings, _, version, _, _, string_size, size = struct.unpack_from(">10I", blob)
+        magic, total, start, strings, reserve, version, _, _, string_size, size = struct.unpack_from(">10I", blob)
         require(magic == 0xD00DFEED and version >= 17, "unsupported FDT header")
         require(40 <= total <= len(blob), "invalid FDT total size")
         require(40 <= start < start + size <= total, "invalid FDT structure bounds")
         require(40 <= strings <= strings + string_size <= total, "invalid FDT string bounds")
+        require(40 <= reserve <= total - 16 and reserve % 8 == 0, "invalid FDT reserve map")
+        self.reservations = []
+        cursor = reserve
+        while True:
+            require(cursor + 16 <= total, "unterminated FDT reserve map")
+            address, length = struct.unpack_from(">QQ", blob, cursor)
+            cursor += 16
+            if address == length == 0:
+                break
+            require(length > 0 and address + length <= 1 << 64, "invalid FDT reserve range")
+            self.reservations.append((address, length))
         self.nodes: dict[str, dict[str, bytes]] = {}
         names = blob[strings:strings + string_size]
         pos, end, stack, finished = start, start + size, [], False
@@ -174,6 +185,7 @@ def verify_thermal_dtb(blob: bytes) -> None:
         trip = zone + "/trips/fan-" + name
         require(tree.cells(trip, "temperature") == (temperature,), "unexpected fan trip")
         require(tree.string(trip, "type") == "active", "fan trip must be active")
+        require(tree.cells(trip, "hysteresis") == (0 if name == "base" else 3000,), "unexpected fan hysteresis")
         mapping = zone + "/cooling-maps/fan-" + name
         require(tree.cells(mapping, "trip") == tree.cells(trip, "phandle"), "fan trip reference mismatch")
         require(tree.cells(mapping, "cooling-device") == (phandle[0], state, state), "fan cooling-state mismatch")
@@ -181,9 +193,144 @@ def verify_thermal_dtb(blob: bytes) -> None:
     require(tree.string(critical, "type") == "critical", "original critical trip missing")
 
 
+def resolve_phandle(tree: Fdt, value: int) -> str:
+    nodes = [node for node, props in tree.nodes.items()
+             if props.get("phandle") == struct.pack(">I", value)]
+    require(len(nodes) == 1, f"invalid or duplicate phandle {value}")
+    return nodes[0]
+
+
+def reserved_regions(tree: Fdt) -> list[tuple[str, int, int]]:
+    regions = [("FDT reserve map", address, size) for address, size in tree.reservations]
+    path = "/reserved-memory"
+    require(path in tree.nodes, "missing reserved-memory")
+    address_cells = tree.cells(path, "#address-cells")
+    size_cells = tree.cells(path, "#size-cells")
+    require(address_cells in ((1,), (2,)) and size_cells in ((1,), (2,)),
+            "unsupported reserved-memory cells")
+    ac, sc = address_cells[0], size_cells[0]
+    for node, props in tree.nodes.items():
+        if not node.startswith(path + "/") or "/" in node[len(path) + 1:] or "reg" not in props:
+            continue
+        if props.get("status", b"okay\0") == b"disabled\0":
+            continue
+        cells = tree.cells(node, "reg")
+        require(bool(cells) and len(cells) % (ac + sc) == 0, "invalid reserved-memory reg")
+        for offset in range(0, len(cells), ac + sc):
+            address = int.from_bytes(struct.pack(f">{ac}I", *cells[offset:offset + ac]), "big")
+            size = int.from_bytes(struct.pack(f">{sc}I", *cells[offset + ac:offset + ac + sc]), "big")
+            require(size > 0 and address + size <= 1 << 64, "invalid reserved-memory range")
+            regions.append((node, address, size))
+    return regions
+
+
+def verify_kernel_memory(tree: Fdt, load: int, size: int) -> None:
+    require(size > 0 and load + size <= 1 << 64, "invalid kernel footprint")
+    for node, address, length in reserved_regions(tree):
+        require(load + size <= address or address + length <= load,
+                f"kernel footprint overlaps reserved memory: {node}")
+
+
+def verify_platform_dtb(blob: bytes) -> dict:
+    """Check final compiled RC01 wiring, references and allocation policy."""
+    tree = Fdt(blob)
+    require("xiaomi,be10000" in tree.strings("/", "compatible"), "DTB is not RC01")
+    args = " ".join(tree.nodes.get("/chosen", {}).get(key, b"").decode().rstrip("\0")
+                    for key in ("bootargs", "bootargs-append"))
+    require([arg for arg in args.split() if arg.startswith("cma=")] == ["cma=320M"],
+            "RC01 must request cma=320M")
+    regions = reserved_regions(tree)
+    tz = [(address, size) for node, address, size in regions if node.endswith("/tzapp@49b00000")]
+    require(tz == [(0x49B00000, 0x600000)], "RC01 TrustZone application reservation changed")
+    require("no-map" in tree.nodes["/reserved-memory/tzapp@49b00000"], "tzapp must be no-map")
+    for node, address, size in regions:
+        require(address not in (0x50000000, 0x54000000, 0x58000000, 0x5C000000),
+                f"obsolete WLAN/MLO carveout: {node}")
+    require("/reserved-memory/tzapp@4d600000" not in tree.nodes, "obsolete tzapp reservation")
+
+    def one(predicate, description):
+        nodes = [node for node in tree.nodes if predicate(node)]
+        require(len(nodes) == 1, f"expected one {description}")
+        return nodes[0]
+
+    def compatible(node, value):
+        return "compatible" in tree.nodes[node] and value in tree.strings(node, "compatible")
+
+    art = one(lambda n: tree.nodes[n].get("label") == b"0:art\0", "ART partition")
+    require("read-only" in tree.nodes[art], "ART must be read-only")
+    base = {}
+    for offset in (0, 6):
+        cell = art + f"/nvmem-layout/macaddr@{offset:x}"
+        require(tree.cells(cell, "reg") == (offset, 6) and
+                tree.cells(cell, "#nvmem-cell-cells") == (1,), "invalid ART MAC base")
+        require(tree.string(cell, "compatible") == "mac-base", "MAC base decoder missing")
+        base[offset] = tree.cells(cell, "phandle")[0]
+
+    def mac(node, offset, increment):
+        require(tree.strings(node, "nvmem-cell-names") == ["mac-address"] and
+                tree.cells(node, "nvmem-cells") == (base[offset], increment),
+                f"incorrect ART MAC reference: {node}")
+        require("local-mac-address" not in tree.nodes[node] and "mac-address" not in tree.nodes[node],
+                "device-specific MAC must not be embedded")
+        verify_enabled_path(tree, node)
+
+    for label in ("lan1", "lan2", "lan3", "lan4", "sfp", "wan"):
+        node = one(lambda n: tree.nodes[n].get("label") == label.encode() + b"\0", label + " port")
+        mac(node, 0 if label == "wan" else 6, 0)
+    radios = [n for n in tree.nodes if compatible(n, "pci17cb,1109")]
+    require(len(radios) == 3, "expected three independent PCIe radios")
+    for board_id, increment, pcie in ((1, 2, "pcie@10000000"), (4, 3, "pcie@20000000"), (2, 4, "pcie@18000000")):
+        node = one(lambda n: n in radios and tree.cells(n, "qcom,board-id") == (board_id,), "radio board ID")
+        # Check card-to-controller identity in addition to the MAC increment.
+        require(pcie in node.split("/"), "radio is on the wrong PCIe controller")
+        mac(node, 6, increment)
+        require(tree.cells(node, "qcom,num-radios") == (1,), "unexpected PHY count")
+        require(tree.string(node, "qcom,calibration-variant") == "Xiaomi-BE10000", "wrong BDF variant")
+        require("qcom,force-unique-qrtr-id" in tree.nodes[node], "QRTR IDs must remain independent")
+        require("memory-region" not in tree.nodes[node] and "memory-region-names" not in tree.nodes[node],
+                "PCIe firmware must allocate through DMA/CMA")
+
+    phy = one(lambda n: compatible(n, "ethernet-phy-ieee802.3-c45"), "Aquantia PHY")
+    reset = tree.cells(phy, "reset-gpios")
+    require(len(reset) == 3 and reset[1:] == (61, 1), "Aquantia requires GPIO61 active-low reset")
+    require(compatible(resolve_phandle(tree, reset[0]), "qcom,ipq9574-tlmm"), "PHY reset is not on TLMM")
+    for name in ("reset-assert-us", "reset-deassert-us"):
+        require(tree.cells(phy, name) == (100000,), "Aquantia reset delay must be 100 ms")
+    require(tree.strings(phy, "nvmem-cell-names") == ["firmware"], "Aquantia firmware reference missing")
+    firmware = tree.cells(phy, "nvmem-cells")
+    require(len(firmware) == 1, "invalid PHY firmware reference")
+    cell = resolve_phandle(tree, firmware[0])
+    require(tree.cells(cell, "reg") == (0x28, 0x60002), "Aquantia firmware header/CRC bounds changed")
+    partition = cell.rsplit("/", 2)[0]
+    require(tree.string(partition, "label") == "0:ethphyfw" and "read-only" in tree.nodes[partition],
+            "PHY firmware must use the new device's read-only ethphyfw")
+    verify_enabled_path(tree, phy)
+
+    pcie3 = one(lambda n: n.endswith("/pcie@18000000"), "PCIe3 controller")
+    pins = tree.cells(pcie3, "pinctrl-0")
+    require(len(pins) == 1, "invalid PCIe3 reset pinctrl")
+    pin = resolve_phandle(tree, pins[0])
+    require(tree.strings(pin, "pins") == ["gpio23"] and "output-low" in tree.nodes[pin],
+            "PCIe3 reset must use GPIO23 output-low")
+    perst = tree.cells(pcie3, "perst-gpios")
+    require(len(perst) == 3 and perst[1:] == (23, 1), "PCIe3 PERST must be GPIO23 active-low")
+    require(compatible(resolve_phandle(tree, perst[0]), "qcom,ipq9574-tlmm"), "PCIe3 reset is not on TLMM")
+    verify_enabled_path(tree, pcie3)
+    nand = one(lambda n: compatible(n, "spi-nand"), "SPI NAND")
+    require(tree.cells(nand, "nand-ecc-strength") == (8,) and
+            tree.cells(nand, "nand-ecc-step-size") == (512,), "NAND must use ECC8/512")
+    verify_enabled_path(tree, nand)
+    return {"cma_mib": 320, "radio_board_ids": [1, 4, 2],
+            "mac_source": "device-local ART: WAN+0, LAN base6, WiFi base6+2/+3/+4",
+            "reserved_regions": [{"node": n, "address": hex(a), "bytes": s} for n, a, s in regions]}
+
+
 def verify_fit(blob: bytes) -> dict:
     fit = Fdt(blob)
-    require(fit.string("/configurations", "default") in CONFIGS, "unexpected FIT default")
+    require(fit.string("/configurations", "default") == CONFIGS[0], "FIT default must be C4")
+    configs = [node for node in fit.nodes if node.startswith("/configurations/") and
+               "/" not in node[len("/configurations/"):]]
+    require(set(configs) == {"/configurations/" + name for name in CONFIGS}, "expected exactly config@al02-c4 and config@al02-c6")
     refs = []
     for config in CONFIGS:
         path = "/configurations/" + config
@@ -205,7 +352,8 @@ def verify_fit(blob: bytes) -> dict:
     entry = fit.cells(kernel_path, "entry")
     require(len(load) == 1 and entry == load, "unexpected kernel entry")
     require(load[0] >= 0x40000000 and (load[0] - text_offset) % 0x200000 == 0, "ARM64 alignment mismatch")
-    require(image_size >= len(image) and load[0] + image_size <= 0x4A100000, "kernel footprint overlaps bootloader memory")
+    require(image_size >= len(image), "kernel footprint is smaller than Image")
+    verify_kernel_memory(Fdt(dtb), load[0], image_size)
     verify_thermal_dtb(dtb)
     verify_ppe_dtb(dtb)
     return {"fit_configs": list(CONFIGS), "load_address": hex(load[0]), "kernel_memory_bytes": image_size,
@@ -308,6 +456,9 @@ def main() -> None:
     require(len(factories) == len(upgrades) == 1, "expected exactly one RC01 factory and sysupgrade image")
     kernel, root = read_sysupgrade(upgrades[0])
     result = verify_fit(kernel) | image_budget(kernel, root) | verify_factory(factories[0], kernel, root)
+    fit = Fdt(kernel)
+    ref = fit.string("/configurations/" + CONFIGS[0], "fdt")
+    result.update(verify_platform_dtb(fit.prop("/images/" + ref, "data")))
     result["physical_acceptance"] = "not-performed"
     print(json.dumps(result, indent=2))
 

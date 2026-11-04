@@ -95,7 +95,7 @@ fi
 grep -Fq 'ATH12K_PPE_DS_SUPPORT' package/kernel/mac80211/ath.mk || {
 	echo 'Native ath12k Direct Switch support disappeared' >&2; exit 1
 }
-grep -Fq 'DEVICE_DTS_CONFIG_ALIASES := config@al02-c4' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
+grep -Fq 'DEVICE_DTS_CONFIG_ALIASES := config@al02-c6' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'IMAGE_SIZE := 122880k' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'fw_env_strict_crc_required()' package/boot/uboot-tools/patches/015-envtools-strict-crc.patch || exit 1
 echo "RC01 configuration validation passed (dae test build: $with_dae)"

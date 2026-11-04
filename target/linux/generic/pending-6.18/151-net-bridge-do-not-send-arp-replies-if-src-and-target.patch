@@ -9,6 +9,9 @@ DHCP server and refuse the address if they get a reply.
 When proxyarp is enabled, they would go into a loop of requesting an address
 and then NAKing it again.
 
+Refresh for 6.18.60: compare the locked neighbour hardware-address snapshot,
+matching the stable neighbour race fix used by br_arp_send().
+
 Link: https://github.com/openwrt/openwrt/issues/14309
 Signed-off-by: Felix Fietkau <nbd@nbd.name>
 ---
@@ -21,14 +24,14 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  			    br_is_neigh_suppress_enabled(dst, vid)) {
 -				if (!vid)
 +				replied = true;
-+				if (!memcmp(n->ha, sha, dev->addr_len))
++				if (!memcmp(ha, sha, dev->addr_len))
 +					replied = false;
 +				else if (!vid)
  					br_arp_send(br, p, skb->dev, sip, tip,
- 						    sha, n->ha, sha, 0, 0);
+ 						    sha, ha, sha, 0, 0);
  				else
 @@ -216,7 +219,6 @@ void br_do_proxy_suppress_arp(struct sk_
- 						    sha, n->ha, sha,
+ 						    sha, ha, sha,
  						    skb->vlan_proto,
  						    skb_vlan_tag_get(skb));
 -				replied = true;
