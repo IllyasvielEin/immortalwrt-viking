@@ -68,6 +68,58 @@ class PreparedPlatform(unittest.TestCase):
         return subprocess.run(["dtc", "-I", "dts", "-O", "dtb", "-"], input=source,
                               capture_output=True, check=True).stdout
 
+    def test_backport_socket_headers_cover_stable_and_mainline_apis(self):
+        # Compile the actual prepared wrappers. The native API fragments come
+        # from the prepared 6.18.60 headers; only unrelated kernel dependencies
+        # are stubbed. Stable 6.18.57 gained the type without kernel_connect's
+        # later mainline signature change, so these are separate boundaries.
+        kernel = Path(KERNEL)
+        wireless = Path(WIRELESS)
+        native_socket = (kernel / "include/linux/socket.h").read_text()
+        declaration = re.search(r"struct sockaddr_unsized \{[^}]+\};", native_socket)[0]
+        prototype = re.search(r"int kernel_connect\([^;]+;",
+                              (kernel / "include/linux/net.h").read_text(), re.S)[0]
+        self.assertIn("struct sockaddr *addr", prototype)
+        compiler = shutil.which("cc")
+        self.assertIsNotNone(compiler, "post-build API regression requires host cc")
+        versions = [((6, 12, 0), False, False), ((6, 18, 56), False, False),
+                    ((6, 18, 57), True, False), ((6, 18, 60), True, False),
+                    ((6, 19, 0), True, True), ((7, 2, 0), True, True)]
+        for version, native_type, native_connect in versions:
+            with self.subTest(version=version), tempfile.TemporaryDirectory(prefix="rc01-socket-api-") as temporary:
+                root = Path(temporary)
+                wrappers = root / "backport/linux"
+                wrappers.mkdir(parents=True)
+                for name in ("socket.h", "net.h", "version.h"):
+                    shutil.copyfile(wireless / "backport-include/linux" / name, wrappers / name)
+                native = root / "native/linux"
+                native.mkdir(parents=True)
+                code = version[0] * 65536 + version[1] * 256 + version[2]
+                (native / "version.h").write_text(
+                    f"#define LINUX_VERSION_CODE {code}\n"
+                    "#define KERNEL_VERSION(a,b,c) (((a)<<16)+((b)<<8)+(c))\n")
+                (native / "socket.h").write_text(
+                    "#ifndef RC01_NATIVE_SOCKET_H\n#define RC01_NATIVE_SOCKET_H\n"
+                    "typedef unsigned short __kernel_sa_family_t;\n"
+                    "struct sockaddr { __kernel_sa_family_t sa_family; char sa_data[14]; };\n"
+                    # This macro predates sockaddr_unsized and cannot serve as
+                    # a feature test for the type, including on the old API.
+                    "#define __sockaddr_check_size(size) ((void)0)\n"
+                    + (declaration if native_type else "") + "\n#endif\n")
+                connect = prototype.replace("struct sockaddr *addr", "struct sockaddr_unsized *addr") if native_connect else prototype
+                (native / "net.h").write_text("#include <linux/socket.h>\nstruct socket;\n" + connect + "\n")
+                (native / "static_key.h").write_text("")
+                probe = root / "probe.c"
+                probe.write_text(
+                    '#include <stddef.h>\n#include <linux/net.h>\n'
+                    '_Static_assert(offsetof(struct sockaddr_unsized, sa_data) == sizeof(__kernel_sa_family_t), "bad socket layout");\n'
+                    'int probe(struct socket *sock, struct sockaddr_unsized *addr) {\n'
+                    ' return kernel_connect(sock, addr, sizeof(*addr), 0);\n}\n')
+                result = subprocess.run([compiler, "-std=gnu11", "-Werror", "-I", str(root / "backport"),
+                                         "-I", str(root / "native"), "-c", str(probe), "-o", str(root / "probe.o")],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_prepared_cve_nand_pcs_and_wireless(self):
         self.assertEqual(platform.verify_kernel(Path(KERNEL))["cve_2026_98432_destructors"], 2)
         self.assertFalse(platform.verify_wireless(Path(WIRELESS))["hw1_mlo"])

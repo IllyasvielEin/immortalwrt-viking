@@ -1,0 +1,36 @@
+From: RC01 maintainers
+Subject: [PATCH] backports: avoid sockaddr_unsized redefinition on 6.18.57+
+
+Linux stable 6.18.57 gained struct sockaddr_unsized with commit
+946dc5835c8fbe5eb5ceb13f5717778911ff4586 (net: Convert proto_ops bind()
+callbacks to use sockaddr_unsized). Exclude this stable range from the
+older-kernel type declaration, as well as the existing mainline 6.19 gate.
+
+Keep the separate backport_kernel_connect adapter: the stable change only
+converted bind(), while kernel_connect() still takes struct sockaddr * on
+6.18.60. __sockaddr_check_size already existed on 6.18.55 and cannot be
+used as a feature marker for this type.
+
+Link: https://git.kernel.org/stable/c/946dc5835c8fbe5eb5ceb13f5717778911ff4586
+---
+--- a/backport-include/linux/socket.h
++++ b/backport-include/linux/socket.h
+@@ -11,7 +11,8 @@
+ #define SOL_NFC		280
+ #endif
+ 
+-#if LINUX_VERSION_IS_LESS(6,19,0)
++#if LINUX_VERSION_IS_LESS(6,19,0) && \
++    !LINUX_VERSION_IN_RANGE(6,18,57, 6,19,0)
+ /**
+  * struct sockaddr_unsized - Unspecified size sockaddr for callbacks
+  * @sa_family: Address family (AF_UNIX, AF_INET, AF_INET6, etc.)
+@@ -28,7 +29,7 @@ struct sockaddr_unsized {
+ 	__kernel_sa_family_t	sa_family;	/* address family, AF_xxx */
+ 	char			sa_data[];	/* flexible address data */
+ };
+-#endif /* < 6.19 */
++#endif /* kernels without a native sockaddr_unsized */
+ 
+ #ifndef __sockaddr_check_size
+ #define __sockaddr_check_size(size)	\

@@ -427,10 +427,22 @@ Nikki锁定78e1a751d55ed0762811f054ee699049473da7b8，包版本2026.10.10-r1。
 [嗅探](https://wiki.metacubex.one/config/sniff/)、[此前调研版本的默认值源码](https://github.com/MetaCubeX/mihomo/blob/v1.19.32/config/config.go)。
 
 
+### 6.18 stable socket API 兼容修正
+
+首轮候选CI41883479902（7f36e7a25f）在mac80211 regular构建失败，
+`backport-include/linux/socket.h`重复声明`struct sockaddr_unsized`，未生成verified镜像。
+官方6.18.57已通过stable提交`946dc5835c8fbe5eb5ceb13f5717778911ff4586`
+回移该类型和bind回调，但kernel_connect仍接收`struct sockaddr *`，直到主线6.19才变化。
+因此130 build补丁仅排除6.18.57起的重复类型，不删除独立kernel_connect适配；
+`__sockaddr_check_size`更早就存在，不用它探测该结构体。
+新增回归编译实际prepared兼容头，覆盖6.12、6.18.56/.57/.60、6.19、7.2的类型/调用组合；
+旧头恰在.57/.60复现重复定义，修复后全部通过。测试抽取真实声明并桩化无关依赖，
+不等于全套目标头文件和交叉编译；完整CI仍是最终构建验收。
+
 ## 2026-11-05：新机候选的离线验收边界
 
 官方hash验证过的6.18.60与backports7.2干净源包，按本仓库真实顺序分别应用
-699个内核、310个无线补丁，全部通过且无fuzz（有正常行号offset）。无线使用RC01的
+699个内核、311个无线补丁（含stable socket兼容修正），全部通过且无fuzz（有正常行号offset）。无线使用RC01的
 非NSS ath11k host组，未将仅AX适用的NSS补丁混入。整体prepare、默认非dae配置与
 平台安装配方检查通过。真实DTS经CPP/dtc编译，校验上述内存、MAC、PHY、NAND、温控和DS资源。
 prepared源码同时核对两处CVE析构修复、0411 ESMT优先匹配、0412及动态AFC/HW1非MLO路径。
