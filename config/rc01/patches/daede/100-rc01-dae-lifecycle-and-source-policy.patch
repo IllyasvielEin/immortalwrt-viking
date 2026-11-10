@@ -1,4 +1,4 @@
-From: IllyasvielEin
+From: RC01 build maintainers
 Subject: [PATCH] RC01: reap dae before runtime cleanup and keep source updates
 
 Based on kenzok8/openwrt-daede 3520a79bd9c68843801dc89d7d6e155d2c43c833.

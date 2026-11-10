@@ -1,0 +1,385 @@
+{
+  "schema": 1,
+  "go": {
+    "commit": "48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd",
+    "files": {
+      "lang/golang/golang/Makefile": {
+        "sha256": "5b9310db92444d0afa2792d16c8f9182818afb57610a762ed89aea7484a35243",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang/Makefile"
+      },
+      "lang/golang/golang1.27/Makefile": {
+        "sha256": "9d4924e0a38379dbfc8e1c3abada3219b536f45d23fce88cc46c8824747ce995",
+        "baseline": "golang1.27.Makefile",
+        "fields": [
+          "GO_VERSION_PATCH",
+          "PKG_HASH",
+          "PKG_RELEASE"
+        ],
+        "mode": 420
+      },
+      "lang/golang/golang1.27/test-version.sh": {
+        "sha256": "c3ecb1f9d887c2ffee4a29affede1e31083916721c7b6268986b5b9d6903cb7f",
+        "mode": 493,
+        "baseline": "inputs/go/lang/golang/golang1.27/test-version.sh"
+      },
+      "lang/golang/golang1.27/test.sh": {
+        "sha256": "02cee1ea468fc4a92c8c8a1c17f9bbfde65da315b708036233e5a1e615e61e06",
+        "mode": 493,
+        "baseline": "inputs/go/lang/golang/golang1.27/test.sh"
+      },
+      "lang/golang/golang-bootstrap/Makefile": {
+        "sha256": "150aa8d4b5e6747af57a1e651d31353ef7514389c0ff5c267cef52db5e229ddd",
+        "baseline": "golang-bootstrap.Makefile",
+        "fields": [
+          "PKG_RELEASE"
+        ],
+        "mode": 420
+      },
+      "lang/golang/golang-bootstrap/Config.in": {
+        "sha256": "9768fb83952ca937a75948f8d5cf2435c1462be560f6e20357c0e4e4af131811",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-bootstrap/Config.in"
+      },
+      "lang/golang/golang-compiler.mk": {
+        "sha256": "6db554871b9a8afa3038c9fb22bcb0bd07c1ea78ed3caa25b4af4ea35b82a04d",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-compiler.mk"
+      },
+      "lang/golang/golang-host-build.mk": {
+        "sha256": "302a298f750efe375c59f9cf736aa6a0c0da6dcab3a7c3ea6832726547802b0c",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-host-build.mk"
+      },
+      "lang/golang/golang-package.mk": {
+        "sha256": "fafd88dc4d44427169cd097500df8c316cb3515290ffd0206db3fd5667d5bb11",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-package.mk"
+      },
+      "lang/golang/golang-values.mk": {
+        "sha256": "da5713118594d4cfc3bf1c247228f851aad9d1b43d31d651848d55a308283a2b",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-values.mk"
+      },
+      "lang/golang/golang-version.mk": {
+        "sha256": "b82ae1137f9970faea9545b41d1d1134498f628b0af87c8eb49b27d5f107d7b1",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-version.mk"
+      },
+      "lang/golang/golang-build.sh": {
+        "sha256": "17aa7810440be3e4d936b0ccdab6ae257cac19e84788f27c52174edf28803e26",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/golang-build.sh"
+      },
+      "lang/golang/go-gcc-helper": {
+        "sha256": "5219a734a6d8e5e7b23650180c073410ea5f8115d72465f8929968c093d5ecfc",
+        "mode": 420,
+        "baseline": "inputs/go/lang/golang/go-gcc-helper"
+      },
+      "lang/golang/go-strip-helper": {
+        "sha256": "9896ef9f217482f67b78331fdd5d2adb352edfe2e353b9861b66038c92e3c2b1",
+        "mode": 493,
+        "baseline": "inputs/go/lang/golang/go-strip-helper"
+      }
+    },
+    "roots": [
+      "lang/golang/golang",
+      "lang/golang/golang1.27",
+      "lang/golang/golang-bootstrap",
+      "lang/golang/golang-compiler.mk",
+      "lang/golang/golang-host-build.mk",
+      "lang/golang/golang-package.mk",
+      "lang/golang/golang-values.mk",
+      "lang/golang/golang-version.mk",
+      "lang/golang/golang-build.sh",
+      "lang/golang/go-gcc-helper",
+      "lang/golang/go-strip-helper"
+    ]
+  },
+  "daede": {
+    "commit": "3520a79bd9c68843801dc89d7d6e155d2c43c833",
+    "files": {
+      "ci/pins.env": {
+        "sha256": "78b77b6283a53154c1727cedc0733d037867afe44ee2cb198f8e4a502308fbfd",
+        "baseline": "daede-pins.env",
+        "mode": 420
+      },
+      "dae/Makefile": {
+        "sha256": "6cab1e503900b1977ad3993a41235c0b9dfd5d4715639bbf1b51ab25f4c76d8d",
+        "baseline": "dae.Makefile",
+        "fields": [
+          "PKG_VERSION",
+          "PKG_RELEASE",
+          "PKG_SOURCE",
+          "PKG_HASH"
+        ],
+        "mode": 420
+      },
+      "dae/files/dae.config": {
+        "sha256": "0b3f257bf5d3bf02abb997f0ef0e6d5576b41c7a2666a5ba823ed7d96a63aa07",
+        "mode": 420
+      },
+      "dae/files/dae.init": {
+        "sha256": "753db2db1d3f8c0ab97df6cdd0559bb2482330d9d37e5b8fac521fc4337482ef",
+        "mode": 420,
+        "baseline": "inputs/daede/dae/files/dae.init"
+      },
+      "dae/patches/010-dns-response-ttl.patch": {
+        "sha256": "2087a916a5680d2f30d202e9d3f6ee18d0660b84f0abe4897640def003ac2354",
+        "mode": 420
+      },
+      "dae/patches_arm/0002-feat-Add-vmlinux-arm.h.patch": {
+        "sha256": "e5f9334fc93c04ddd04355b0f653ffb9369872022ec5d1a0c0ee58bc7d043df7",
+        "mode": 420
+      },
+      "dae/patches_arm/0003-drop-kprobe-skb-5.patch": {
+        "sha256": "b7cacb18e5f6a7c6217e3658cb096784ed3086150d5b86143dd2a599a7ea1f38",
+        "mode": 420
+      },
+      "daed/Makefile": {
+        "sha256": "817649f58548e839bc0f0ef39ae34a4c890688a3247b9db196055650554df5a7",
+        "baseline": "daed.Makefile",
+        "fields": [
+          "PKG_VERSION",
+          "PKG_RELEASE",
+          "PKG_SOURCE",
+          "PKG_HASH"
+        ],
+        "mode": 420
+      },
+      "daed/files/daed-cleanup.sh": {
+        "sha256": "e1400e6ab485f8a4963e7a5a8279f868f98b64a3709773739837f791d79c33de",
+        "mode": 420
+      },
+      "daed/files/daed-guard": {
+        "sha256": "81a34d05b7135e1f6c9535029d909b828c02e30eb52b6e775492c17a7433ddf8",
+        "mode": 420
+      },
+      "daed/files/daed.config": {
+        "sha256": "37526683ec4534e5a8905198528fafede6919a60a20857a1c7d61fce9428f298",
+        "mode": 420
+      },
+      "daed/files/daed.init": {
+        "sha256": "a7981282134159794eea3112ebd8a440116e5035e67ec145184f3d9e308daebe",
+        "mode": 420
+      },
+      "daed/files/daed.keep": {
+        "sha256": "a9efcb6d9bc2d46f12c3594d5df83bf9fd96f3cc7c64e842d66ca652f8ef8899",
+        "mode": 420
+      },
+      "daed/patches/0003-raise-latency-probe-concurrency.patch": {
+        "sha256": "79ccf688f9436d58220126fe29ce42d2fc68d6ac93e2d2669f562a60435556a0",
+        "mode": 420
+      },
+      "daed/patches/0004-restart-daed-on-dashboard-reload-timeout.patch": {
+        "sha256": "48e4e69ab8c995ced76e3faea1ba3c1f601caf0964c743b4fc16c0ab95bdee65",
+        "mode": 420
+      },
+      "daed/patches/0005-bound-startup-network-wait.patch": {
+        "sha256": "9b4ecba0ffec3d23597f8e0d40cddf4b3e6ad030d2e22fb1f7fb365d99c15058",
+        "mode": 420
+      },
+      "daed/patches/0006-daed-strictly-reconcile-subscription-updates.patch": {
+        "sha256": "d3ef743d37f5538b78309156d5cfbf8599f4beb414bb55e4961e95aea0370aad",
+        "mode": 420
+      },
+      "daed/patches/0007-bound-scheduled-subscription-update.patch": {
+        "sha256": "e1d3583205a7274197698a85817dffc204cf29d96c702ce2c80de56fd42b7833",
+        "mode": 420
+      },
+      "daed/patches/0008-daed-open-sqlite-database-in-WAL-mode.patch": {
+        "sha256": "4c1c36fdce37c63238ed70c635cb70fc116390d864713285ee252c9bc46d2354",
+        "mode": 420
+      },
+      "daed/patches/0009-daed-reload-dae-outside-the-database-transaction.patch": {
+        "sha256": "b5e6051a78b1fb5acc5257558d8a4c738c50ad8f8fd54ebe7106f4b7354e3636",
+        "mode": 420
+      },
+      "daed/patches/0010-daed-serialize-scheduled-subscription-updates.patch": {
+        "sha256": "2b2ff2fc6381af91674fcc9a905c332dbbe8f647bc401e6fb50a52be575b280e",
+        "mode": 420
+      },
+      "daed/patches/0011-preserve-reload-safety-on-new-wing.patch": {
+        "sha256": "fbd89ae708b186182f7d7986fd8498f23ce9ebc47815902dea354b65786b119b",
+        "mode": 420
+      },
+      "daed/patches_arm/0002-feat-Add-vmlinux-arm.h.patch": {
+        "sha256": "9efc4a6f12fa392dc093bf5e42a688c828abf9269ac72169d63303e8548d8dad",
+        "mode": 420
+      },
+      "daed/patches_arm/0003-drop-kprobe-skb-5.patch": {
+        "sha256": "9eb18266abbc09d89482be6e7bb41ef0e678e527b289917e32e8a60861910f02",
+        "mode": 420
+      },
+      "luci-app-daede/Makefile": {
+        "sha256": "820eecf99b7086a67730928634133712e661a66dac33eac38c31c9f25efb9fa1",
+        "baseline": "luci-app-daede.Makefile",
+        "fields": [
+          "PKG_VERSION",
+          "PKG_RELEASE"
+        ],
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/airport-sync.js": {
+        "sha256": "38b432aab211b7089aa541c52f459160b1f6cf19d734255dc4f075ffb7bdd1f2",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js": {
+        "sha256": "7c5689d9dd0fe63c6a0e33aefb1fbdcb0307fded0d76227a018a649a4a0d9a98",
+        "mode": 420,
+        "baseline": "inputs/daede/luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js"
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/clash-converter.js": {
+        "sha256": "b68b3c13b0af40349674bf61733096298b97f15dcbf4a67f8de12ae145ef249d",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/config.js": {
+        "sha256": "37bf672155e18fcd1532c239e8d276745f23f60c7f6c4360fdb3cb92bc280642",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/converter.js": {
+        "sha256": "7634132908bea2dd98ac8db701ba2e2b42c8c26971ca2189062ee6cd1c551e7b",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/dae.js": {
+        "sha256": "1c1d16d5d852b981113435eeeb4e8bc0951a5ed9bfac4c9d0f0854092d97440f",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/daed-session.js": {
+        "sha256": "4bbcb138d7975d91d97457e186571ea69c6f4e925e87778163b66dfe2e3f1505",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/daed.js": {
+        "sha256": "faf8b66e43f2a48a31b8ea2f9b49d69d3ff907edbdc88b8941235d416446f5fb",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/log.js": {
+        "sha256": "05acd185de375c2da5d2ca862def791cb9825d1639889efcec8e6b010b47f548",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/styles.js": {
+        "sha256": "6b2c84be5e49e2bb2cbc715833049823d9c8c85ddd1513cebb3fba9368f56caf",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js": {
+        "sha256": "61d7da57e7148e3f8696b9fa1f43da5b290c6e968d542e5e4c5f088fdc41b32f",
+        "mode": 420,
+        "baseline": "inputs/daede/luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js"
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/vendor/js-yaml.LICENSE": {
+        "sha256": "a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/vendor/js-yaml.min.js": {
+        "sha256": "da1e8c845d515c586ca48897a26bf180494a21d34e2f92b0c2e2d51e7c55a53d",
+        "mode": 420
+      },
+      "luci-app-daede/htdocs/luci-static/resources/view/daede/widgets.js": {
+        "sha256": "ca845332d3944320214e05093ecb862beb30dca28c538275e786f8dabdb5162e",
+        "mode": 420
+      },
+      "luci-app-daede/po/templates/daede.pot": {
+        "sha256": "b230f0479d4c8d5072206ef2f826c21090dbcce8a87b8b8b0f0007d01e158f1e",
+        "mode": 420
+      },
+      "luci-app-daede/po/zh-cn/daede.po": {
+        "sha256": "1e45e3b576dbfd12fa18767239d2d8e4fea3d4bfe4d7eb46a8b776191bb423d2",
+        "mode": 420
+      },
+      "luci-app-daede/po/zh_Hans/daede.po": {
+        "sha256": "81da91f5c04f6fc69cf30d757b93d534f8babf3625d77d62d5b22655c3b61622",
+        "mode": 420
+      },
+      "luci-app-daede/root/etc/config/daede": {
+        "sha256": "369b7f045ef12a9412e5ede999d2ec58bb8881d9d712cddd7f12c49c49fe8504",
+        "mode": 420,
+        "baseline": "inputs/daede/luci-app-daede/root/etc/config/daede"
+      },
+      "luci-app-daede/root/etc/uci-defaults/90-luci-app-daede-init": {
+        "sha256": "cc8c34190b17df7c8ad97280e14bc2a57566928de8a0e33fe6b6af914b6aa794",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/config-backup.sh": {
+        "sha256": "95c9398506d80b84ff7212fd0ca154a26b5f0cafd93ac3ea9ac9ce54284e1341",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/config-defaults.sh": {
+        "sha256": "402b0f629dd8eb28071d9a1841b093411b290c6c470771c4e05e211a5f19496d",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/daed-sub-cron.sh": {
+        "sha256": "67b42287f9f213c457defc23054c2bb677099a5d700bfc733a23d517c2db1b18",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/daed-sub-update.sh": {
+        "sha256": "df5675e820d801ab26fca0ef2382ea949600b9621ebc63acf7e7036dce46cb3d",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/fetch-clash-yaml.sh": {
+        "sha256": "55c6cb324255601c2ed50794e77c7a4dcb34ff75f4f35fa54e7f8936e26f4474",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/gen-dae-config.sh": {
+        "sha256": "c08b07185a208539fd06bcf0226b98da300242829126fbc0e996ae7ef2ebd35c",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/geo-cron.sh": {
+        "sha256": "c3d1abd4825f664fc14f8305cbb49e8786dbe400473269d4f26814d82579e1e9",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/pkg-info.sh": {
+        "sha256": "f02d4cee86f419dc8a33ae94a3bcfa354f59692a65a518a69376e16a2ee0ebad",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/proxy-check.sh": {
+        "sha256": "00bdce404025b996d9426fa62d7129998f7f71ab5a18781656d9e48bb4f1d170",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/refresh-index.sh": {
+        "sha256": "9f29423e5973fd04e09604aeacf249205175f44654daa685027f883ad1c55ba5",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/snapshot-file.sh": {
+        "sha256": "cd47c7716c57152fbe52444ac75545f147d6c592721821f2b3e7df834ffe62f8",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/update-geo.sh": {
+        "sha256": "7ee8790bab0ae9537391cb8a0b46e531de51ef52e7c23d9b6544e218ebb5b81f",
+        "mode": 493
+      },
+      "luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh": {
+        "sha256": "7e3d757ee717d2fdf2007e9a770e11b7653fbf27b872e1469df904e754472f1c",
+        "mode": 493,
+        "baseline": "inputs/daede/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh"
+      },
+      "luci-app-daede/root/usr/share/luci/menu.d/luci-app-daede.json": {
+        "sha256": "7b29840ed6c269b3ff474d88bcb195b9083cb0cd58be9751073257c3500c6d4d",
+        "mode": 420
+      },
+      "luci-app-daede/root/usr/share/rpcd/acl.d/luci-app-daede.json": {
+        "sha256": "53fc8e5f36d9dc0a47272b20b6feb569106235a2b8534314b8f6db980dc95b95",
+        "mode": 420
+      },
+      "luci-app-daede/root/www/cgi-bin/daede-graphql": {
+        "sha256": "f89991569ec1e39d81eb4769cd4931e314d2bfac8edd4057341075da108bbe56",
+        "mode": 420
+      },
+      "luci-app-daede/root/www/cgi-bin/daede-sub": {
+        "sha256": "9a8092f614f52d0dd06c8d6738c7563dfbdd9ab631357463debf60cd9ca3fb7e",
+        "mode": 420
+      },
+      "vmlinux-btf/Makefile": {
+        "sha256": "2f54d57afea670672098ea10db32e5b16a670cc9d826b2367f65eacf7f89942d",
+        "mode": 420,
+        "baseline": "inputs/daede/vmlinux-btf/Makefile"
+      }
+    },
+    "roots": [
+      "dae",
+      "daed",
+      "luci-app-daede",
+      "vmlinux-btf/Makefile",
+      "ci/pins.env"
+    ]
+  }
+}

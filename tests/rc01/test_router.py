@@ -107,7 +107,7 @@ let values = {
     auto_role: 'sub', state: 'obsolete-routed-snapshot' } },
   network: {
     globals: { '.type': 'globals', '.name': 'globals' },
-    lan: { '.type': 'interface', ipaddr: '192.168.50.3/24' },
+    lan: { '.type': 'interface', ipaddr: '192.0.2.3/24' },
     wan: { '.type': 'interface', auto: '0', proto: 'dhcp' }
   },
   firewall: { defaults: { '.type': 'defaults', '.name': 'defaults', flow_offloading: '0' } },

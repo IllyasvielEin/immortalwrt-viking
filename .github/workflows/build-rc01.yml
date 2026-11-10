@@ -3,8 +3,21 @@ name: Build Xiaomi RC01 DHCP complete firmware
 on:
   workflow_dispatch:
     inputs:
+      software_updates:
+        description: 'Software feeds/apps: latest stable per build, or reviewed locked baseline'
+        type: choice
+        required: true
+        default: latest
+        options:
+          - latest
+          - locked
+      replay_run_id:
+        description: 'Optional prior run ID: replay its rc01-software-source-lock artifact'
+        type: string
+        required: false
+        default: ''
       include_dae:
-        description: 'Experimental dae 2026.11.09-r3 + daede UI (runtime unverified)'
+        description: 'Experimental dae + daede UI; exact version in this build source lock (runtime unverified)'
         type: boolean
         required: true
         default: false
@@ -24,9 +37,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: rc01-${{ github.ref }}
+  group: rc01-${{ github.ref }}-${{ inputs.include_dae }}-${{ inputs.software_updates || 'latest' }}-${{ inputs.go_bootstrap }}-${{ inputs.replay_run_id || 'fresh' }}
   cancel-in-progress: false
 
 env:
@@ -36,6 +50,7 @@ env:
   RC01_GO_BOOTSTRAP_MODE: ${{ inputs.go_bootstrap }}
   TZ: Asia/Singapore
   RC01_WITH_DAE: ${{ inputs.include_dae }}
+  RC01_UPDATE_MODE: ${{ inputs.software_updates || 'latest' }}
 
 jobs:
   build:
@@ -150,12 +165,47 @@ jobs:
             *) echo 'Invalid bootstrap mode' >&2; exit 1 ;;
           esac
 
-      - name: Prepare locked feeds and configuration
+      - name: Load an earlier software source lock
+        if: ${{ inputs.replay_run_id != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPLAY_RUN_ID: ${{ inputs.replay_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REPLAY_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'Invalid replay run ID' >&2; exit 1; }
+          gh run download "$REPLAY_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rc01-software-source-lock --dir "$RUNNER_TEMP/rc01-replay"
+          echo "RC01_REPLAY_LOCK=$RUNNER_TEMP/rc01-replay/lock.json" >> "$GITHUB_ENV"
+
+      - name: Resolve software sources and prepare configuration
         shell: bash
         run: |
           set -euo pipefail
           sh scripts/prepare-rc01.sh 2>&1 | tee prepare.log
           ./scripts/diffconfig.sh > rc01.diffconfig
+          echo "SOURCE_DATE_EPOCH=$(python3 -c 'import json; print(json.load(open(".rc01-sources/lock.json"))["source_date_epoch"])')" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check source lock and documentation before publishing
+        id: source_privacy
+        if: ${{ always() && !cancelled() && hashFiles('.rc01-sources/lock.json') != '' }}
+        run: python3 -B scripts/validate-rc01-public-artifacts.py .rc01-sources docs/rc01-build.md
+
+      - name: Preserve this build's software source lock
+        if: ${{ always() && !cancelled() && steps.source_privacy.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-software-source-lock
+          if-no-files-found: ignore
+          retention-days: 90
+          include-hidden-files: true
+          path: |
+            .rc01-sources/lock.json
+            .rc01-sources/feeds.conf
+            .rc01-sources/package-manifest.json
+            .rc01-sources/dae-sources.json
+            .rc01-sources/dae.patch
 
       - name: Download package sources
         id: downloads
@@ -194,8 +244,13 @@ jobs:
           RC01_COMPILER_CACHE_OUTCOME: ${{ steps.compiler_cache.outcome }}
         run: python3 -B scripts/rc01-ci-metrics.py report "$RUNNER_TEMP/rc01-metrics"
 
-      - name: Upload build observations
+      - name: Check build observations before publishing
+        id: metrics_privacy
         if: ${{ !cancelled() && steps.build_metrics.outcome == 'success' }}
+        run: python3 -B scripts/validate-rc01-public-artifacts.py "$RUNNER_TEMP/rc01-metrics" rc01-build-timings.json
+
+      - name: Upload build observations
+        if: ${{ !cancelled() && steps.build_metrics.outcome == 'success' && steps.metrics_privacy.outcome == 'success' }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -209,7 +264,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go_compiler="$(GOTOOLCHAIN=local GOENV=off staging_dir/hostpkg/lib/go-1.27/bin/go version)"
+          go_compiler="$(python3 -B scripts/validate-rc01-go-version.py)"
           cp .config "$TARGET_DIR/rc01.config"
           if [ -f rc01-build-timings.json ]; then
             cp rc01-build-timings.json "$TARGET_DIR/rc01-build-timings.json"
@@ -220,14 +275,15 @@ jobs:
             fi
           done
           cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
-          cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
+          cp .rc01-sources/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
+          cp .rc01-sources/lock.json "$TARGET_DIR/rc01-software-source-lock.json"
           cp scripts/rc01-platform-sources.json "$TARGET_DIR/rc01-platform-sources.json"
-          cp config/rc01/patches/packages/manifest.json "$TARGET_DIR/rc01-package-sources.json"
+          python3 -c 'import json, pathlib, sys; s=json.loads(pathlib.Path(".rc01-sources/lock.json").read_text()); pathlib.Path(sys.argv[1]).write_text(json.dumps(s["package_manifest"], indent=2)+"\n")' "$TARGET_DIR/rc01-package-sources.json"
           python3 -B scripts/rc01-source-metadata.py "$TARGET_DIR/rc01-source-metadata.json"
           cp -a config/rc01/patches/packages "$TARGET_DIR/rc01-package-patches"
           cp files/etc/uci-defaults/89-rc01-bypass "$TARGET_DIR/rc01-network-defaults.sh"
           {
-            echo "repository=$GITHUB_REPOSITORY"
+            echo "repository=immortalwrt-viking"
             echo "source_commit=$(git rev-parse HEAD)"
             echo "source_tree=$(git rev-parse 'HEAD^{tree}')"
             echo "viking_baseline=e5b0e82156513e81b6b712e4498ab15fd3a28571"
@@ -278,13 +334,22 @@ jobs:
           git -C feeds/packages diff -- lang/golang/golang-compiler.mk lang/golang/golang-host-build.mk > "$TARGET_DIR/rc01-go-build.patch"
           if [ "$RC01_WITH_DAE" = true ]; then
             cp feeds/daede/ci/pins.env "$TARGET_DIR/rc01-daede-upstream.lock"
-            cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
+            if [ -f .rc01-sources/dae.patch ]; then
+              cp .rc01-sources/dae.patch "$TARGET_DIR/rc01-daede-build.patch"
+            else
+              cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
+            fi
             cp feeds/daede/dae/Makefile "$TARGET_DIR/rc01-dae.Makefile"
           fi
           (cd "$TARGET_DIR"; sha256sum -- *xiaomi_be10000-squashfs-* > rc01-images.sha256)
 
-      - name: Preserve unverified images before acceptance checks
+      - name: Check image metadata before publishing
+        id: image_privacy
         if: ${{ !cancelled() && steps.firmware.outcome == 'success' }}
+        run: python3 -B scripts/validate-rc01-public-artifacts.py "$TARGET_DIR" key-build.pub public-key.pem
+
+      - name: Preserve unverified images before acceptance checks
+        if: ${{ !cancelled() && steps.firmware.outcome == 'success' && steps.image_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: rc01-unverified-images
@@ -293,7 +358,7 @@ jobs:
           path: ${{ env.TARGET_DIR }}/
 
       - name: Upload matching package archives
-        if: ${{ !cancelled() && steps.firmware.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.firmware.outcome == 'success' && steps.image_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: rc01-packages-${{ github.run_number }}
@@ -310,7 +375,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(GOTOOLCHAIN=local GOENV=off staging_dir/hostpkg/lib/go-1.27/bin/go version)" = 'go version go1.27.3 linux/amd64'
+          python3 -B scripts/validate-rc01-go-version.py
           for module in ath12k.ko ath12k_wifi7.ko qcom-ppe.ko emc2305.ko; do
             test -n "$(find build_dir -type f -name "$module" -print -quit)"
           done
@@ -345,7 +410,12 @@ jobs:
           python3 -B scripts/verify-rc01-images.py "$TARGET_DIR" | tee "$TARGET_DIR/rc01-image-validation.json"
           python3 -B scripts/verify-rc01-wireless-artifacts.py "$TARGET_DIR" > "$TARGET_DIR/rc01-wireless-artifacts.json"
 
+      - name: Check final validation records before publishing
+        id: verified_privacy
+        run: python3 -B scripts/validate-rc01-public-artifacts.py "$TARGET_DIR"
+
       - name: Upload verified images and build metadata
+        if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: rc01-duv2-120m-dhcp-complete-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
@@ -361,8 +431,13 @@ jobs:
             ${{ env.TARGET_DIR }}/profiles.json
             ${{ env.TARGET_DIR }}/sha256sums
 
-      - name: Upload failure logs
+      - name: Check failure logs before publishing
+        id: logs_privacy
         if: failure()
+        run: python3 -B scripts/validate-rc01-public-artifacts.py prepare.log download.log build.log logs
+
+      - name: Upload failure logs
+        if: ${{ failure() && steps.logs_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: rc01-failure-logs-${{ github.run_number }}

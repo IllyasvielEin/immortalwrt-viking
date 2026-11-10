@@ -24,10 +24,11 @@ PPE先确认上层是bridge再读VLAN；这些本地修正有实际prepared函�
 不代替内核并发、DMA或实机故障注入。保留旧906/317/338/342；不整合1635清理，
 mode1默认策略作为另一项运行对照暂缓，不混入slab或固件ABI更新。
 
-独立应用提交将daede feed锁到3520a79b，dae为2026.11.09-r3，仅include_dae=true编译；
+审核基线的独立应用提交将daede feed锁到3520a79b，dae为2026.11.09-r3，仅include_dae=true编译；
 默认固件仍不安装dae。新核心包含strict-alignment修复及原生HTTP API，API默认关闭，
 启用时默认仅监听127.0.0.1:9527，非loopback必须secret。保留原启停回收、互斥、
-来源及LuCI保护；实际内核BTF必需，禁止用影子vanilla BTF代替。其他feeds版本不滚动。
+来源及LuCI保护；实际内核BTF必需，禁止用影子vanilla BTF代替。
+后续构建默认按下述 latest 策略更新应用和软件 feeds；平台审核来源保持固定。
 
 编译及产物守卫会核对最终kernel .config的NETFILTER_INGRESS、真实DTB、镜像AMSS/M3
 SHA和驱动/包版本；源补丁展开或主机测试成功不等于完整固件构建通过。
@@ -83,12 +84,47 @@ PCS0313仅将interface缓存提交推迟到模式配置成功后，不称为已�
 自动合并上游、发布 Release、上传路由器或刷机步骤。将工作流提交到自己的
 fork 默认分支后，可以在 Actions 中手动启动。
 
-`config/rc01/feeds.conf` 固定五个feed；Nikki锁定
-`78e1a751d55ed0762811f054ee699049473da7b8`，包版本2026.10.10-r1。
-Mihomo源码固定1.19.33、Tailscale固定1.104.5，Go编译器1.27.3、bootstrap1.24.13。
-`config/rc01/patches/packages/manifest.json` 记录核心提交、源包hash和本地配方补丁，
-prepare按固定feed与配方hash幂等应用。仅安装所选软件及依赖，移除会造成Kconfig循环的
-alpha核心定义，并使用 `SOURCE_DATE_EPOCH` 固定Mihomo构建时间。
+每次构建默认使用 `latest`：先解析 packages、luci、routing、nikki、daede 软件 feed
+默认分支的最新 HEAD，并立即固定本次完整 commit；然后解析 Tailscale、Mihomo、Nikki 的
+最新稳定 GitHub Release。draft、prerelease、无法识别的发行标签均拒绝。Nikki 的核心服务和
+LuCI 源码使用稳定标签对应的 commit，feed 自身仍记录默认分支 HEAD，两者分别记录。
+其余应用采用该次软件 feed 配方。kernel、mac80211、ath12k 固件、平台驱动和 U-Boot
+不在动态更新范围，继续使用 `scripts/rc01-platform-sources.json` 审核来源。
+
+Tailscale/Mihomo 按固定 release commit 生成 OpenWrt 格式源归档并实算 SHA256；编译配方使用
+该 commit 和真实摘要。只允许适配器支持的版本/来源字段变化；构建、安装、依赖或 Go
+工具链布局发生不支持的变化时立即失败，不能用 skip、模糊补丁或静默回旧版本继续。
+Go 的现有本地工具链补丁和经过校验的 bootstrap 1.24.13 保留；新 major/minor 或 bootstrap
+链需要兼容性审核。仅安装所选软件及依赖，移除 alpha 定义造成的 Kconfig 循环，Mihomo
+构建时间继续使用 `SOURCE_DATE_EPOCH`。
+
+Actions 的 `software_updates` 默认 `latest`，可选择 `locked` 重建审核基线；本地分别执行：
+
+```sh
+sh scripts/prepare-rc01.sh
+RC01_UPDATE_MODE=locked sh scripts/prepare-rc01.sh
+```
+
+`config/rc01/feeds.conf` 与 `config/rc01/patches/packages/manifest.json` 是 locked 模式的审核
+基线：Mihomo 1.19.33、Tailscale 1.104.5、Go 1.27.3。latest 不改写这些文件；它将本次解析结果、
+源归档摘要、配方完整前后摘要、本地变更和公开来源写入 `.rc01-sources/lock.json`。
+这个目录是生成文件，不提交版本控制。应用或源获取失败会停止当前构建，不回退 locked。
+
+每次运行上传 `rc01-software-source-lock` artifact，成功镜像还附带
+`rc01-software-source-lock.json`、实际 `rc01-feeds.lock` 和 package manifest。Actions 填写
+`replay_run_id` 可重用先前运行的 artifact；本地将已下载的 `lock.json` 路径传入：
+
+```sh
+RC01_REPLAY_LOCK=/tmp/rc01-source-lock/lock.json sh scripts/prepare-rc01.sh
+. .rc01-sources/environment.sh
+```
+
+重放不查询 latest，仍验证平台输入、选用 dae 与否、feed commit、源归档 SHA 和全部配方
+前后摘要，并保留原构建的 `SOURCE_DATE_EPOCH`。锁只描述公开软件来源及构建输入，不记录账号、设备标识、凭据或个人环境。
+
+`preparation.json` 仅记录本地准备阶段，不作为可重放输入上传。完整准备脚本自动执行
+plan、适配与收尾；已完成后直接调用 prepare/finish-locked 只验证，不重新写文件或规范权限。
+重新完整准备仍先检查旧生成文件，用户改过内容或权限时停止，保留修改。
 
 普通软件已对照 AX6000 默认分支 `25.12` 与最近成功构建
 `6eeefe96793e0ab0181d6b9d97ed6b9b63e84126`：Nikki/Mihomo、WireGuard、
@@ -117,13 +153,13 @@ python3 -B scripts/verify-rc01-images.py bin/targets/qualcommbe/ipq95xx
 准备脚本会重建生成的 feeds 包链接、`feeds.conf`、`.config` 和 `files` 中的RC01
 覆盖文件；不要在这些生成位置保存个人配置。版本源文件分别位于
 `defconfig/qualcommbe-rc01.config` 和 `config/rc01/`。跟进上游、升级feeds或Nikki时，
-更新锁定提交并重新运行检查，不能只给旧镜像混装新内核模块。
+检查本次生成锁与适配器兼容性并重新运行检查，不能只给旧镜像混装新内核模块。
 
 后续正常构建统一使用长期分支 `rc01/custom`；GitHub缓存只允许当前分支和默认分支
 共享，历史 sibling 分支的缓存不会因快进或相同key自动迁移。
 
 Actions 的 `go_bootstrap` 默认 `external`：下载并核对官方 Go 1.24.13 linux-amd64
-归档的固定SHA256，在独立空目录解压，再从锁定源码编译最终 Go 1.27.3。
+归档的固定SHA256，在独立空目录解压，再从锁定源码编译最终 Go。locked基线为1.27.3；latest使用当次来源锁校验过的1.27.x版本。
 这跳过原有多级bootstrap链，不替换固件中的代理程序或功能。
 下载、校验或版本检查失败时在正式编译前停止；显式选择 `source` 才回到原有源码链，
 不在已有构建产物上自动切换。packages feed中的两处实际Go调用均强制
@@ -194,11 +230,9 @@ overlay另存一份大文件；默认通过重编固件升级核心，需要独�
 
 ## 首次启动的网络和代理
 
-- LAN作为DHCP客户端从GS7获取地址、网关和DNS，系统与客户端hostname均为 `RC01`，
-  不固定 `.50.3`；在GS7租约中按hostname和实际MAC查找地址。设备获取自身管理地址，
-  LAN DHCP服务器仍关闭。此前 `43fc40c991` 已在本机通过 Du v2 启动，获 `.50.219`；
-  Viking sync 082981已于2026-11-04启动，风扇有实际风量、三路DS节点已注册；
-  AP数据流、完整温控与代理共存仍待验收。现场随后设静态`.50.3/24`，固件首启仍保持DHCP。
+- LAN作为DHCP客户端从上游路由器获取地址、网关和DNS，系统与客户端hostname均为 `RC01`。
+  管理地址在上游租约中查找，不预置现场地址；LAN DHCP服务器保持关闭。
+  既有启动记录只用于限定历史验证范围，完整温控、AP数据流与代理共存仍需新镜像验收。
 - 首启启用HTTPS监听，由设备本地生成证书，保留HTTP且不强制跳转；不预置证书私钥。
   Tailscale主服务与辅助服务均禁用，持久设置 `service_enabled=0`，避免helper恢复默认启用。
 - `lan1..lan4` 和 `sfp` 在LAN桥内；10G电口 `wan` 保留且不自动启动，WAN6同样关闭。
@@ -211,7 +245,7 @@ overlay另存一份大文件；默认通过重编固件升级核心，需要独�
 - Nikki和Mihomo默认选入构建，但未配置代理接管。NAS、UPnP不选入；dae/daede仅为可选测试构建。
 
 不能保留QWRT的eth接口配置跨驱动升级。单客户端代理验证应同时检查DNS、IPv6和
-同网段回程；关闭RC01自己的RA不会阻止GS7的RA抵达同一二层网络的客户端。
+同网段回程；关闭RC01自己的RA不会阻止上游路由器的RA抵达同一二层网络的客户端。
 保留原生PPE能力，用新建连接做offload开关对照。空闲计数为0或不对称回程下未命中，
 不能单独判驱动故障。ath12k DS仅在所支持AP/授权peer路径启用，MLO回退不等于无线失败。
 
@@ -277,7 +311,13 @@ release增加用于区分本地修补。核心使用官方dae加olicesx性能分
 quic-go也有固定性能分支，不能称为纯官方dae。源包完整SHA256在配方中，组件提交在
 feed的 `ci/pins.env`；CI产物同时保存该锁和本地补丁。保留来源、原作者与许可。
 
-本地补丁位于 `config/rc01/patches/daede/`，由准备脚本按固定HEAD幂等应用：
+本地补丁位于 `config/rc01/patches/daede/`。locked 使用固定HEAD；latest 跟随维护者已发布、
+内容寻址且 SHA256 匹配的组合源码配方，固定当次 feed commit、组件 pins 和本地完整前后摘要。
+这条组合源码策略与官方 dae `releases/latest` 不是同一版本序列，不能将官方 v2.x 当作
+2026.xx 快照的升级或回退。生命周期补丁必须准确应用，否则构建停止；不启用公共二进制 feed。
+
+准备脚本保留以下策略：
+
 - dae由guard托管，TERM转发后最多等待20秒，回收核心后再清理保留名称daens/dae0；
   发现其他代理进程或不能核实状态时拒绝清理/启动，不删除共享BPF pin或其他TC规则。
   核心负责TC/BPF脱附，强制终止后仍需单独核对TC状态。
@@ -338,11 +378,9 @@ PWM使用正常极性、通道0的推挽输出，与QWRT0726/1007实际驱动行
 
 ## 2026-11-04：旁路由调优依据与实施边界
 
-现场082981已由DHCP`.219`改为静态`.3/24`、网关/DNS`.1`，SSH、HTTP/HTTPS、
-GS7双向连通和本机解析均通过。先私密备份、启动五分钟设备侧回退、验证临时新地址，
-再持久切换并在验收后解除回退。当前静态可用不能解释旧b834当时失联；CIDR本身合法。
-GS7仍将`.3`保留给旧MAC，未来存在重复分配风险，应由用户确认后修改或移除；本轮未改GS7。
-现机不要重跑89，它会把现场静态地址改回DHCP；下版继续使用可发现的DHCP首启。
+历史现场的静态地址、网关、租约及设备标识只保存在私有运维记录，不进入构建文档。
+网络迁移先做私密备份与定时回退，验证临时配置后再持久保存；新镜像仍采用可发现的DHCP首启。
+已手动配置的设备应避免重跑会重置网络的首次启动脚本，按其私有配置单独维护。
 
 现机的`min_cache_ttl=3600`、`use_stale_cache=3600`、`nonegcache=1`、`dns_redirect=1`
 来自基础默认配置，之前只检查RC01片段不足以排除它们。已按Astra xhigh复核移除/复位；
@@ -365,8 +403,8 @@ IPC夹具失败；不得把旧wrapper语义记为最终修复。测试可自动�
 
 | 项目 | 当前依据与建议 | 何时再调整、怎样验收 |
 | --- | --- | --- |
-| DNS容量/TTL | 保持8192/1232，遵循收到的上游TTL，不强延长；不默认过滤AAAA | 用`ubus call dnsmasq metrics`看提前淘汰与转发增量、进程RSS；代表性负载后再改容量。GS7收到的TTL不等于权威TTL证明 |
-| DNS负缓存/劫持 | nonegcache=0、dns_redirect=0，直接`.3:53`服务继续；NXDOMAIN未通过 | 正/负查询、带SOA的NXDOMAIN、TCP与TTL；实际经RC01转发到其他DNS的新流量待单客户端测试 |
+| DNS容量/TTL | 保持8192/1232，遵循收到的上游TTL，不强延长；不默认过滤AAAA | 用`ubus call dnsmasq metrics`看提前淘汰与转发增量、进程RSS；代表性负载后再改容量。上游路由器收到的TTL不等于权威TTL证明 |
+| DNS负缓存/劫持 | nonegcache=0、dns_redirect=0，直接向设备当前管理地址的53端口提供服务；NXDOMAIN未通过 | 正/负查询、带SOA的NXDOMAIN、TCP与TTL；实际经RC01转发到其他DNS的新流量待单客户端测试 |
 | zram容量/算法 | 保持858MiB逻辑容量、LZO、priority100；不预占等量物理内存，当前未swap | 未来规则加载、稳定代理和恢复阶段观察mm_stat峰值、实际压缩收益、pswpin/out增量及CPU延迟。当前仅lzo-rle/lzo可选，LZ4/zstd需额外内核支持与对照 |
 | VM回收 | 保持swappiness60/page-cluster3/compaction_proactiveness20/min_free_kbytes16384 | swappiness是相对回收成本，不是百分比阈值；只在持续换入换出/回收延迟时单变量对比，不照抄100/133或每日drop_caches |
 | CPU调频 | 保持schedutil，936–2208MHz | 只在负载下频率/单核瓶颈出现时对照临时高频，记录吞吐、尾延迟、温度和功耗，不固定满频作默认 |
@@ -375,7 +413,7 @@ IPC夹具失败；不得把旧wrapper语义记为最终修复。测试可自动�
 | SQM/qdisc | 本轮不新增整形，也不扩大队列 | 确认RC01真正位于拥塞路径，才在饱和上下行比较延迟、吞吐、CPU和qdisc计数；flow offload可能绕过整形 |
 | MTU/EEE | MTU1500；EEE未修改、当前具体状态未采集 | jumbo需全路径支持且有收益；协商/误码/唤醒问题才A/B测试EEE。检查PMTU/ICMP与IPv6，不按10G规格直接设9000 |
 | conntrack/TCP | 样本84/65535，OOM0；不扩大conntrack/socket缓冲或切BBR | 接近表上限/明确重传或长RTT窗口受限时，结合内存与实际代理路径测量；单纯桥转发不由RC01本机TCP拥塞算法加速 |
-| IPv6 | RC01不发RA/不提供DHCPv6，只有link-local；不擅自关全网IPv6 | GS7的RA仍能直接抵达客户端；启用代理时对IPv6出口/DNS/绕行另验，AAAA解析成功不等于IPv6路由可用 |
+| IPv6 | RC01不发RA/不提供DHCPv6，只有link-local；不擅自关全网IPv6 | 上游路由器的RA仍能直接抵达客户端；启用代理时对IPv6出口/DNS/绕行另验，AAAA解析成功不等于IPv6路由可用 |
 | 存储与更新 | root upper约40.5MiB总/38.3MiB空；核心在SquashFS，不合并70MiB | 规则/数据库原子更新需预算新旧文件和临时空间；在线覆盖核心会占一整份overlay。重分区/extroot单独设计与恢复验收 |
 | 日志/时间 | 128KiB RAM环缓冲，无持久日志；NTP客户端已运行，时间一致 | 按排障需要短时扩日志或远端接收，避免长期写闪存；独立核实NTP同步，不能由进程存在就认定完成 |
 | 服务/管理 | 无线、Nikki/dae、VPN保持关闭；监听22/80/443/53 | 用户自行设置root密码/公钥。自签HTTPS应核对证书，确认客户端可用后再讨论停HTTP；不替用户生成未知密码或先关唯一入口 |
@@ -427,8 +465,9 @@ SHA256 `b881cc742499c84ce3b419efde70821ae34678c7901a2e21b538f6a156fa26d5`；
 
 ### 未来Nikki/Mihomo资源调优
 
-本节是未来单客户端试验的建议，不启用代理或加入订阅。新候选Mihomo固定1.19.33；
-Nikki锁定78e1a751d55ed0762811f054ee699049473da7b8，包版本2026.10.10-r1。
+本节是未来单客户端试验的建议，不启用代理或加入订阅。历史locked基线为Mihomo 1.19.33、
+Nikki feed 78e1a751d55ed0762811f054ee699049473da7b8及包版本2026.10.10-r1；
+latest的实际稳定release、feed与源码commit以该次构建来源锁为准。
 必须核对生成后的最终配置，LuCI合并选项优先于mixin文件，不能只看订阅原文。
 
 - Geo数据先保持memconservative加载器；MMDB/DAT由规则实际需求决定，不并存下载无用的大型数据库。
@@ -475,8 +514,8 @@ Nikki锁定78e1a751d55ed0762811f054ee699049473da7b8，包版本2026.10.10-r1。
 内核、mac80211、ipq-wifi、dnsmasq、Mihomo/Tailscale/Nikki/Go来源，产物保留验证JSON。
 
 本阶段未全量交叉编译工具链或生成新固件；最终内核/模块链接、真实FIT/UBI容量和32MiB
-rootfs_data预算交给父线程CI。旧机不部署；新机候选不携带旧机MAC/caldata、现场静态`.3/.1`、
-节点或VPN账号，首启继续DHCP且无线/代理/VPN关闭。元数据标注 `physical_acceptance=not-performed`；
+rootfs_data预算由CI核对。候选不携带设备专属MAC/caldata、现场网络参数、代理节点或VPN账号，
+首启继续DHCP且无线/代理/VPN关闭。元数据标注 `physical_acceptance=not-performed`；
 准备、源码和夹具通过均不代表新机冷启动、风扇曲线、PPE/DS、无线及流量已实机验收。
 
 ## 2026-11-11：新选集与审核修正

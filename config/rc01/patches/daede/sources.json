@@ -8,7 +8,7 @@
   "patches": [
     {
       "name": "100-rc01-dae-lifecycle-and-source-policy.patch",
-      "sha256": "57bc57471417efa91be9287e55a7b06cc1bb8001c12a15a7cfb33239bde8d6f2"
+      "sha256": "4b4f7ba06b65ce4d262c3b31c1f71b348fba80f34b99c9beb23e350678f563f3"
     }
   ],
   "files": {

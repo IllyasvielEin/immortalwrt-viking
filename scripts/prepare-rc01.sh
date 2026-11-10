@@ -1,6 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 set -eu
+umask 022
 
 cd "$(dirname "$0")/.."
 [ -z "${RC01_WITH_DAED+x}" ] || {
@@ -11,8 +12,15 @@ case "$with_dae" in
 	true|false) ;;
 	*) echo 'RC01_WITH_DAE must be true or false' >&2; exit 1 ;;
 esac
-cp config/rc01/feeds.conf feeds.conf
+# Resolve software feeds once at build start; all following steps use that lock.
+python3 -B scripts/rc01-software-sources.py plan
+cp .rc01-sources/feeds.conf feeds.conf
+SOURCE_DATE_EPOCH="$(python3 -c 'import json; print(json.load(open(".rc01-sources/lock.json"))["source_date_epoch"])')"
+export SOURCE_DATE_EPOCH
 ./scripts/feeds update -a
+python3 -B scripts/rc01-software-sources.py prepare
+./scripts/feeds update -i
+source_mode="$(python3 -c 'import json; print(json.load(open(".rc01-sources/lock.json"))["mode"])')"
 ./scripts/feeds uninstall -a
 # Install the selected roots and their dependencies, rather than indexing
 # every unrelated UI/audio package into this device's Kconfig namespace.
@@ -23,7 +31,9 @@ cp config/rc01/feeds.conf feeds.conf
 	luci-app-cpufreq luci-i18n-cpufreq-zh-cn conntrack iperf3 pciutils usbutils
 if [ "$with_dae" = true ]; then
 	# Override the old dae provider before resolving the UI dependency.
-	sh scripts/patch-rc01-daede.sh feeds/daede
+	if [ "$source_mode" = locked ]; then
+		sh scripts/patch-rc01-daede.sh feeds/daede
+	fi
 	./scripts/feeds uninstall dae daed luci-app-dae luci-app-daed
 	./scripts/feeds install -f -p daede dae luci-app-daede
 fi
@@ -40,8 +50,9 @@ while read -r type name url; do
 		echo "Feed revision mismatch: $name" >&2
 		exit 1
 	}
-done < config/rc01/feeds.conf
+done < .rc01-sources/feeds.conf
 
+if [ "$source_mode" = locked ]; then
 # Keep Go toolchain selection local at the pinned feed call sites.
 sh scripts/patch-rc01-golang.sh feeds/packages
 
@@ -67,6 +78,10 @@ fi
 
 # Replay reviewed package source updates after the feed and timestamp guards.
 python3 -B scripts/patch-rc01-packages.py feeds/packages feeds/nikki
+
+fi
+python3 -B scripts/rc01-software-sources.py finish-locked
+python3 -B scripts/rc01-software-sources.py verify
 
 mkdir -p files
 cp -a config/rc01/files/. files/

@@ -168,7 +168,8 @@ class PackageRecipeTests(unittest.TestCase):
         path = self.recipes()["nikki"]
         path.write_text(self.originals["nikki"])
         prepare = (ROOT / "scripts/prepare-rc01.sh").read_text()
-        section = prepare[prepare.index("core_makefile="):prepare.index("mkdir -p files")]
+        end = prepare.index("\nfi\npython3 -B scripts/rc01-software-sources.py finish-locked")
+        section = prepare[prepare.index("core_makefile="):end]
         for _ in range(2):
             result = subprocess.run(["sh", "-eu", "-c", section], cwd=project,
                                     capture_output=True, text=True)

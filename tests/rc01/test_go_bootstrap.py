@@ -4,7 +4,9 @@
 import hashlib
 import importlib.util
 import io
+import json
 import os
+import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import shutil
@@ -24,6 +26,10 @@ FEED_REVISION = "48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd"
 spec = importlib.util.spec_from_file_location("rc01_go_bootstrap", SCRIPT)
 bootstrap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bootstrap)
+GO_VALIDATOR = ROOT / "scripts/validate-rc01-go-version.py"
+compiler_spec = importlib.util.spec_from_file_location("rc01_go_version", GO_VALIDATOR)
+compiler = importlib.util.module_from_spec(compiler_spec)
+compiler_spec.loader.exec_module(compiler)
 
 # This executable computes its own root and records the environment actually
 # received by subprocesses; no mock stands in for the Go command invocation.
@@ -254,6 +260,15 @@ class BootstrapTests(unittest.TestCase):
             path.chmod(0o755)
 
         executable("scripts/feeds", ":\n")
+        # Source resolution is an independent collaborator here; this test
+        # checks bootstrap ordering against prepare's real shell control flow.
+        (project / "scripts/rc01-software-sources.py").write_text(
+            "from pathlib import Path\nimport shutil, sys\n"
+            "if sys.argv[1] == 'plan':\n"
+            "    Path('.rc01-sources').mkdir(exist_ok=True)\n"
+            "    Path('.rc01-sources/lock.json').write_text('{\"mode\":\"locked\",\"source_date_epoch\":1}')\n"
+            "    shutil.copyfile('config/rc01/feeds.conf', '.rc01-sources/feeds.conf')\n"
+        )
         for name in ("golang", "daede"):
             executable(f"scripts/patch-rc01-{name}.sh", f'echo patch-{name} >> "$RC01_TEST_EVENTS"\n')
         (project / "scripts/patch-rc01-packages.py").write_text(
@@ -301,10 +316,128 @@ esac
         self.assertNotIn("defconfig", events.read_text())
 
 
+class CompiledGoTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="rc01-compiled-go-")
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+        self.log = self.work / "go-invocations"
+        self.environment = mock.patch.dict(os.environ, {
+            "RC01_GO_TEST_LOG": str(self.log), "GOTOOLCHAIN": "auto",
+            "GOENV": "/untrusted/goenv", "GOROOT": "/untrusted/root",
+        })
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.lock = {"schema": 1, "prepared": True, "mode": "latest", "inputs": {},
+                     "go": {"version": "1.27.4", "bootstrap": "1.24.13"}}
+        for name in (compiler.COMPILER, compiler.BOOTSTRAP, compiler.VALUES):
+            path = self.work / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            baseline = {
+                compiler.COMPILER: "golang1.27.Makefile",
+                compiler.BOOTSTRAP: "golang-bootstrap.Makefile",
+                compiler.VALUES: "inputs/go/lang/golang/golang-values.mk",
+            }[name]
+            source = (ROOT / "config/rc01/software-baselines" / baseline).read_text()
+            if name == compiler.COMPILER:
+                source = re.sub(r"^GO_VERSION_PATCH:=.*$", "GO_VERSION_PATCH:=4", source, flags=re.M)
+            path.write_text(source)
+            self.lock["inputs"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.lock["go"]["recipe_sha256"] = self.lock["inputs"][compiler.COMPILER]
+        binary = self.work / compiler.BINARY
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(GO_FIXTURE.replace(("go" + bootstrap.VERSION).encode(), b"go1.27.4"))
+        binary.chmod(0o755)
+
+    def test_valid_new_patch_release_is_checked_against_real_command_and_lock(self):
+        self.assertEqual(compiler.check(self.work, self.lock), "go version go1.27.4 linux/amd64")
+        self.assertEqual(self.log.read_text().splitlines(), [
+            "local|off|unset|version", "local|off|unset|env GOROOT GOHOSTOS GOHOSTARCH",
+        ])
+        lock = self.work / ".rc01-sources/lock.json"
+        lock.parent.mkdir()
+        lock.write_text(json.dumps(self.lock))
+        result = subprocess.run([sys.executable, "-B", str(GO_VALIDATOR), "--root", str(self.work)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "go version go1.27.4 linux/amd64\n")
+        # The locked baseline must use the same acceptance path, not a fixed
+        # compiler version hidden in a separate CI branch.
+        self.lock["mode"] = "locked"
+        self.assertEqual(compiler.check(self.work, self.lock), "go version go1.27.4 linux/amd64")
+
+    def test_different_actual_version_host_or_root_is_rejected(self):
+        variants = ({"RC01_TEST_VERSION": "go version go1.27.3 linux/amd64"},
+                    {"RC01_TEST_VERSION": "go version go1.27.4 linux/arm64"},
+                    {"RC01_TEST_HOST_OS": "darwin"}, {"RC01_TEST_HOST_ARCH": "arm64"},
+                    {"RC01_TEST_REPORTED_ROOT": str(self.work)})
+        for environment in variants:
+            with self.subTest(environment=environment), mock.patch.dict(os.environ, environment):
+                with self.assertRaises(compiler.GoVersionError):
+                    compiler.check(self.work, self.lock)
+
+    def test_incomplete_lock_or_unreviewed_chain_never_executes_go(self):
+        variants = []
+        for key, value in (("prepared", False), ("mode", "untrusted"), ("schema", 2)):
+            lock = json.loads(json.dumps(self.lock)); lock[key] = value; variants.append(lock)
+        for key, value in (("version", "1.28.0"), ("version", "1.27.4rc1"),
+                           ("bootstrap", "1.25.0"), ("recipe_sha256", "0" * 64)):
+            lock = json.loads(json.dumps(self.lock)); lock["go"][key] = value; variants.append(lock)
+        lock = json.loads(json.dumps(self.lock)); lock["inputs"].pop(compiler.BOOTSTRAP); variants.append(lock)
+        for lock in variants:
+            with self.subTest(lock=lock), self.assertRaises(compiler.GoVersionError):
+                compiler.check(self.work, lock)
+        self.assertFalse(self.log.exists())
+
+    def test_recipe_content_and_version_provenance_drift_is_rejected(self):
+        recipe = self.work / compiler.COMPILER
+        original = recipe.read_text()
+        recipe.write_text(original + "# content drift\n")
+        with self.assertRaises(compiler.GoVersionError):
+            compiler.check(self.work, self.lock)
+        # A lock version cannot disagree with even a matching recipe hash.
+        recipe.write_text(original.replace("GO_VERSION_PATCH:=4", "GO_VERSION_PATCH:=5"))
+        self.lock["inputs"][compiler.COMPILER] = hashlib.sha256(recipe.read_bytes()).hexdigest()
+        self.lock["go"]["recipe_sha256"] = self.lock["inputs"][compiler.COMPILER]
+        with self.assertRaises(compiler.GoVersionError):
+            compiler.check(self.work, self.lock)
+        self.assertFalse(self.log.exists())
+
+    def test_workflow_uses_validator_and_publishes_only_generic_repository_identity(self):
+        workflow = (ROOT / ".github/workflows/build-rc01.yml").read_text()
+        self.assertEqual(workflow.count("python3 -B scripts/validate-rc01-go-version.py"), 2)
+        self.assertNotIn("go version go1.27.3 linux/amd64", workflow)
+        self.assertIn('gh run download "$REPLAY_RUN_ID" --repo "$GITHUB_REPOSITORY"', workflow)
+        lines = workflow.splitlines()
+        identity = next(i for i, line in enumerate(lines) if 'echo "repository=' in line)
+        command = "\n".join(line.strip() for line in lines[identity:identity + 3])
+        result = subprocess.run(["sh", "-c", command], cwd=ROOT,
+                                env=os.environ | {"GITHUB_REPOSITORY": "private-fixture-owner/custom-name"},
+                                capture_output=True, text=True, check=True)
+        metadata = dict(line.split("=", 1) for line in result.stdout.splitlines())
+        self.assertEqual(metadata["repository"], "immortalwrt-viking")
+        self.assertRegex(metadata["source_commit"], r"^[0-9a-f]{40}$")
+        self.assertNotIn("private-fixture-owner", result.stdout)
+
+
 class FeedPatchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.feed = ROOT / "feeds/packages"
+        cls.feed = Path(os.environ.get("RC01_PACKAGES_FEED", str(ROOT / "feeds/packages")))
+        if not cls.feed.is_dir():
+            raise unittest.SkipTest("packages feed is not prepared; real patch tests run after source preparation")
+        top = subprocess.run(["git", "-C", str(cls.feed), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+        if top.returncode or Path(top.stdout.strip()).resolve() != cls.feed.resolve():
+            raise RuntimeError("existing packages directory is not an independent Git feed")
+        head = subprocess.run(["git", "-C", str(cls.feed), "rev-parse", "HEAD"], capture_output=True, text=True)
+        if head.returncode:
+            raise RuntimeError("existing packages feed has no readable HEAD")
+        before = head.stdout.strip()
+        def unchanged():
+            after = subprocess.check_output(["git", "-C", str(cls.feed), "rev-parse", "HEAD"], text=True).strip()
+            if after != before:
+                raise AssertionError("shared packages feed HEAD changed during disposable patch tests")
+        cls.addClassCleanup(unchanged)
         cls.originals = {}
         for name in ("golang-compiler.mk", "golang-host-build.mk", "golang-values.mk"):
             result = subprocess.run(["git", "-C", str(cls.feed), "show", f"{FEED_REVISION}:lang/golang/{name}"],
@@ -321,6 +454,9 @@ class FeedPatchTests(unittest.TestCase):
         # No checkout/branch change in the shared feed. Reuse its local objects
         # in a disposable repository and materialize only the files under test.
         subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout", str(self.feed), str(self.checkout)], check=True)
+        # The feed under build may be newer. These exact baseline patch tests
+        # only detach their private clone at the already-verified old object.
+        subprocess.run(["git", "-C", str(self.checkout), "update-ref", "--no-deref", "HEAD", FEED_REVISION], check=True)
         self.assertEqual(subprocess.check_output(["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip(), FEED_REVISION)
         self.golang = self.checkout / "lang/golang"
         self.golang.mkdir(parents=True)

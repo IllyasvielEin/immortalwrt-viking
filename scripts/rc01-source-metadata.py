@@ -3,6 +3,7 @@
 from pathlib import Path
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import struct
@@ -76,27 +77,38 @@ def metadata():
     for key, expected in (("PKG_SOURCE_VERSION", wireless["version"]), ("PKG_RELEASE", wireless["release"]), ("PKG_HASH", wireless["sha256"])):
         if value("package/kernel/mac80211/Makefile", key) != str(expected):
             raise ValueError(f"wireless source differs: {key}")
+    spec = importlib.util.spec_from_file_location("rc01_software_sources", ROOT / "scripts/rc01-software-sources.py")
+    resolver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(resolver)
+    source_lock = resolver.verify()
+    source_lock_path = ROOT / ".rc01-sources/lock.json"
+    result["software_resolution"] = {"mode": source_lock["mode"],
+        "resolved_at": source_lock["resolved_at"], "replay": source_lock.get("replay", False),
+        "source_lock_sha256": hashlib.sha256(source_lock_path.read_bytes()).hexdigest(),
+        "platform_inputs": source_lock["platform_inputs"]}
     result["software"] = {}
     result["software"]["ath12k-firmware"] = firmware_metadata(result["ath12k_firmware"])
     result["local_patchset"] = local_patchset()
-    dae_lock_path = ROOT / "config/rc01/patches/daede/sources.json"
-    dae_lock = json.loads(dae_lock_path.read_text())
+    dae_lock = source_lock.get("optional_dae") or json.loads((ROOT / "config/rc01/patches/daede/sources.json").read_text())
     enabled = bool(re.search(r"^CONFIG_PACKAGE_dae=y$", (ROOT / ".config").read_text(), re.M))
-    result["optional_dae"] = {"enabled": enabled, "source_lock_sha256": hashlib.sha256(dae_lock_path.read_bytes()).hexdigest(),
+    if enabled != source_lock["with_dae"]:
+        raise ValueError("actual daemon selection differs from this build's source lock")
+    result["optional_dae"] = {"enabled": enabled, "source_lock_sha256": hashlib.sha256(json.dumps(dae_lock, sort_keys=True).encode()).hexdigest(),
                               "source": dae_lock, "kernel_btf": "actual-built-kernel; checked in opt-in CI"}
     if enabled:
         for name, expected in dae_lock["files"].items():
             if hashlib.sha256((ROOT / "feeds/daede" / name).read_bytes()).hexdigest() != expected["after"]:
                 raise ValueError(f"prepared dae source differs from lock: {name}")
         result["optional_dae"]["kernel_btf"] = kernel_btf_metadata()
-    manifest = json.loads((ROOT / "config/rc01/patches/packages/manifest.json").read_text())
+    manifest = source_lock["package_manifest"]
     for entry in manifest["packages"]:
         path = f"feeds/{entry['feed']}/{entry['path']}"
         if value(path, "PKG_VERSION") != entry["version"] or hashlib.sha256((ROOT / path).read_bytes()).hexdigest() != entry["applied_sha256"]:
             raise ValueError(f"prepared package differs from reviewed manifest: {path}")
         result["software"][entry["path"].split("/")[-2]] = entry
     result["software"]["nikki"] = {"version": value("feeds/nikki/nikki/Makefile", "PKG_VERSION"),
-                                   "release": value("feeds/nikki/nikki/Makefile", "PKG_RELEASE")}
+                                   "release": value("feeds/nikki/nikki/Makefile", "PKG_RELEASE"),
+                                   "stable_source": source_lock.get("nikki")}
     result["software"]["go"] = {"version": value("feeds/packages/lang/golang/golang1.27/Makefile", "GO_VERSION_MAJOR_MINOR") + "." + value("feeds/packages/lang/golang/golang1.27/Makefile", "GO_VERSION_PATCH"),
                                 "bootstrap": "1.24.13"}
     result["software"]["dnsmasq"] = {"version": value("package/network/services/dnsmasq/Makefile", "PKG_UPSTREAM_VERSION"),
@@ -105,7 +117,7 @@ def metadata():
     ipq = "package/firmware/ipq-wifi/Makefile"
     result["software"]["ipq-wifi"] = {"source_commit": value(ipq, "PKG_SOURCE_VERSION"), "release": value(ipq, "PKG_RELEASE"), "source_sha256": value(ipq, "PKG_MIRROR_HASH")}
     result["feeds"] = {}
-    for line in (ROOT / "config/rc01/feeds.conf").read_text().splitlines():
+    for line in (ROOT / ".rc01-sources/feeds.conf").read_text().splitlines():
         if not line.startswith("src-git "):
             continue
         _, name, url = line.split()
