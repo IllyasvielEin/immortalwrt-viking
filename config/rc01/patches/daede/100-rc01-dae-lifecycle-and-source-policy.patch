@@ -1,22 +1,22 @@
 From: IllyasvielEin
 Subject: [PATCH] RC01: reap dae before runtime cleanup and keep source updates
 
-Based on kenzok8/openwrt-daede 1eedcafd1cd4d8a89ac928be6608df76ffb38f78.
+Based on kenzok8/openwrt-daede 3520a79bd9c68843801dc89d7d6e155d2c43c833.
 The guard's signal/reap ordering follows that project's daed-guard.
 Retain upstream copyright, licenses, and source provenance.
 
 diff --git a/dae/Makefile b/dae/Makefile
-index f92c4c5..07a5052 100644
+index a1b77a3..53dd849 100644
 --- a/dae/Makefile
 +++ b/dae/Makefile
 @@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
  
  PKG_NAME:=dae
- PKG_VERSION:=2026.10.30
--PKG_RELEASE:=1
-+PKG_RELEASE:=2
+ PKG_VERSION:=2026.11.09
+-PKG_RELEASE:=2
++PKG_RELEASE:=3
  
- PKG_SOURCE:=dae-src-2026.10.30-55c59e68c059.tar.gz
+ PKG_SOURCE:=dae-src-2026.11.09-8b744ffb65ee.tar.gz
  PKG_SOURCE_URL:=https://github.com/kenzok8/openwrt-daede/releases/download/dae-src
 @@ -137,6 +137,7 @@ define Package/dae/install
  

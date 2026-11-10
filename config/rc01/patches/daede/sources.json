@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "feed_url": "https://github.com/kenzok8/openwrt-daede.git",
+  "feed_commit": "3520a79bd9c68843801dc89d7d6e155d2c43c833",
+  "previous_feed_commit": "1eedcafd1cd4d8a89ac928be6608df76ffb38f78",
+  "integration": "experimental-dae-only",
+  "physical_acceptance": "not-performed",
+  "patches": [
+    {
+      "name": "100-rc01-dae-lifecycle-and-source-policy.patch",
+      "sha256": "57bc57471417efa91be9287e55a7b06cc1bb8001c12a15a7cfb33239bde8d6f2"
+    }
+  ],
+  "files": {
+    "ci/pins.env": {
+      "before": "78b77b6283a53154c1727cedc0733d037867afe44ee2cb198f8e4a502308fbfd",
+      "after": "78b77b6283a53154c1727cedc0733d037867afe44ee2cb198f8e4a502308fbfd"
+    },
+    "dae/Makefile": {
+      "before": "6cab1e503900b1977ad3993a41235c0b9dfd5d4715639bbf1b51ab25f4c76d8d",
+      "after": "2f7e7ac2ecea0aa835a9d2b06ea44065de0392ef188ddf967aaddb232751b08b"
+    },
+    "dae/files/dae-guard": {
+      "before": null,
+      "after": "fb536f0e66d29da9eefa89192917d6a02180684a9c124597effceb863c8f2fd7"
+    },
+    "dae/files/dae.init": {
+      "before": "753db2db1d3f8c0ab97df6cdd0559bb2482330d9d37e5b8fac521fc4337482ef",
+      "after": "6ee9c291b127f8c12586b4c7da9c896c1fe463186666bcca7d171993283004eb"
+    },
+    "daed/Makefile": {
+      "before": "817649f58548e839bc0f0ef39ae34a4c890688a3247b9db196055650554df5a7",
+      "after": "817649f58548e839bc0f0ef39ae34a4c890688a3247b9db196055650554df5a7"
+    },
+    "luci-app-daede/Makefile": {
+      "before": "820eecf99b7086a67730928634133712e661a66dac33eac38c31c9f25efb9fa1",
+      "after": "a5198971e4b46f59efda6c87cba72ef9e151ee111e4590718409097f4034c001"
+    },
+    "luci-app-daede/htdocs/luci-static/resources/view/daede/backend.js": {
+      "before": "7c5689d9dd0fe63c6a0e33aefb1fbdcb0307fded0d76227a018a649a4a0d9a98",
+      "after": "920c90f394a67c1d9510c7a53c3e43d611e2fcc6d2ce8cbc053dd5f60d17de79"
+    },
+    "luci-app-daede/htdocs/luci-static/resources/view/daede/updates.js": {
+      "before": "61d7da57e7148e3f8696b9fa1f43da5b290c6e968d542e5e4c5f088fdc41b32f",
+      "after": "a70a44c87a47aad2de8a3b424ef38a106ba575653587cd0ea22f4dabb5af5dd0"
+    },
+    "luci-app-daede/root/etc/config/daede": {
+      "before": "369b7f045ef12a9412e5ede999d2ec58bb8881d9d712cddd7f12c49c49fe8504",
+      "after": "b4bcaebd557acc650936083718d020f18a1d1bd817378b915b10ef87f9bdd7f4"
+    },
+    "luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh": {
+      "before": "7e3d757ee717d2fdf2007e9a770e11b7653fbf27b872e1469df904e754472f1c",
+      "after": "d00c1d0b286abfcc8cc059be72d6d0781ebdbd36935deb07ac51b6f5b600f76c"
+    },
+    "vmlinux-btf/Makefile": {
+      "before": "2f54d57afea670672098ea10db32e5b16a670cc9d826b2367f65eacf7f89942d",
+      "after": "2f54d57afea670672098ea10db32e5b16a670cc9d826b2367f65eacf7f89942d"
+    }
+  },
+  "upstream_pins": {
+    "DAE_VERSION": "2026.11.09",
+    "DAED_VERSION": "2026.11.09",
+    "DAED_COMMIT": "be4ef873c352a9ec930c877a3a821163f4b4ac0a",
+    "WING_COMMIT": "b089b568649f03f909477adb6c7db25535a58782",
+    "CORE_COMMIT": "be2b6047eff8be8da7dfdcd0c007fd6d9f7f5175",
+    "CORE_UPSTREAM_COMMIT": "460cec77f4365abfd9ea6fae04b66466dd4861cb",
+    "OUTBOUND_COMMIT": "a64d874f494230f363ef36e06686ac35ae403d1d",
+    "QUICGO_BASE_COMMIT": "ffb41ccbd9d24158ad7b77074e783d00ea84bcf2",
+    "QUICGO_PERF_TIP": "ffb41ccbd9d24158ad7b77074e783d00ea84bcf2"
+  },
+  "source_archives": {
+    "dae": {
+      "version": "2026.11.09",
+      "feed_release": 2,
+      "local_release": 3,
+      "filename": "dae-src-2026.11.09-8b744ffb65ee.tar.gz",
+      "url": "https://github.com/kenzok8/openwrt-daede/releases/download/dae-src/dae-src-2026.11.09-8b744ffb65ee.tar.gz",
+      "sha256": "8b744ffb65eedf46e9f3cf035e757bda30547d2dafed522eb3154bd4e509e146",
+      "size": 10417890,
+      "module_files": {
+        "core/go.mod": "8192e7441d54b750d908980aa5cfd6e398002f5811b13cee298d1ceef0f5fe0b",
+        "core/go.sum": "ff122e75b0e3ea6774399b794b1ff5207cd40b154a6025e41062877dedf4df72",
+        "outbound/go.mod": "ac92b92832e685d69177ee8e82a8220e4599c9a2d1223599970ddeeb5fb528ec",
+        "outbound/go.sum": "1576f661c2749090db74c310ff4e68844d686408c1f6d8456005f49bc5825da5",
+        "quic-go/go.mod": "bab7bf6ce7a9ad69680a1a7c53e954bc4cc288638cb6d0b67f3527dc24ddcaf8",
+        "quic-go/go.sum": "f0015a2a9399d6e01d22878e093e57a3cf7e827b4f560bba285207ab8bfa0675"
+      }
+    },
+    "daed": {
+      "version": "2026.11.09",
+      "feed_release": 2,
+      "local_release": 2,
+      "filename": "daed-src-2026.11.09-a25f8d76d474.tar.gz",
+      "url": "https://github.com/kenzok8/openwrt-daede/releases/download/daed-src/daed-src-2026.11.09-a25f8d76d474.tar.gz",
+      "sha256": "a25f8d76d4745a114f52f7b80d0636aad7e4a9be06488db8e2753dc119547dd0",
+      "size": 32861346,
+      "module_files": {
+        "wing/go.mod": "bf0d4e8220f5f0f503ebebdc97265fe2329a7004689880233a0c6a68780bf265",
+        "wing/go.sum": "7b47f8cabeb69ea20f19c8973848b7897489177ce5f935d70f68f8f9fdf56838",
+        "wing/dae-core/go.mod": "006d97a35e98d981aa8e236e5f55d09405e0b2ff7df06538f08d262b896c7dfb",
+        "wing/dae-core/go.sum": "308e224c6a11c588ef1d921270ecc4076cc23cbec7c2b25806d7421ba87c6abc",
+        "outbound/go.mod": "ac92b92832e685d69177ee8e82a8220e4599c9a2d1223599970ddeeb5fb528ec",
+        "outbound/go.sum": "1576f661c2749090db74c310ff4e68844d686408c1f6d8456005f49bc5825da5",
+        "quic-go/go.mod": "bab7bf6ce7a9ad69680a1a7c53e954bc4cc288638cb6d0b67f3527dc24ddcaf8",
+        "quic-go/go.sum": "f0015a2a9399d6e01d22878e093e57a3cf7e827b4f560bba285207ab8bfa0675",
+        "pnpm-lock.yaml": "7fb7fa14e600d89b0cb7d1b7471c7e2c68a135e25a621cf8e4c844ddb1985a7a"
+      }
+    }
+  },
+  "kernel_btf": {
+    "source": "actual-built-kernel",
+    "shadow_vmlinux_btf_allowed": false
+  },
+  "native_api": {
+    "enabled_by_default": false,
+    "default_listener": "127.0.0.1:9527",
+    "non_loopback_requires_secret": true
+  },
+  "core_delta": {
+    "base": "29a70280fd7e0e73233e623d6dcd004c245882e2",
+    "head": "460cec77f4365abfd9ea6fae04b66466dd4861cb",
+    "commits": [
+      "8722db01fca702818ea85cefde46a84dd755f44a",
+      "e2b090a98012d0a53fb04b6262650723d2d342e2",
+      "460cec77f4365abfd9ea6fae04b66466dd4861cb"
+    ],
+    "summary": [
+      "strict-alignment-safe L3 packet reads",
+      "native HTTP control-plane API, disabled by default",
+      "configuration examples and permissions"
+    ],
+    "go_mod_and_sum_unchanged_from_previous_dae_archive": true
+  }
+}
