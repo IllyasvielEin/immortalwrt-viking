@@ -112,6 +112,8 @@
 
 	reserved-memory {
 		/delete-node/ tzapp@4d600000;
+		/* All three RC01 radios are PCIe: no enabled Q6 consumer. */
+		/delete-node/ wcss@4ab00000;
 
 		/* RC01's TrustZone application precedes the bootloader region. */
 		tzapp_rc01: tzapp@49b00000 {
@@ -551,6 +553,8 @@
 };
 
 &wifi1 {
+	/* Use slab RX buffers without changing firmware or host capacity. */
+	qcom,rx-skb-slab;
 	qcom,board-id = <1>;
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
@@ -560,6 +564,8 @@
 };
 
 &wifi2 {
+	/* Use slab RX buffers without changing firmware or host capacity. */
+	qcom,rx-skb-slab;
 	qcom,board-id = <4>;
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
@@ -569,10 +575,18 @@
 };
 
 &wifi3 {
+	/* Use slab RX buffers without changing firmware or host capacity. */
+	qcom,rx-skb-slab;
 	qcom,board-id = <2>;
 	qcom,calibration-variant = "Xiaomi-BE10000";
 	qcom,num-radios = <1>;
 	qcom,force-unique-qrtr-id;
 	nvmem-cells = <&macaddr_art_6 4>;
 	nvmem-cell-names = "mac-address";
+};
+
+/* PCIe/MHI radios do not use the integrated WCSS remote processor. */
+&q6v5_wcss {
+	status = "disabled";
+	/delete-property/ memory-region;
 };

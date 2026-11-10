@@ -12,10 +12,19 @@ for symbol in MTD_SPI_NAND SPI_QPIC_SNAND; do
 		exit 1
 	}
 done
-grep -Fq 'memcmp(id + 1, info->devid.id, min(3, info->devid.len))' "$core" || {
-	echo 'Prepared kernel is missing the four-byte QPIC ID workaround' >&2
-	exit 1
-}
+# Reuse the table/comparator/diagnostic checks on the prepared kernel, rather
+# than approving a global three-byte workaround or trusting a patch filename.
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+python3 - "$script_dir/validate-rc01-platform.py" "$kernel_dir" <<'PY'
+import importlib.util
+from pathlib import Path
+import sys
+
+spec = importlib.util.spec_from_file_location("rc01_platform", sys.argv[1])
+platform = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(platform)
+platform.verify_nand(Path(sys.argv[2]))
+PY
 for marker in 'rc01-nand: matched model=' 'rc01-nand: QPIC READID' 'rc01-nand: ECC strength='; do
 	grep -Fq "$marker" "$core" "$qpic"
 	grep -aFq "$marker" "$vmlinux" || {
@@ -23,4 +32,4 @@ for marker in 'rc01-nand: matched model=' 'rc01-nand: QPIC READID' 'rc01-nand: E
 		exit 1
 	}
 done
-echo 'Prepared SPI ID workaround and compiled RC01 NAND probe diagnostics verified'
+echo 'Prepared SPI NAND full-ID matching and compiled RC01 NAND probe diagnostics verified'

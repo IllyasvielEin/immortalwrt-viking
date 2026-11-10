@@ -5,12 +5,14 @@ and the effective ECC configuration. Do not present the unfilled fifth
 scratch byte as hardware data. Messages are limited to READID and probe
 initialization; no page contents, calibration data, or environment values
 are logged. These diagnostics do not change controller transactions.
+The ESMT table now describes the three device bytes returned by QPIC;
+report the actual per-entry comparison length, without a global ID cap.
 
 SPDX-License-Identifier: GPL-2.0-only
 
 --- a/drivers/mtd/nand/spi/core.c
 +++ b/drivers/mtd/nand/spi/core.c
-@@ -1443,6 +1443,13 @@
+@@ -1465,6 +1465,13 @@ int spinand_match_and_init(struct spinan
  
  		spinand->ssdr_op_templates.update_cache = op;
  
@@ -18,7 +20,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +			 "rc01-nand: matched model=%s method=%u table-id=%u compared-id=%u size-bytes=%llu\n",
 +			 info->model, (unsigned int)rdid_method,
 +			 (unsigned int)info->devid.len,
-+			 (unsigned int)min(3, info->devid.len),
++			 (unsigned int)info->devid.len,
 +			 (unsigned long long)nanddev_size(nand));
 +
  		return 0;
@@ -39,7 +41,7 @@ SPDX-License-Identifier: GPL-2.0-only
  
  	snandc->qspi->ecc = ecc_cfg;
  
-@@ -1432,6 +1434,10 @@
+@@ -1436,6 +1438,10 @@
  	if (copy) {
  		qcom_nandc_dev_to_mem(snandc, true);
  		memcpy(op->data.buf.in, snandc->reg_read_buf, snandc->buf_count);

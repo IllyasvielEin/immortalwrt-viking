@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import struct
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,54 @@ def value(path, key):
     if not match:
         raise ValueError(f"missing {key} in {path}")
     return match[1].strip()
+
+
+def firmware_metadata(expected):
+    recipe = "package/firmware/ath12k-firmware/Makefile"
+    for key, field in (("PKG_SOURCE_DATE", "date"), ("PKG_SOURCE_VERSION", "commit"),
+                       ("PKG_SOURCE_URL", "url"), ("PKG_MIRROR_HASH", "sha256"),
+                       ("PKG_RELEASE", "release")):
+        if value(recipe, key) != str(expected[field]):
+            raise ValueError(f"ath12k firmware differs from reviewed metadata: {key}")
+    return expected
+
+
+def local_patchset():
+    # Hash actual tracked inputs, including local context/ownership fixes.
+    paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard",
+                                     "package/kernel/mac80211/patches", "target/linux/generic/*-6.18",
+                                     "target/linux/qualcommbe", "package/network/config/netifd",
+                                     "package/emortal/luci-app-router-tool", "config/rc01/patches/daede",
+                                     "scripts/patch-rc01-daede.sh"], cwd=ROOT, text=True).splitlines()
+    records = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()
+               for p in sorted(set(paths)) if (ROOT / p).is_file()}
+    digest = hashlib.sha256(json.dumps(records, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {"sha256": digest, "files": records}
+
+
+def kernel_btf_metadata():
+    kernels = list(ROOT.glob("build_dir/target-*/linux-qualcommbe_ipq95xx/linux-6.18.60/vmlinux"))
+    if len(kernels) != 1:
+        raise ValueError("dae provenance requires one actual built RC01 vmlinux")
+    kernel = kernels[0]
+    data = kernel.read_bytes()
+    if data[:6] != b"\x7fELF\x02\x01":
+        raise ValueError("expected actual ELF64 little-endian vmlinux")
+    offset = struct.unpack_from("<Q", data, 40)[0]
+    size, count, strings = struct.unpack_from("<HHH", data, 58)
+    if size < 64 or not 0 < strings < count or offset + size * count > len(data):
+        raise ValueError("invalid vmlinux section table")
+    entries = [struct.unpack_from("<IIQQQQIIQQ", data, offset + i * size) for i in range(count)]
+    shstr = entries[strings]
+    names = data[shstr[4]:shstr[4] + shstr[5]]
+    matches = [e for e in entries if names[e[0]:].split(b"\0", 1)[0] == b".BTF"]
+    if len(matches) != 1 or not 0 < matches[0][5] <= len(data) - matches[0][4]:
+        raise ValueError("actual compiled kernel has no bounded BTF section")
+    section = data[matches[0][4]:matches[0][4] + matches[0][5]]
+    return {"source": str(kernel.relative_to(ROOT)), "vmlinux_sha256": hashlib.sha256(data).hexdigest(),
+            "config_sha256": hashlib.sha256(kernel.with_name(".config").read_bytes()).hexdigest(),
+            "btf_bytes": len(section), "btf_sha256": hashlib.sha256(section).hexdigest(),
+            "shadow_vmlinux_btf": False}
 
 
 def metadata():
@@ -28,6 +77,18 @@ def metadata():
         if value("package/kernel/mac80211/Makefile", key) != str(expected):
             raise ValueError(f"wireless source differs: {key}")
     result["software"] = {}
+    result["software"]["ath12k-firmware"] = firmware_metadata(result["ath12k_firmware"])
+    result["local_patchset"] = local_patchset()
+    dae_lock_path = ROOT / "config/rc01/patches/daede/sources.json"
+    dae_lock = json.loads(dae_lock_path.read_text())
+    enabled = bool(re.search(r"^CONFIG_PACKAGE_dae=y$", (ROOT / ".config").read_text(), re.M))
+    result["optional_dae"] = {"enabled": enabled, "source_lock_sha256": hashlib.sha256(dae_lock_path.read_bytes()).hexdigest(),
+                              "source": dae_lock, "kernel_btf": "actual-built-kernel; checked in opt-in CI"}
+    if enabled:
+        for name, expected in dae_lock["files"].items():
+            if hashlib.sha256((ROOT / "feeds/daede" / name).read_bytes()).hexdigest() != expected["after"]:
+                raise ValueError(f"prepared dae source differs from lock: {name}")
+        result["optional_dae"]["kernel_btf"] = kernel_btf_metadata()
     manifest = json.loads((ROOT / "config/rc01/patches/packages/manifest.json").read_text())
     for entry in manifest["packages"]:
         path = f"feeds/{entry['feed']}/{entry['path']}"

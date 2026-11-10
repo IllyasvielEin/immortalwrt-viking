@@ -38,6 +38,15 @@ Subsequent LuCI edits and upgrades that retain configuration do not reapply the
 build defaults. Do not clear the markers to enforce new credentials on an
 already configured router; edit its Wireless form instead.
 
+For eligible APs, 2.4 GHz starts on channel 1 with 20 MHz width; 5 and 6 GHz use
+automatic channel selection. Low 5 GHz and 6 GHz request up to 160 MHz, while
+high 5 GHz requests up to 80 MHz, always within the reported radio capabilities.
+On a PHY with child radios, the selected child's default channel determines
+whether the 5 GHz radio uses the high-band defaults. Missing child or band
+capabilities leave initialization pending. Automatic selection still follows
+the regulatory and DFS/CAC requirements. These defaults preserve both radio
+and AP disabled flags; the user enables Wi-Fi explicitly.
+
 OpenWRT-CI passes `WRT_SSID` and `WRT_WORD` through this section. It must leave
 the wifi-scripts generator's untouched-AP values intact, so custom build
 credentials do not suppress channel, bandwidth, country, and security defaults.

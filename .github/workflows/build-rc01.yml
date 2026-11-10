@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       include_dae:
-        description: 'Experimental dae 2026.10.30 + daede UI (runtime unverified)'
+        description: 'Experimental dae 2026.11.09-r3 + daede UI (runtime unverified)'
         type: boolean
         required: true
         default: false
@@ -71,7 +71,7 @@ jobs:
             build-essential clang llvm flex bison gawk gcc-multilib gettext git \
             libncurses-dev libssl-dev zlib1g-dev python3-dev python3-setuptools \
             python3-pyelftools python3-cryptography rsync swig unzip file wget \
-            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils shellcheck busybox
+            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils squashfs-tools shellcheck busybox
 
       - name: Look up source downloads
         id: downloads_lookup
@@ -231,16 +231,16 @@ jobs:
             echo "source_commit=$(git rev-parse HEAD)"
             echo "source_tree=$(git rev-parse 'HEAD^{tree}')"
             echo "viking_baseline=e5b0e82156513e81b6b712e4498ab15fd3a28571"
-            echo "viking_reviewed_head=ec73307670005a1f00cbeb039dc90709fa2a871e"
+            echo "viking_reviewed_head=7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b"
             echo "viking_integration=selected-commits"
             echo "viking_full_merge=false"
-            echo "viking_selected_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd,f120d87c9200ae1ddad9a1d9996d51cf0fb14709,1e95b974f6e040e24a26800d5aa9dcc9e0f592d8,6149690bf77473633aaf820d6569c97a9f2908ab,490d9e9cb2131a989551a055c0e84f70174e3787,490a5b388762702dd68b81472095f8773265adc9,7e8c4cef998c6789a29d2253b21a2721e3f19044,ec73307670005a1f00cbeb039dc90709fa2a871e,90f54dddcf833c2ddde722dd8b298ec54c59eb98"
+            echo "viking_selected_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd,f120d87c9200ae1ddad9a1d9996d51cf0fb14709,1e95b974f6e040e24a26800d5aa9dcc9e0f592d8,6149690bf77473633aaf820d6569c97a9f2908ab,490d9e9cb2131a989551a055c0e84f70174e3787,490a5b388762702dd68b81472095f8773265adc9,7e8c4cef998c6789a29d2253b21a2721e3f19044,ec73307670005a1f00cbeb039dc90709fa2a871e,90f54dddcf833c2ddde722dd8b298ec54c59eb98,a7593dae2e669a61c7815e87b7d38d3a91184756,279676f8088d1af739a133879bfbce4e00b9175f,50595e765f42bdb518402f8a0bd1ae1f649f4823,29fc7b2153c5f965024b0c0632a844f9b173813c,e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5,11bdaa6c6fbf570e664a9b670cf54d0feba8b387,30b66b0fba4dfc248d61915b08e92e4cabd2323a,9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc,e44e8cf26aa8e5abc204bdf54f58d27aaac993a7,7a54294609a4a8075eac2302f60e3a4031ef3596,ced6a648901fa6ff7f2a18d854164845d89fa024,6c57d4105add93c3b983ca2dfbb4d6f66f696f92,f9dd19a1a2820891cddd0c3cea538984a5b6c497,b4f7857f9c0c21e83d0c3e76917093f4011053db,516da1de900c3ae45daa09cbfbfec985e0179661,d7cb81d96a4a10ab5a44ce916dc5d9406cd44559,99977bd751741658172c6d0f1df21af662a375e8"
             echo "viking_followup_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd"
             echo "ppe_ds_nodes_ipq9574=3"
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
             echo "kernel=6.18.60"
             echo "kernel_source_sha256=3c2f44ef6acc021a7ad444d9a2e6ec1ef488ff09368793d0004a6080f69d621e"
-            echo "mac80211=7.2-r35"
+            echo "mac80211=7.2-r47 (local selected-commits)"
             echo "ipq_wifi=7@5363395811fb3c72da0e62304a26d995c0f9c675"
             echo "mihomo=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/mihomo-meta/Makefile)"
             echo "tailscale=$(sed -n 's/^PKG_VERSION:=//p' feeds/packages/net/tailscale/Makefile)"
@@ -248,6 +248,10 @@ jobs:
             echo "dnsmasq=2.93-r10@10fbc39cf57220eb93f61ce282d7561750f8d29d"
             echo "rc01_cma_mib=320"
             echo "qcn9274_hw1_mlo=false"
+            echo "qcn9274_hw1_ds_abi=0x10098b57/WBE.1.0-02903"
+            echo "ath12k_firmware=2026.11.07~774f0cca-r1"
+            echo "pcie_rx_allocator=slab; original resource profile"
+            echo "q6_remoteproc=disabled; unbound"
             echo "go_bootstrap_mode=$RC01_GO_BOOTSTRAP_MODE"
             echo "go_bootstrap_version=1.24.13"
             if [ "$RC01_GO_BOOTSTRAP_MODE" = external ]; then
@@ -262,13 +266,13 @@ jobs:
             echo "dhcp_client_hostname=RC01"
             echo "fan_pwm_output=push-pull"
             echo "dae_test_build=$RC01_WITH_DAE"
-            echo "nand_id_workaround=spi-device-prefix-max-3"
+            echo "nand_id_match=full-per-entry-length; ESMT device ID=51:7f:7f"
             echo "nand_probe_diagnostics=true"
             for feed in packages luci routing nikki daede; do
               echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
             done
           } > "$TARGET_DIR/rc01-build-metadata.txt"
-          cp target/linux/qualcommbe/patches-6.18/0411-mtd-spinand-qpic-four-byte-id.patch "$TARGET_DIR/rc01-nand-id-workaround.patch"
+          cp target/linux/generic/backport-6.18/442-v6.19-mtd-spinand-esmt-f50d2g41ka-qpic-id.patch "$TARGET_DIR/rc01-nand-id-correction.patch"
           cp target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch "$TARGET_DIR/rc01-nand-probe-diagnostics.patch"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
           git -C feeds/packages diff -- lang/golang/golang-compiler.mk lang/golang/golang-host-build.mk > "$TARGET_DIR/rc01-go-build.patch"
@@ -339,6 +343,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B scripts/verify-rc01-images.py "$TARGET_DIR" | tee "$TARGET_DIR/rc01-image-validation.json"
+          python3 -B scripts/verify-rc01-wireless-artifacts.py "$TARGET_DIR" > "$TARGET_DIR/rc01-wireless-artifacts.json"
 
       - name: Upload verified images and build metadata
         uses: actions/upload-artifact@v4

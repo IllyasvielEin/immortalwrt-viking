@@ -2,7 +2,7 @@
   "schema": 1,
   "upstream": "https://github.com/VIKINGYFY/immortalwrt",
   "baseline": "e5b0e82156513e81b6b712e4498ab15fd3a28571",
-  "reviewed_head": "ec73307670005a1f00cbeb039dc90709fa2a871e",
+  "reviewed_head": "7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b",
   "integration": "selected-commits",
   "full_merge": false,
   "previous_selected_commits": [
@@ -19,12 +19,28 @@
     "490a5b388762702dd68b81472095f8773265adc9",
     "7e8c4cef998c6789a29d2253b21a2721e3f19044",
     "ec73307670005a1f00cbeb039dc90709fa2a871e",
-    "90f54dddcf833c2ddde722dd8b298ec54c59eb98"
+    "90f54dddcf833c2ddde722dd8b298ec54c59eb98",
+    "a7593dae2e669a61c7815e87b7d38d3a91184756",
+    "279676f8088d1af739a133879bfbce4e00b9175f",
+    "50595e765f42bdb518402f8a0bd1ae1f649f4823",
+    "29fc7b2153c5f965024b0c0632a844f9b173813c",
+    "e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5",
+    "11bdaa6c6fbf570e664a9b670cf54d0feba8b387",
+    "30b66b0fba4dfc248d61915b08e92e4cabd2323a",
+    "9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc",
+    "e44e8cf26aa8e5abc204bdf54f58d27aaac993a7",
+    "7a54294609a4a8075eac2302f60e3a4031ef3596",
+    "ced6a648901fa6ff7f2a18d854164845d89fa024",
+    "6c57d4105add93c3b983ca2dfbb4d6f66f696f92",
+    "f9dd19a1a2820891cddd0c3cea538984a5b6c497",
+    "b4f7857f9c0c21e83d0c3e76917093f4011053db",
+    "516da1de900c3ae45daa09cbfbfec985e0179661",
+    "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
+    "99977bd751741658172c6d0f1df21af662a375e8"
   ],
   "excluded_commits": [
     "6061a61a",
     "17d1ac",
-    "6c57",
     "a8d4a44c8ede4c703e8866fbf709b34dd1506294"
   ],
   "kernel": {
@@ -35,20 +51,137 @@
   },
   "wireless": {
     "version": "7.2",
-    "release": 35,
-    "sha256": "6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454"
+    "release": 47,
+    "sha256": "6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454",
+    "release_scope": "local selected-commits; not upstream r47 or a full merge"
   },
   "local_preserved": [
     "RC01 120MiB layout and 32MiB writable budget",
     "five-argument 64KiB envtools mapping",
     "C4 default and C6 same-payload alias",
-    "0411 NAND ID and 0412 probe diagnostics",
+    "442 per-entry NAND ID correction and 0412 full-length probe diagnostics",
     "push-pull fan and fail-safe guard",
     "BusyBox awk preflight and ramfs layout recheck",
     "three PPE DS nodes, identity DMA and quarantine"
   ],
   "local_adjustments": [
     "PCS interface cache updated only after successful mode setup",
-    "6.18.60 duplicate backports removed and affected contexts refreshed"
-  ]
+    "6.18.60 duplicate backports removed and affected contexts refreshed",
+    "RC01-only Q6 removal and WCSS disable/unbind; retain existing tzapp 0x49b00000/6MiB and memory mode",
+    "Firmware 02903 paired with d7 exact two-field DS guard; unknown FW stays CPU",
+    "Keep old 906/317/338/342 and independently adapt dependencies; preserve CMA320 and ring sizes",
+    "914 uses per-device MLO borrowers to protect pre-start partners, and releases coherent owner before unknown PCI-type fallback",
+    "PPE FDB worker verifies bridge master before reading bridge private VLAN data",
+    "Router Tool waits for a requested child capability list before applying defaults",
+    "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
+    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated"
+  ],
+  "followup_selection": [
+    {
+      "commit": "a7593dae2e669a61c7815e87b7d38d3a91184756",
+      "scope": "ESMT full-length table correction; no unrelated DTS reorder"
+    },
+    {
+      "commit": "279676f8088d1af739a133879bfbce4e00b9175f",
+      "scope": "915 encrypted native-WiFi EAPOL"
+    },
+    {
+      "commit": "50595e765f42bdb518402f8a0bd1ae1f649f4823",
+      "scope": "352 MHI/QMI teardown"
+    },
+    {
+      "commit": "29fc7b2153c5f965024b0c0632a844f9b173813c",
+      "scope": "916 four-address CPU fallback"
+    },
+    {
+      "commit": "e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5",
+      "scope": "917 conditional HW1 RX padding"
+    },
+    {
+      "commit": "11bdaa6c6fbf570e664a9b670cf54d0feba8b387",
+      "scope": "918 control-port hook and lifetime"
+    },
+    {
+      "commit": "30b66b0fba4dfc248d61915b08e92e4cabd2323a",
+      "scope": "919 bounded HALT and error propagation"
+    },
+    {
+      "commit": "9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc",
+      "scope": "netifd existing AP bridge attributes"
+    },
+    {
+      "commit": "e44e8cf26aa8e5abc204bdf54f58d27aaac993a7",
+      "scope": "719-04 software flowtable policy invalidation"
+    },
+    {
+      "commit": "7a54294609a4a8075eac2302f60e3a4031ef3596",
+      "scope": "719-05 old FDB port notification"
+    },
+    {
+      "commit": "ced6a648901fa6ff7f2a18d854164845d89fa024",
+      "scope": "partial: 0680 generic notifiers/carrier +0681 FDB worker; excludes RTL/MPPE capability changes"
+    },
+    {
+      "commit": "6c57d4105add93c3b983ca2dfbb4d6f66f696f92",
+      "scope": "partial: 910 property reader; excludes other board DTS"
+    },
+    {
+      "commit": "f9dd19a1a2820891cddd0c3cea538984a5b6c497",
+      "scope": "partial: RC01 three-radio slab policy; no mode1"
+    },
+    {
+      "commit": "b4f7857f9c0c21e83d0c3e76917093f4011053db",
+      "scope": "partial: full old-317-compatible ath12k 914 plus RC01-only Q6/WCSS removal; excludes mode1/AHB/ath11k"
+    },
+    {
+      "commit": "516da1de900c3ae45daa09cbfbfec985e0179661",
+      "scope": "partial: ath12k firmware recipe only, no ath11k"
+    },
+    {
+      "commit": "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
+      "scope": "HW1 02903 exact DS ABI gate"
+    },
+    {
+      "commit": "99977bd751741658172c6d0f1df21af662a375e8",
+      "scope": "Router Tool per-child auto-channel defaults"
+    }
+  ],
+  "deferred": {
+    "mode1": "separate runtime comparison candidate; default remains original profile",
+    "dae": "source update is a separate opt-in application batch; compilation and runtime acceptance tracked independently",
+    "906_split": "retain existing 906; no unproved source-equivalence refactor",
+    "1635_cleanup": "not a prerequisite for old-317-compatible 914",
+    "DFS911": "pending request A/B/A ordering defect unresolved",
+    "uboot": "not needed for source integration; downloaded MIBIB has a different layout",
+    "3db8bb9": "WCSS copied dump has no direct benefit with RC01 Q6 disabled"
+  },
+  "ath12k_firmware": {
+    "url": "https://github.com/VIKINGYFY/ath12k-firmware-ddwrt.git",
+    "date": "2026-11-07",
+    "commit": "774f0ccab90cd587dd679e0c73c721f22fff8dc8",
+    "sha256": "173abc0f85206a728de168923d7dc53eb2da5b4ea4e251ba8a9fe9dca7667b96",
+    "release": 1,
+    "hw1": {
+      "fw_version": "0x10098b57",
+      "build_id": "WBE.1.0-02903",
+      "files": {
+        "amss.bin": {
+          "bytes": 8114240,
+          "sha256": "0faada4ea378bccacb22e66fad6feb4cf8d9fe9d9289bee1c350251835d65606"
+        },
+        "m3.bin": {
+          "bytes": 397964,
+          "sha256": "2591d725897f04000918166183dbd73139cc0297b60391b07d13f357c7b09be1"
+        }
+      }
+    }
+  },
+  "optional_dae": {
+    "integration": "separate opt-in application commit; disabled by default",
+    "feed_commit": "3520a79bd9c68843801dc89d7d6e155d2c43c833",
+    "version": "2026.11.09-r3",
+    "lock": "config/rc01/patches/daede/sources.json",
+    "native_api_default": "disabled; when enabled default loopback, remote needs secret",
+    "kernel_btf": "actual-built-kernel only"
+  }
 }

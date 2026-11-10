@@ -1248,8 +1248,8 @@ Signed-off-by: ViKing <viking.yfy@qq.com>
 +bool ath12k_wifi7_ds_hw1_compat(struct ath12k_base *ab)
 +{
 +	return ab->hw_rev == ATH12K_HW_QCN9274_HW10 &&
-+	       ab->qmi.target.fw_version == 0x1003009f &&
-+	       strstr(ab->qmi.target.fw_build_id, "WBE.1.0.r4-00159");
++	       ab->qmi.target.fw_version == 0x10098b57 &&
++	       strstr(ab->qmi.target.fw_build_id, "WBE.1.0-02903");
 +}
 +
 +/* Only select compatible RX settings after successful DS registration.

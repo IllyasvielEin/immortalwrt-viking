@@ -1,0 +1,117 @@
+From: ViKing <viking.yfy@qq.com>
+Date: Sat, 07 Nov 2026 15:33:52 +0800
+Subject: [PATCH] net: ppe: invalidate flows on bridge policy and carrier loss
+
+Extract the generic policy notifier and carrier-down handling from upstream
+ced6a648901fa6ff7f2a18d854164845d89fa024. Keep the existing native bridge
+admission rules: no RTL837x/MPPE nexthop, VLAN or source-VP capabilities
+are added by this backport.
+
+Register and roll back the blocking notifier with the existing account
+and PPP notifiers. Changed policies invalidate affected cached hardware
+paths; this does not promise a zero-packet asynchronous FDB move window.
+
+Signed-off-by: ViKing <viking.yfy@qq.com>
+
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
+@@ -39,6 +39,7 @@
+ #include <net/ipv6.h>
+ #include <net/lwtunnel.h>
+ #include <net/neighbour.h>
++#include <net/switchdev.h>
+ #include <net/tcp.h>
+ 
+ #include "edma_port.h"
+@@ -462,6 +463,7 @@
+ 	struct ppe_ft_tunnel_pppoe_port tunnel_pppoe_ports[PPE_PORT_ID_COUNT];
+ 	struct notifier_block ppp_nb;
+ 	struct notifier_block account_nb;
++	struct notifier_block bridge_nb;
+ 	struct list_head block_cb_list;
+ };
+ 
+@@ -4730,6 +4732,41 @@
+ 	mutex_unlock(&ft->lock);
+ }
+ 
++/* Retire hardware bypasses before a bridge policy change completes.
++ * RTNL excludes publication of another transparent flow until the bridge
++ * software state commits; nf_flowtable also retires its cached SW path.
++ */
++static int ppe_ft_bridge_event(struct notifier_block *nb,
++			       unsigned long event, void *ptr)
++{
++	struct ppe_flowtable *ft = container_of(nb, struct ppe_flowtable,
++						 bridge_nb);
++	struct net_device *dev = switchdev_notifier_info_to_dev(ptr);
++	struct switchdev_notifier_port_obj_info *obj = ptr;
++	struct switchdev_notifier_port_attr_info *attr = ptr;
++
++	switch (event) {
++	case SWITCHDEV_PORT_OBJ_ADD:
++	case SWITCHDEV_PORT_OBJ_DEL:
++		if (obj->obj->id == SWITCHDEV_OBJ_ID_PORT_VLAN)
++			ppe_ft_dev_invalidate(ft, dev);
++		break;
++	case SWITCHDEV_PORT_ATTR_SET:
++		switch (attr->attr->id) {
++		case SWITCHDEV_ATTR_ID_PORT_STP_STATE:
++		case SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS:
++		case SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING:
++		case SWITCHDEV_ATTR_ID_BRIDGE_VLAN_PROTOCOL:
++			ppe_ft_dev_invalidate(ft, dev);
++			break;
++		default:
++			break;
++		}
++		break;
++	}
++	return NOTIFY_DONE;
++}
++
+ static int ppe_ft_account_event(struct notifier_block *nb,
+ 				unsigned long event, void *ptr)
+ {
+@@ -4747,6 +4784,10 @@
+ 	case NETDEV_CHANGEMTU:
+ 	case NETDEV_CHANGEINFODATA:
+ 		ppe_ft_dev_invalidate(ft, dev);
++		break;
++	case NETDEV_CHANGE:
++		if (!netif_carrier_ok(dev))
++			ppe_ft_dev_invalidate(ft, dev);
+ 		break;
+ 	}
+ 
+@@ -4832,13 +4873,21 @@
+ 	hash_init(ft->hosts);
+ 	ft->ppp_nb.notifier_call = ppe_ft_ppp_event;
+ 	ft->account_nb.notifier_call = ppe_ft_account_event;
++	ft->bridge_nb.notifier_call = ppe_ft_bridge_event;
+ 	ppe_dev->flowtable = ft;
+ 
+ 	ret = register_netdevice_notifier(&ft->account_nb);
+ 	if (!ret) {
+-		ret = ppp_register_channel_notifier(&ft->ppp_nb);
++		ret = register_switchdev_blocking_notifier(&ft->bridge_nb);
+ 		if (ret)
+ 			unregister_netdevice_notifier(&ft->account_nb);
++	}
++	if (!ret) {
++		ret = ppp_register_channel_notifier(&ft->ppp_nb);
++		if (ret) {
++			unregister_switchdev_blocking_notifier(&ft->bridge_nb);
++			unregister_netdevice_notifier(&ft->account_nb);
++		}
+ 	}
+ 	if (ret) {
+ 		ppe_dev->flowtable = NULL;
+@@ -4889,6 +4938,7 @@
+ 		return;
+ 
+ 	WARN_ON(!list_empty(&ft->block_cb_list));
++	unregister_switchdev_blocking_notifier(&ft->bridge_nb);
+ 	unregister_netdevice_notifier(&ft->account_nb);
+ 	ppp_unregister_channel_notifier(&ft->ppp_nb);
+ 	ppe_ft_flow_drain(ft);

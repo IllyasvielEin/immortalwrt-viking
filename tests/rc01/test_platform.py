@@ -140,6 +140,8 @@ class PreparedPlatform(unittest.TestCase):
                 with self.assertRaises(images.VerificationError):
                     images.verify_kernel_memory(tree, address - 1, 2)
         images.verify_kernel_memory(tree, 0x41000000, 0x49B00000 - 0x41000000)
+        # The old 43 MiB Q6 carveout is now ordinary memory on PCIe-only RC01.
+        images.verify_kernel_memory(tree, 0x4AB00000, 0x2B00000)
 
     def test_damaged_compiled_board_contracts_are_rejected(self):
         # fdtput edits the compiled tree itself, covering real phandles and paths.
@@ -156,6 +158,43 @@ class PreparedPlatform(unittest.TestCase):
                 subprocess.run(["fdtput", "-t", kind, str(path), node, prop, *values], check=True, capture_output=True)
                 with self.assertRaises(images.VerificationError):
                     images.verify_platform_dtb(path.read_bytes())
+
+    def test_slab_and_remoteproc_ownership_are_checked_in_compiled_dtb(self):
+        tree = images.Fdt(self.blob)
+        radio = next(n for n in tree.nodes if tree.nodes[n].get("compatible") == b"pci17cb,1109\0")
+        remote = next(n for n in tree.nodes if tree.nodes[n].get("compatible") == b"qcom,ipq9574-wcss-sec-pil\0")
+        variants = [(["-d", radio, "qcom,rx-skb-slab"], None),
+                    (["-t", "s", remote, "status", "okay"], None),
+                    (["-t", "x", remote, "memory-region", "dead"], None),
+                    (["-t", "x", radio, "qcom,ath12k-fw-memory-mode", "1"], None)]
+        for index, (arguments, _) in enumerate(variants):
+            with self.subTest(arguments=arguments):
+                path = Path(self.temp.name) / f"ownership-{index}.dtb"
+                path.write_bytes(self.blob)
+                # fdtput options precede the file, followed by node/property.
+                options = arguments[:1] if arguments[0] == "-d" else arguments[:2]
+                tail = arguments[len(options):]
+                subprocess.run(["fdtput", *options, str(path), *tail], check=True, capture_output=True)
+                with self.assertRaises(images.VerificationError):
+                    images.verify_platform_dtb(path.read_bytes())
+
+    def test_old_ds_gate_and_missing_ingress_configuration_are_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="rc01-wireless-reject-") as temporary:
+            copied = Path(temporary) / "wireless"
+            shutil.copytree(Path(WIRELESS) / "drivers/net/wireless/ath/ath12k",
+                            copied / "drivers/net/wireless/ath/ath12k")
+            platform.verify_wireless(copied)
+            ds = copied / "drivers/net/wireless/ath/ath12k/wifi7/ppe_ds.c"
+            ds.write_text(ds.read_text().replace("0x10098b57", "0x1003009f").replace("WBE.1.0-02903", "WBE.1.0.r4-00159"))
+            with self.assertRaises(images.VerificationError):
+                platform.verify_wireless(copied)
+            config = Path(temporary) / ".config"
+            text = "CONFIG_NETFILTER=y\nCONFIG_NETFILTER_INGRESS=y\nCONFIG_NET_INGRESS=y\nCONFIG_NF_FLOW_TABLE=m\n"
+            config.write_text(text)
+            platform.verify_kernel_config(config)
+            config.write_text(text.replace("CONFIG_NETFILTER_INGRESS=y", "# CONFIG_NETFILTER_INGRESS is not set"))
+            with self.assertRaises(images.VerificationError):
+                platform.verify_kernel_config(config)
 
 
 if __name__ == "__main__":

@@ -247,6 +247,8 @@ def verify_platform_dtb(blob: bytes) -> dict:
         require(address not in (0x50000000, 0x54000000, 0x58000000, 0x5C000000),
                 f"obsolete WLAN/MLO carveout: {node}")
     require("/reserved-memory/tzapp@4d600000" not in tree.nodes, "obsolete tzapp reservation")
+    require(all(address + size <= 0x4AB00000 or address >= 0x4D600000
+                for _, address, size in regions), "unused PCIe-board Q6 reservation remains")
 
     def one(predicate, description):
         nodes = [node for node in tree.nodes if predicate(node)]
@@ -255,6 +257,14 @@ def verify_platform_dtb(blob: bytes) -> dict:
 
     def compatible(node, value):
         return "compatible" in tree.nodes[node] and value in tree.strings(node, "compatible")
+
+    remoteproc = one(lambda n: compatible(n, "qcom,ipq9574-wcss-sec-pil"), "WCSS remote processor")
+    require(tree.string(remoteproc, "status") == "disabled" and
+            "memory-region" not in tree.nodes[remoteproc],
+            "PCIe-only RC01 must disable WCSS and unbind its Q6 memory")
+    require(not any(compatible(n, "qcom,ipq9574-wifi") and
+                    tree.nodes[n].get("status", b"okay\0") != b"disabled\0"
+                    for n in tree.nodes), "unexpected enabled integrated radio")
 
     art = one(lambda n: tree.nodes[n].get("label") == b"0:art\0", "ART partition")
     require("read-only" in tree.nodes[art], "ART must be read-only")
@@ -289,6 +299,9 @@ def verify_platform_dtb(blob: bytes) -> dict:
         require("qcom,force-unique-qrtr-id" in tree.nodes[node], "QRTR IDs must remain independent")
         require("memory-region" not in tree.nodes[node] and "memory-region-names" not in tree.nodes[node],
                 "PCIe firmware must allocate through DMA/CMA")
+        require("qcom,rx-skb-slab" in tree.nodes[node], "PCIe radio must use slab RX buffers")
+        require("qcom,ath12k-fw-memory-mode" not in tree.nodes[node],
+                "memory-mode experiment must remain separate from the default candidate")
 
     phy = one(lambda n: compatible(n, "ethernet-phy-ieee802.3-c45"), "Aquantia PHY")
     reset = tree.cells(phy, "reset-gpios")

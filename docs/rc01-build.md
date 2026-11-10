@@ -5,10 +5,33 @@
 小米万兆 **RC01 / BE10000 / IPQ9570**。保留上游作者、补丁来源及许可。
 无线固件仍包含原项目使用的二进制文件，公开构建源码不等于所有组件均开源。
 
-本轮从 `rc01/custom` 的 `64802ce26c` 继续，真实 ancestry 基线仍为上述 `e5b0e821`。
-Viking 审查到 `ec73307670005a1f00cbeb039dc90709fa2a871e`，按以下完整提交选择整合，
-没有 full merge，也没有把此前审查点 `a8d4a44c` 当作已合并基线。
-此前已摘取的四项继续保留；构建元数据同时记录原始来源与本次选择列表，保留作者、签署和许可。
+本轮从 `rc01/custom@cf8e09591ffeef7d748914962865cee74aea6046` 继续，审查点固定为
+`7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b`。采用 selected-commits，full_merge=false；
+完整SHA与部分摘取范围见 `scripts/rc01-platform-sources.json`。mac80211是本地7.2-r47选集，
+不等同于上游完整r47。来源、作者及许可保留。下表记录此前选集，后续新增如下：
+
+| 本轮机制 | 改变与边界 |
+| --- | --- |
+| NAND442＋0412 | 只修ESMT单项三device字节；恢复其他型号完整ID匹配，诊断记录真实长度 |
+| 915–919、352 | EAPOL续期、4addr回CPU、条件RXpadding、控制端口接收及重载HALT；MHI部分启动与移除排空 |
+| netifd、719-04/05、通用0680/81 | 同时更新桥属性、软件缓存及PPE旧流；FDB异步撤流仍可能有短暂旧路径窗口 |
+| 910、RC01 DTS、914 | 三卡slab保留原ring/profile和CMA320；释放不用的43MiB Q6，禁用并解绑WCSS；固定/coherent/MLO借用所有权分清 |
+| ath12k固件＋d7 | 774f0cca HW1 02903与0x10098b57/WBE.1.0-02903双字段门控配套；未知版本回CPU，HW1仍非MLO |
+| Router Tool | 5/6GHz auto，选定子无线决定高5GHz80MHz；能力未到时等待，手工设置及首启禁用继续保留 |
+
+914额外保护尚未core_start的伙伴借用者；352让PCI的QMI_FAIL分支也先排空工作；
+PPE先确认上层是bridge再读VLAN；这些本地修正有实际prepared函数的主机故障回归，
+不代替内核并发、DMA或实机故障注入。保留旧906/317/338/342；不整合1635清理，
+mode1默认策略作为另一项运行对照暂缓，不混入slab或固件ABI更新。
+
+独立应用提交将daede feed锁到3520a79b，dae为2026.11.09-r3，仅include_dae=true编译；
+默认固件仍不安装dae。新核心包含strict-alignment修复及原生HTTP API，API默认关闭，
+启用时默认仅监听127.0.0.1:9527，非loopback必须secret。保留原启停回收、互斥、
+来源及LuCI保护；实际内核BTF必需，禁止用影子vanilla BTF代替。其他feeds版本不滚动。
+
+编译及产物守卫会核对最终kernel .config的NETFILTER_INGRESS、真实DTB、镜像AMSS/M3
+SHA和驱动/包版本；源补丁展开或主机测试成功不等于完整固件构建通过。
+本轮physical_acceptance=not-performed；尚未刷写新机或更换其引导/分区表。
 
 | 上游提交 | 跟进内容 | 验收边界 |
 | --- | --- | --- |
@@ -26,7 +49,7 @@ Viking 审查到 `ec73307670005a1f00cbeb039dc90709fa2a871e`，按以下完整提
 | `90f54dddcf` | 独立加入909 AP TPC重算 | 仅6GHz TPC路径，不宣传RC01 2.4/5GHz功率收益 |
 
 暂缓 `6061a61a` DFS 去重：只比较已生效规则，仍需验证“当前 A、待应用 B、再次请求 A”
-的异步队列情形，911不加入。Askey 专用 slab 开关与 qualcommax 的 AX/SVID 修改未摘取。
+的异步队列情形，911不加入。910通用slab属性读取已独立摘取；Askey板级DTS及qualcommax AX/SVID修改未摘取。
 CMA320MiB是本次候选分配策略，不把第三路DS与此前CMA紧张的因果关系当作已证实。
 
 内核固定 **6.18.60**，官方tar SHA256为
@@ -445,7 +468,8 @@ Nikki锁定78e1a751d55ed0762811f054ee699049473da7b8，包版本2026.10.10-r1。
 699个内核、311个无线补丁（含stable socket兼容修正），全部通过且无fuzz（有正常行号offset）。无线使用RC01的
 非NSS ath11k host组，未将仅AX适用的NSS补丁混入。整体prepare、默认非dae配置与
 平台安装配方检查通过。真实DTS经CPP/dtc编译，校验上述内存、MAC、PHY、NAND、温控和DS资源。
-prepared源码同时核对两处CVE析构修复、0411 ESMT优先匹配、0412及动态AFC/HW1非MLO路径。
+该历史prepared源码核对两处CVE析构修复、当时0411 ESMT优先匹配、0412及动态AFC/HW1非MLO路径；
+这不是11-11新442和后续无线补丁的验证证据。
 `validate-rc01-platform.py` 和 `tests/rc01/test_platform.py` 在CI编译后用真实prepared树再跑。
 构建输入另有 `rc01-source-metadata.json`，核对实际prepared核心配方hash与feed锁，记录
 内核、mac80211、ipq-wifi、dnsmasq、Mihomo/Tailscale/Nikki/Go来源，产物保留验证JSON。
@@ -454,3 +478,14 @@ prepared源码同时核对两处CVE析构修复、0411 ESMT优先匹配、0412�
 rootfs_data预算交给父线程CI。旧机不部署；新机候选不携带旧机MAC/caldata、现场静态`.3/.1`、
 节点或VPN账号，首启继续DHCP且无线/代理/VPN关闭。元数据标注 `physical_acceptance=not-performed`；
 准备、源码和夹具通过均不代表新机冷启动、风扇曲线、PPE/DS、无线及流量已实机验收。
+
+## 2026-11-11：新选集与审核修正
+
+此次实际选集重新在锁定干净源包上展开：703个内核补丁、320个无线补丁（含审查修正920），
+全部fuzz=0。920把QMI work移至core_alloc一次初始化，组销毁先在锁外排空各成员，
+再在ag mutex内释放内存；部分create失败也走相同路径。现有全局process生命周期锁
+贯穿查找/加入/创建和停止/移除/最终释放，QMI及恢复worker不取此锁；退出组不得复活，
+代价是独立组的probe/remove也串行，不能把这当作吞吐优化。
+此前177项主机回归是920前的完整结果；当前修正选集188项通过、零skip，包含真实
+assign/find/alloc/free入口与pthread控制的probe/remove交错。目标CI仍未执行，
+不沿用历史699/311或旧cf8构建作为新候选验收。实机仍未部署。

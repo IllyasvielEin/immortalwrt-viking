@@ -1,0 +1,551 @@
+From: RC01 maintainers
+Subject: [PATCH] wifi: ath12k: serialize group lifetime and locked memory release
+
+Close local review R1/R2 in the 352/914 integration. Initialize QMI work
+once at core_alloc, including devices waiting for group partners. Reuse
+the existing process-context lifecycle mutex from lookup/assign through
+create and from stop through last member removal/list deletion/free.
+Workers never acquire it; drop worker-owned ag/core locks across every
+cancel/release wait. This serializes rare independent group init/remove.
+
+Stop QMI/recovery on every member before locked DMA/MLO borrower release.
+Partial create failure uses the same path after releasing ag/core locks.
+Track partial handle/workqueue/power-up ownership and reject late events.
+The allocator ABI, firmware profile, ring sizes and HW1 policy stay intact.
+
+SPDX-License-Identifier: BSD-3-Clause-Clear
+---
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -35,7 +35,12 @@
+ MODULE_PARM_DESC(ftm_mode, "Boots up in factory test mode");
+ EXPORT_SYMBOL(ath12k_ftm_mode);
+ 
+-/* protected with ath12k_hw_group_mutex */
++/* Process-context lifecycle lock, also protecting list membership/lifetime.
++ * Held from lookup/publication through create, and stop through last free.
++ * QMI/restart/reset workers must never acquire it: they only need ag->mutex,
++ * which is dropped before their work is cancelled. Lock order is this mutex
++ * -> ag->mutex -> core_lock. This serialises independent group init/remove.
++ */
+ static struct list_head ath12k_hw_group_list = LIST_HEAD_INIT(ath12k_hw_group_list);
+ 
+ static DEFINE_MUTEX(ath12k_hw_group_mutex);
+@@ -873,6 +878,7 @@
+ {
+ 	int ret;
+ 
++	lockdep_assert_held(&ab->ag->mutex);
+ 	if (ath12k_ftm_mode) {
+ 		ab->fw_mode = ATH12K_FIRMWARE_MODE_FTM;
+ 		ath12k_info(ab, "Booting in ftm mode\n");
+@@ -885,26 +891,32 @@
+ 	}
+ 
+ 	ath12k_debugfs_soc_create(ab);
+-
+ 	ret = ath12k_hif_power_up(ab);
+ 	if (ret) {
+ 		ath12k_err(ab, "failed to power up :%d\n", ret);
+-		goto err_qmi_deinit;
+-	}
+-
++		ath12k_debugfs_soc_destroy(ab);
++		/* The group caller drops ag/core locks before stopping QMI work. */
++		return ret;
++	}
++
++	ab->soc_created = true;
+ 	return 0;
+-
+-err_qmi_deinit:
+-	ath12k_debugfs_soc_destroy(ab);
+-	ath12k_qmi_deinit_service(ab);
+-	return ret;
+ }
+ 
+ static void ath12k_core_soc_destroy(struct ath12k_base *ab)
+ {
+-	ath12k_hif_power_down(ab, false);
+-	ath12k_reg_free(ab);
+-	ath12k_debugfs_soc_destroy(ab);
++	lockdep_assert_held(&ab->ag->mutex);
++
++	/* QMI and recovery work were stopped for every member before taking
++	 * the group lock. Partial create and repeated destroy are harmless.
++	 */
++	if (ab->soc_created) {
++		ath12k_hif_power_down(ab, false);
++		ath12k_reg_free(ab);
++		ath12k_debugfs_soc_destroy(ab);
++		ath12k_core_to_group_ref_put(ab);
++		ab->soc_created = false;
++	}
+ 	ath12k_qmi_deinit_service(ab);
+ }
+ 
+@@ -1987,13 +1999,14 @@
+ 
+ static void ath12k_core_hw_group_free(struct ath12k_hw_group *ag)
+ {
+-	mutex_lock(&ath12k_hw_group_mutex);
+-
++	lockdep_assert_held(&ath12k_hw_group_mutex);
++	if (WARN_ON(ag->num_probed))
++		return;
++
++	/* Lookup cannot retain a pointer across this locked list removal. */
++	list_del(&ag->list);
+ 	ath12k_core_free_wsi_info(ag);
+-	list_del(&ag->list);
+ 	kfree(ag);
+-
+-	mutex_unlock(&ath12k_hw_group_mutex);
+ }
+ 
+ static struct ath12k_hw_group *ath12k_core_hw_group_find_by_dt(struct ath12k_base *ab)
+@@ -2177,7 +2190,11 @@
+ 	ath12k_dbg(ab, ATH12K_DBG_BOOT, "single device added to hardware group\n");
+ 
+ exit:
+-	if (ag->num_probed >= ag->num_devices) {
++	mutex_lock(&ag->mutex);
++	/* The lifecycle lock covers both the exit check and publication. */
++	if (test_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags) ||
++	    ag->num_probed >= ag->num_devices) {
++		mutex_unlock(&ag->mutex);
+ 		ath12k_warn(ab, "unable to add new device to group, max limit reached\n");
+ 		goto invalid_group;
+ 	}
+@@ -2191,44 +2208,39 @@
+ 	ath12k_dbg(ab, ATH12K_DBG_BOOT, "wsi group-id %d num-devices %d index %d",
+ 		   ag->id, ag->num_devices, wsi->index);
+ 
++	mutex_unlock(&ag->mutex);
+ 	return ag;
+ }
+ 
+-void ath12k_core_hw_group_unassign(struct ath12k_base *ab)
++static void ath12k_core_hw_group_unassign(struct ath12k_base *ab)
+ {
+ 	struct ath12k_hw_group *ag = ath12k_ab_to_ag(ab);
+ 	u8 device_id = ab->device_id;
+-	int num_probed;
+-
++	bool last;
++
++	lockdep_assert_held(&ath12k_hw_group_mutex);
+ 	if (!ag)
+ 		return;
+-
+ 	mutex_lock(&ag->mutex);
+-
+-	if (WARN_ON(device_id >= ag->num_devices)) {
++	if (WARN_ON(device_id >= ag->num_devices) ||
++	    WARN_ON(ag->ab[device_id] != ab)) {
+ 		mutex_unlock(&ag->mutex);
+ 		return;
+ 	}
+ 
+-	if (WARN_ON(ag->ab[device_id] != ab)) {
+-		mutex_unlock(&ag->mutex);
+-		return;
+-	}
+-
+ 	ath12k_dp_cmn_hw_group_unassign(ath12k_ab_to_dp(ab), ag);
+-
+ 	ag->ab[device_id] = NULL;
+ 	ab->ag = NULL;
+ 	ab->device_id = ATH12K_INVALID_DEVICE_ID;
+-
+ 	if (ag->num_probed)
+ 		ag->num_probed--;
+-
+-	num_probed = ag->num_probed;
+-
++	last = !ag->num_probed;
+ 	mutex_unlock(&ag->mutex);
+ 
+-	if (!num_probed)
++	/* Still holding the lifecycle lock: no lookup/assign/create can get
++	 * past the last-member decision before list removal and actual free.
++	 */
++	if (last)
+ 		ath12k_core_hw_group_free(ag);
+ }
+ 
+@@ -2239,14 +2251,37 @@
+ 
+ 	if (WARN_ON(!ag))
+ 		return;
++
++	/* All callers own a published member and the lifecycle lock. No
++	 * assign/create/unassign can cross the unlocked worker-stop phase.
++	 */
++	lockdep_assert_held(&ath12k_hw_group_mutex);
++	mutex_lock(&ag->mutex);
++	set_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags);
++	for (i = 0; i < ag->num_devices; i++) {
++		ab = ag->ab[i];
++		if (ab)
++			set_bit(ATH12K_FLAG_UNREGISTERING, &ab->dev_flags);
++	}
++	mutex_unlock(&ag->mutex);
+ 
+ 	for (i = 0; i < ag->num_devices; i++) {
+ 		ab = ag->ab[i];
+ 		if (!ab)
+ 			continue;
+-
+-		ath12k_core_soc_destroy(ab);
+-	}
++		cancel_work_sync(&ab->reset_work);
++		ath12k_qmi_stop_service(ab);
++		cancel_work_sync(&ab->restart_work);
++		cancel_work_sync(&ab->dump_work);
++	}
++
++	mutex_lock(&ag->mutex);
++	for (i = 0; i < ag->num_devices; i++) {
++		ab = ag->ab[i];
++		if (ab)
++			ath12k_core_soc_destroy(ab);
++	}
++	mutex_unlock(&ag->mutex);
+ }
+ 
+ void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *ag)
+@@ -2257,10 +2292,12 @@
+ 	if (!ag)
+ 		return;
+ 
++	mutex_lock(&ath12k_hw_group_mutex);
+ 	mutex_lock(&ag->mutex);
+ 
+ 	if (test_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags)) {
+ 		mutex_unlock(&ag->mutex);
++		mutex_unlock(&ath12k_hw_group_mutex);
+ 		return;
+ 	}
+ 
+@@ -2274,11 +2311,13 @@
+ 			continue;
+ 
+ 		mutex_lock(&ab->core_lock);
+-		ath12k_core_stop(ab);
++		if (ab->hw_group_ref)
++			ath12k_core_stop(ab);
+ 		mutex_unlock(&ab->core_lock);
+ 	}
+ 
+ 	mutex_unlock(&ag->mutex);
++	mutex_unlock(&ath12k_hw_group_mutex);
+ }
+ 
+ static int ath12k_core_hw_group_create(struct ath12k_hw_group *ag)
+@@ -2287,38 +2326,23 @@
+ 	int i, ret;
+ 
+ 	lockdep_assert_held(&ag->mutex);
+-
+ 	for (i = 0; i < ag->num_devices; i++) {
+ 		ab = ag->ab[i];
+ 		if (!ab)
+ 			continue;
+ 
+ 		mutex_lock(&ab->core_lock);
+-
+ 		ret = ath12k_core_soc_create(ab);
++		mutex_unlock(&ab->core_lock);
+ 		if (ret) {
+-			mutex_unlock(&ab->core_lock);
+ 			ath12k_err(ab, "failed to create soc %d core: %d\n", i, ret);
+-			goto destroy;
+-		}
+-
+-		mutex_unlock(&ab->core_lock);
+-	}
+-
++			/* core_init performs group rollback after dropping ag->mutex,
++			 * including the member whose QMI/power-up only partly ran.
++			 */
++			return ret;
++		}
++	}
+ 	return 0;
+-
+-destroy:
+-	for (i--; i >= 0; i--) {
+-		ab = ag->ab[i];
+-		if (!ab)
+-			continue;
+-
+-		mutex_lock(&ab->core_lock);
+-		ath12k_core_soc_destroy(ab);
+-		mutex_unlock(&ab->core_lock);
+-	}
+-
+-	return ret;
+ }
+ 
+ void ath12k_core_hw_group_set_mlo_capable(struct ath12k_hw_group *ag)
+@@ -2389,47 +2413,56 @@
+ 		ath12k_warn(ab, "failed to register panic handler: %d\n", ret);
+ 
+ 	mutex_lock(&ath12k_hw_group_mutex);
+-
+ 	ag = ath12k_core_hw_group_assign(ab);
+ 	if (!ag) {
+-		mutex_unlock(&ath12k_hw_group_mutex);
+-		ath12k_warn(ab, "unable to get hw group\n");
+ 		ret = -ENODEV;
+-		goto err_unregister_notifier;
+-	}
+-
+-	mutex_unlock(&ath12k_hw_group_mutex);
++		goto err_unlock;
++	}
+ 
+ 	mutex_lock(&ag->mutex);
+-
+-	ath12k_dbg(ab, ATH12K_DBG_BOOT, "num devices %d num probed %d\n",
+-		   ag->num_devices, ag->num_probed);
++	/* The member pins ag, and the lifecycle lock keeps create and stop
++	 * indivisible. Never revive a group already marked for removal.
++	 */
++	if (test_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags)) {
++		mutex_unlock(&ag->mutex);
++		ret = -ESHUTDOWN;
++		goto err_unassign;
++	}
+ 
+ 	if (ath12k_core_hw_group_create_ready(ag)) {
+ 		ret = ath12k_core_hw_group_create(ag);
+ 		if (ret) {
+ 			mutex_unlock(&ag->mutex);
+ 			ath12k_warn(ab, "unable to create hw group\n");
+-			goto err_unassign_hw_group;
+-		}
+-	}
+-
++			/* Drop only worker-owned locks; retain the lifecycle lock. */
++			ath12k_core_hw_group_destroy(ag);
++			goto err_unassign;
++		}
++	}
+ 	mutex_unlock(&ag->mutex);
+-
++	mutex_unlock(&ath12k_hw_group_mutex);
+ 	return 0;
+ 
+-err_unassign_hw_group:
++err_unassign:
+ 	ath12k_core_hw_group_unassign(ab);
+-err_unregister_notifier:
++err_unlock:
++	mutex_unlock(&ath12k_hw_group_mutex);
+ 	ath12k_core_panic_notifier_unregister(ab);
+-
+ 	return ret;
+ }
+ 
+ void ath12k_core_deinit(struct ath12k_base *ab)
+ {
+-	ath12k_core_hw_group_destroy(ab->ag);
+-	ath12k_core_hw_group_unassign(ab);
++	/* This device's published membership pins ag before taking the lock.
++	 * A new probe cannot retain a lookup result while the last member is
++	 * removed and the group is taken off the lookup list and freed.
++	 */
++	mutex_lock(&ath12k_hw_group_mutex);
++	if (ab->ag) {
++		ath12k_core_hw_group_destroy(ab->ag);
++		ath12k_core_hw_group_unassign(ab);
++	}
++	mutex_unlock(&ath12k_hw_group_mutex);
+ 	ath12k_core_panic_notifier_unregister(ab);
+ }
+ 
+@@ -2471,6 +2504,7 @@
+ 
+ 	init_waitqueue_head(&ab->peer_mapping_wq);
+ 	init_waitqueue_head(&ab->wmi_ab.tx_credits_wq);
++	ath12k_qmi_init_work(ab);
+ 	INIT_WORK(&ab->restart_work, ath12k_core_restart);
+ 	INIT_WORK(&ab->reset_work, ath12k_core_reset);
+ 	INIT_WORK(&ab->rfkill_work, ath12k_rfkill_work);
+--- a/drivers/net/wireless/ath/ath12k/core.h
++++ b/drivers/net/wireless/ath/ath12k/core.h
+@@ -981,6 +981,8 @@
+ 	struct platform_device *pdev;
+ 	struct device *dev;
+ 	struct ath12k_qmi qmi;
++	/* Protected by ag->mutex; set only after successful HIF power-up. */
++	bool soc_created;
+ 	struct ath12k_wmi_base wmi_ab;
+ 	struct completion fw_ready;
+ 	u8 device_id;
+@@ -1328,7 +1330,6 @@
+ int ath12k_core_resume(struct ath12k_base *ab);
+ int ath12k_core_suspend(struct ath12k_base *ab);
+ int ath12k_core_suspend_late(struct ath12k_base *ab);
+-void ath12k_core_hw_group_unassign(struct ath12k_base *ab);
+ u8 ath12k_get_num_partner_link(struct ath12k *ar);
+ 
+ const struct firmware *ath12k_core_firmware_request(struct ath12k_base *ab,
+--- a/drivers/net/wireless/ath/ath12k/qmi.c
++++ b/drivers/net/wireless/ath/ath12k/qmi.c
+@@ -4243,10 +4243,15 @@
+ 	event->data = data;
+ 
+ 	spin_lock(&qmi->event_lock);
++	if (qmi->events_stopped) {
++		spin_unlock(&qmi->event_lock);
++		kfree(event);
++		return -ESHUTDOWN;
++	}
+ 	list_add_tail(&event->list, &qmi->event_list);
++	/* Stop sets events_stopped under this lock before destroying event_wq. */
++	queue_work(qmi->event_wq, &qmi->event_work);
+ 	spin_unlock(&qmi->event_lock);
+-
+-	queue_work(qmi->event_wq, &qmi->event_work);
+ 
+ 	return 0;
+ }
+@@ -4639,14 +4644,22 @@
+ 	spin_unlock(&qmi->event_lock);
+ }
+ 
++void ath12k_qmi_init_work(struct ath12k_base *ab)
++{
++	/* A successful probe need not have a complete hardware group yet. */
++	INIT_LIST_HEAD(&ab->qmi.event_list);
++	spin_lock_init(&ab->qmi.event_lock);
++	INIT_WORK(&ab->qmi.event_work, ath12k_qmi_driver_event_work);
++	ab->qmi.events_stopped = true;
++}
++
+ int ath12k_qmi_init_service(struct ath12k_base *ab)
+ {
+ 	int ret;
+ 
+-	memset(&ab->qmi.target, 0, sizeof(struct target_info));
+-	memset(&ab->qmi.target_mem, 0, sizeof(struct target_mem_chunk));
++	memset(&ab->qmi.target, 0, sizeof(ab->qmi.target));
++	memset(ab->qmi.target_mem, 0, sizeof(ab->qmi.target_mem));
+ 	ab->qmi.ab = ab;
+-
+ 	ab->qmi.target_mem_mode = ab->target_mem_mode;
+ 	ret = qmi_handle_init(&ab->qmi.handle, ATH12K_QMI_RESP_LEN_MAX,
+ 			      &ath12k_qmi_ops, ath12k_qmi_msg_handlers);
+@@ -4654,6 +4667,7 @@
+ 		ath12k_warn(ab, "failed to initialize qmi handle\n");
+ 		return ret;
+ 	}
++	ab->qmi.handle_initialized = true;
+ 
+ 	ab->qmi.event_wq = alloc_ordered_workqueue("ath12k_qmi_driver_event", 0);
+ 	if (!ab->qmi.event_wq) {
+@@ -4661,30 +4675,54 @@
+ 		return -EFAULT;
+ 	}
+ 
+-	INIT_LIST_HEAD(&ab->qmi.event_list);
+-	spin_lock_init(&ab->qmi.event_lock);
+-	INIT_WORK(&ab->qmi.event_work, ath12k_qmi_driver_event_work);
+-
++	spin_lock(&ab->qmi.event_lock);
++	ab->qmi.events_stopped = false;
++	spin_unlock(&ab->qmi.event_lock);
+ 	ret = qmi_add_lookup(&ab->qmi.handle, QMI_SERVICE_ID_WLFW,
+ 			     ATH12K_QMI_WLFW_SERVICE_VERS_V01,
+ 			     ab->qmi.service_ins_id);
+-	if (ret < 0) {
++	if (ret < 0)
+ 		ath12k_warn(ab, "failed to add qmi lookup\n");
+-		destroy_workqueue(ab->qmi.event_wq);
+-		return ret;
+-	}
+-
++	/* All partial failures are stopped outside group/core locks by the
++	 * group create rollback, before locked resource release.
++	 */
+ 	return ret;
+ }
+ 
++void ath12k_qmi_stop_service(struct ath12k_base *ab)
++{
++	struct ath12k_qmi *qmi = &ab->qmi;
++	struct ath12k_qmi_driver_event *event, *tmp;
++
++	lockdep_assert_not_held(&ab->ag->mutex);
++	spin_lock(&qmi->event_lock);
++	qmi->events_stopped = true;
++	spin_unlock(&qmi->event_lock);
++	if (qmi->handle_initialized) {
++		qmi_handle_release(&qmi->handle);
++		qmi->handle_initialized = false;
++	}
++	cancel_work_sync(&qmi->event_work);
++	if (qmi->event_wq) {
++		destroy_workqueue(qmi->event_wq);
++		qmi->event_wq = NULL;
++	}
++	spin_lock(&qmi->event_lock);
++	list_for_each_entry_safe(event, tmp, &qmi->event_list, list) {
++		list_del(&event->list);
++		kfree(event);
++	}
++	spin_unlock(&qmi->event_lock);
++}
++
+ void ath12k_qmi_deinit_service(struct ath12k_base *ab)
+ {
++	lockdep_assert_held(&ab->ag->mutex);
+ 	if (!ab->qmi.ab)
+ 		return;
+-
+-	qmi_handle_release(&ab->qmi.handle);
+-	cancel_work_sync(&ab->qmi.event_work);
+-	destroy_workqueue(ab->qmi.event_wq);
++	/* No waiting under ag->mutex: stop_service has already drained QMI. */
++	if (WARN_ON(ab->qmi.handle_initialized || ab->qmi.event_wq))
++		return;
+ 	ath12k_qmi_aux_uc_free(ab);
+ 	ath12k_qmi_m3_free(ab);
+ 	ath12k_qmi_free_target_mem_chunk(ab);
+@@ -4693,6 +4731,7 @@
+ 
+ void ath12k_qmi_free_resource(struct ath12k_base *ab)
+ {
++	lockdep_assert_held(&ab->ag->mutex);
+ 	ath12k_qmi_free_target_mem_chunk(ab);
+ 	ath12k_qmi_aux_uc_free(ab);
+ 	ath12k_qmi_m3_free(ab);
+--- a/drivers/net/wireless/ath/ath12k/qmi.h
++++ b/drivers/net/wireless/ath/ath12k/qmi.h
+@@ -152,6 +152,9 @@
+ 	struct qmi_handle handle;
+ 	struct sockaddr_qrtr sq;
+ 	struct work_struct event_work;
++	/* events_stopped is protected by event_lock; initialized once at alloc. */
++	bool events_stopped;
++	bool handle_initialized;
+ 	struct workqueue_struct *event_wq;
+ 	struct list_head event_list;
+ 	spinlock_t event_lock; /* spinlock for qmi event list */
+@@ -671,8 +674,13 @@
+ int ath12k_qmi_firmware_start(struct ath12k_base *ab,
+ 			      u32 mode);
+ void ath12k_qmi_firmware_stop(struct ath12k_base *ab);
++void ath12k_qmi_init_work(struct ath12k_base *ab);
++/* Stop may sleep: caller must not hold the group/core mutexes. */
++void ath12k_qmi_stop_service(struct ath12k_base *ab);
++/* Memory release only: caller holds ag->mutex after stop_service. */
+ void ath12k_qmi_deinit_service(struct ath12k_base *ab);
+ int ath12k_qmi_init_service(struct ath12k_base *ab);
++/* Allocation rollback/resource release: caller holds ag->mutex. */
+ void ath12k_qmi_free_resource(struct ath12k_base *ab);
+ void ath12k_qmi_trigger_host_cap(struct ath12k_base *ab);
+ void ath12k_qmi_reset_mlo_mem(struct ath12k_hw_group *ag);

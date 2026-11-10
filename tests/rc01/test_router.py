@@ -1,5 +1,6 @@
 """Verify manual network ownership and disabled APs using the actual scripts."""
 from pathlib import Path
+import copy
 import json
 import os
 import shutil
@@ -14,6 +15,54 @@ NODE = shutil.which("node")
 
 
 class Router(unittest.TestCase):
+    def wireless_fixture(self, band="5g", first_channel=36, width=160):
+        cap_band = {"2g": "2G", "5g": "5G", "6g": "6G"}[band]
+        values = {
+            "router-tool": {},
+            "wireless": {
+                "radio0": {".name": "radio0", ".type": "wifi-device", "path": "pci-test",
+                           "band": band, "disabled": "1"},
+                "ap0": {".name": "ap0", ".type": "wifi-iface", "device": "radio0",
+                        "mode": "ap", "disabled": "1", "ssid": "OWRT",
+                        "key": "12345678", "encryption": "psk2+ccmp"},
+            },
+        }
+        board = {"model": {"id": "xiaomi,be10000"}, "wlan": {
+            "phy0": {"path": "pci-test", "info": {"bands": {
+                cap_band: {"default_channel": first_channel, "max_width": width,
+                           "modes": ["EHT20", "EHT40", "EHT80", "EHT160"]},
+            }}},
+        }}
+        return values, board
+
+    def run_wireless(self, values, board, operations=None):
+        module = TOOL / "root/usr/share/router-tool/wireless.uc"
+        script = f"import {{ synchronize_wireless }} from {json.dumps(str(module))};\n"
+        script += "let values = " + json.dumps(values) + ";\n"
+        script += "let board = " + json.dumps(board) + ";\n"
+        script += r'''
+let writes = 0;
+let cursor = {
+  get: (c, s, k) => values[c]?.[s]?.[k],
+  get_all: (c, s) => values[c]?.[s],
+  get_first: () => 'RC01',
+  foreach: (c, t, fn) => { for (let s, v in values[c] || {}) if (v['.type'] == t) fn(v); },
+  set: (c, s, k, v) => {
+    writes++;
+    if (v == null) { values[c][s] = { '.type': k, '.name': s }; return true; }
+    values[c][s][k] = v; return true;
+  },
+  delete: (c, s, k) => { writes++; delete values[c][s][k]; return true; }
+};
+'''
+        script += operations or r'''
+let changed = synchronize_wireless(cursor, board);
+print(sprintf('%J', { values, changed, writes }));
+'''
+        result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
     @unittest.skipUnless(NODE, "Node.js is required for LuCI save regression")
     def test_luci_save_preserves_manual_network_without_snapshot_or_rpc(self):
         source = TOOL / "htdocs/luci-static/resources/tools/router-tool.js"
@@ -147,6 +196,130 @@ print('restricted-band-check:ok\n');
         result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "restricted-band-check:ok\n")
+
+    @unittest.skipUnless(UCODE, "ucode is required for per-band defaults regression")
+    def test_band_defaults_and_repeat_run_preserve_disabled_state(self):
+        for band, first, width, channel, mode, suffix, encryption in (
+            ("2g", 6, 40, "1", "EHT20", "2.4G", "psk2+ccmp"),
+            ("5g", 36, 160, "auto", "EHT160", "5.2G", "psk2+ccmp"),
+            ("5g", 100, 160, "auto", "EHT80", "5.8G", "psk2+ccmp"),
+            ("5g", 36, 80, "auto", "EHT80", "5.8G", "psk2+ccmp"),
+            ("6g", 5, 160, "auto", "EHT160", "6G", "sae+ccmp"),
+        ):
+            with self.subTest(band=band, first=first, width=width):
+                values, board = self.wireless_fixture(band, first, width)
+                result = self.run_wireless(values, board, r'''
+let first = synchronize_wireless(cursor, board);
+let initialized = sprintf('%J', values);
+let first_writes = writes;
+let second = synchronize_wireless(cursor, board);
+print(sprintf('%J', { values, first, second, unchanged: initialized == sprintf('%J', values),
+                     repeat_writes: writes - first_writes }));
+''')
+                radio, ap = result["values"]["wireless"]["radio0"], result["values"]["wireless"]["ap0"]
+                self.assertEqual((radio["channel"], radio["htmode"]), (channel, mode))
+                self.assertEqual(ap["ssid"], "RC01-Xiaomi-" + suffix)
+                self.assertEqual(ap["encryption"], encryption)
+                self.assertEqual(ap.get("ieee80211w"), "2" if band == "6g" else None)
+                self.assertEqual((radio["disabled"], ap["disabled"]), ("1", "1"))
+                self.assertEqual(result["values"]["router-tool"]["radio0"]["defaults_done"], "1")
+                self.assertCountEqual(result["first"], ["wireless", "router-tool"])
+                self.assertFalse(result["second"])
+                self.assertTrue(result["unchanged"])
+                self.assertEqual(result["repeat_writes"], 0)
+
+    @unittest.skipUnless(UCODE, "ucode is required for child-radio selection regression")
+    def test_selected_high_5g_child_overrides_aggregate_low_channel(self):
+        for index in (1, "1"):
+            with self.subTest(index=index):
+                values, board = self.wireless_fixture()
+                values["wireless"]["radio0"]["radio"] = index
+                board["wlan"]["phy0"]["info"]["radios"] = [
+                    {"index": 0, "bands": {"5G": {"default_channel": 36}}},
+                    {"index": 1, "bands": {"5G": {"default_channel": 100}}},
+                ]
+                result = self.run_wireless(values, board)
+                radio, ap = result["values"]["wireless"]["radio0"], result["values"]["wireless"]["ap0"]
+                self.assertEqual((radio["channel"], radio["htmode"]), ("auto", "EHT80"))
+                self.assertEqual(ap["ssid"], "RC01-Xiaomi-5.8G")
+                self.assertEqual((radio["disabled"], ap["disabled"]), ("1", "1"))
+
+    @unittest.skipUnless(UCODE, "ucode is required for missing child-radio regression")
+    def test_missing_child_or_band_waits_without_initializing_or_marking(self):
+        for children in (
+            [{"index": 0, "bands": {"5G": {"default_channel": 36}}}],
+            [{"index": 1, "bands": {"2G": {"default_channel": 1}}}],
+            [],
+            None,
+        ):
+            with self.subTest(children=children):
+                values, board = self.wireless_fixture()
+                values["wireless"]["radio0"]["radio"] = "1"
+                if children is not None:
+                    board["wlan"]["phy0"]["info"]["radios"] = children
+                result = self.run_wireless(values, board)
+                self.assertEqual(result["values"], values)
+                self.assertFalse(result["changed"])
+                self.assertEqual(result["writes"], 0)
+
+    @unittest.skipUnless(UCODE, "ucode is required for delayed child-radio capabilities regression")
+    def test_pending_child_initializes_after_its_capabilities_arrive(self):
+        values, board = self.wireless_fixture()
+        values["wireless"]["radio0"]["radio"] = "1"
+        board["wlan"]["phy0"]["info"]["radios"] = []
+        result = self.run_wireless(values, board, r'''
+let first = synchronize_wireless(cursor, board);
+let pending = sprintf('%J', values);
+let pending_writes = writes;
+board.wlan.phy0.info.radios = [ { index: 1, bands: { '5G': { default_channel: 100 } } } ];
+let second = synchronize_wireless(cursor, board);
+print(sprintf('%J', { values, first, second, pending, pending_writes }));
+''')
+        self.assertFalse(result["first"])
+        self.assertEqual(json.loads(result["pending"]), values)
+        self.assertEqual(result["pending_writes"], 0)
+        radio = result["values"]["wireless"]["radio0"]
+        self.assertEqual((radio["channel"], radio["htmode"], radio["disabled"]), ("auto", "EHT80", "1"))
+        self.assertEqual(result["values"]["wireless"]["ap0"]["disabled"], "1")
+        self.assertEqual(result["values"]["router-tool"]["radio0"]["defaults_done"], "1")
+        self.assertCountEqual(result["second"], ["wireless", "router-tool"])
+
+    @unittest.skipUnless(UCODE, "ucode is required for customized AP protection regression")
+    def test_custom_credentials_and_non_ap_profiles_preserve_wireless_options(self):
+        variants = [
+            {"ssid": "My-custom-SSID"}, {"key": "already-private"}, {"encryption": "sae+ccmp"},
+            {"mode": "sta"}, {"mode": "mesh"}, {"wds": "1"}, {"mlo": "1"},
+            {"device": ["radio0", "radio1"]},
+        ]
+        for options in variants:
+            with self.subTest(options=options):
+                values, board = self.wireless_fixture()
+                values["wireless"]["ap0"].update(options)
+                values["wireless"]["radio0"].update({"channel": "149", "htmode": "EHT40", "country": "CN"})
+                original_wireless = copy.deepcopy(values["wireless"])
+                result = self.run_wireless(values, board)
+                self.assertEqual(result["values"]["wireless"], original_wireless)
+                self.assertEqual(result["values"]["router-tool"]["radio0"]["defaults_done"], "1")
+                self.assertEqual(result["changed"], ["router-tool"])
+
+    @unittest.skipUnless(UCODE, "ucode is required for saved defaults marker regression")
+    def test_marked_radio_keeps_even_untouched_ap_and_manual_channel(self):
+        values, board = self.wireless_fixture()
+        values["router-tool"]["radio0"] = {".name": "radio0", ".type": "radio", "defaults_done": "1"}
+        values["wireless"]["radio0"].update({"channel": "157", "htmode": "EHT40", "country": "CN"})
+        result = self.run_wireless(values, board)
+        self.assertEqual(result["values"], values)
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["writes"], 0)
+
+    @unittest.skipUnless(UCODE, "ucode is required for missing AP retry regression")
+    def test_radio_without_interfaces_remains_unmarked_for_later_initialization(self):
+        values, board = self.wireless_fixture()
+        del values["wireless"]["ap0"]
+        result = self.run_wireless(values, board)
+        self.assertEqual(result["values"], values)
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["writes"], 0)
 
 
 if __name__ == "__main__":
