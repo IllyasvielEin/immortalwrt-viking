@@ -178,6 +178,71 @@ assert(text.includes('not a heartbeat from the fan guard'), 'page sample time mu
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_guard_record_renders_current_last_and_unknown_honestly(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r'''
+const fs = require('fs');
+const assert = require('assert');
+const rpc = { declare: () => () => Promise.resolve({}) };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, { add: () => {} }, {}, E, v => v);
+function rows(protection) {
+  const tree = api.render({
+    schema: 1, sampled_at: { uptime: 1000 }, temperatures: [], ports: [], processes: [], radios: [],
+    fans: [{ hwmon: 'hwmon8', rpm: 960, pwm: 255, fault: 0, fault_available: true, health: 'ok' }],
+    fan: { controller: 'found', temperature: { status: 'ok', celsius: 45 }, guard_process: 'running',
+      trend: { interval: 10, capacity: 90, window: 900, samples: [] }, protection },
+    storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }]
+  });
+  const found = {};
+  (function walk(n) {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    if (n.tag === 'tr' && Array.isArray(n.children) && n.children.length === 2)
+      found[n.children[0].children] = n.children[1].children;
+    walk(n.children);
+  })(tree);
+  return { found, text: JSON.stringify(tree) };
+}
+const record = { status: 'current', detail: null, age: 1, sample_age: 3, phase: 'monitoring', event: 'sample',
+  sample_reason: 'ok', failures: 0, latched: true, latch_reason: 'consecutive-failures:rpm-zero' };
+let r = rows(record);
+assert.strictEqual(r.found['Fan guard record'], 'Current record from the running guard');
+assert.strictEqual(r.found['Guard sample age'], '3 s', 'guard sample age, not the page poll time');
+assert.strictEqual(r.found['Guard sample result'], 'Guard checks passed');
+assert.strictEqual(r.found['Consecutive failed checks'], '0');
+assert.strictEqual(r.found['Software full-speed latch'], 'Set; first reason: Three consecutive failed checks: Stopped (0 RPM)',
+  'a passing current sample must not hide the latch');
+assert(r.text.includes('does not prove that the PWM write succeeded'));
+assert(r.text.includes('does not prove that fan protection is working'), 'existing process note is kept');
+
+r = rows({ ...record, status: 'stale', detail: 'expired', sample_reason: 'fault', failures: 2, latched: false, latch_reason: null });
+assert.strictEqual(r.found['Fan guard record'], 'Last record only; current guard state unknown (not updated within 10 s)');
+assert.strictEqual(r.found['Guard sample result'], 'Last record: Fault flag not 0 or unreadable');
+assert.strictEqual(r.found['Consecutive failed checks'], 'Last record: 2');
+assert.strictEqual(r.found['Software full-speed latch'], 'Last record: Not set');
+
+r = rows({ ...record, status: 'exited', event: 'pwm-write-failed', sample_age: null, latch_reason: 'startup:sensor-missing' });
+assert.strictEqual(r.found['Guard event'], 'Last record: Stopped: PWM write failed');
+assert.strictEqual(r.found['Guard sample age'], 'No guard sample in this record');
+assert.strictEqual(r.found['Software full-speed latch'], 'Last record: Set; first reason: Startup check failed: NSS sensor missing');
+
+const unknown = { status: 'unknown', detail: 'missing', age: null, sample_age: null, phase: null, event: null,
+  sample_reason: null, failures: null, latched: null, latch_reason: null };
+for (const p of [ unknown, undefined ]) {
+  r = rows(p);
+  assert(r.found['Fan guard process'] === 'Process present');
+  assert(!r.text.includes('Current record'), 'a running process without a record is not current');
+  for (const k of [ 'Guard sample age', 'Guard sample result', 'Consecutive failed checks', 'Software full-speed latch' ])
+    assert.strictEqual(r.found[k], 'Unknown', k + ' must be unknown, not zero or false');
+}
+assert.strictEqual(rows(unknown).found['Fan guard record'], 'Unknown (no record)');
+'''
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
     def test_channel_hints_render_and_failed_capabilities_drop_old_results(self):
         source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
         program = r"""

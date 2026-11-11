@@ -532,3 +532,126 @@ msgstr "LED 服务进程"
 
 msgid "A present network device does not mean a module is inserted. RC01 has no module-detect line, so the kernel infers presence from module I2C reads; persistent read failures also show as not detected, so this cannot prove the cage is empty. Module identity, EEPROM and optical diagnostics are not read. With presence mode enabled (system.led_sfp.rc01_presence=1) the LED is off without a detected module, lit with a module but no link, and shows link and activity with link; when detection is unavailable it keeps the link/activity LED."
 msgstr "网络设备存在不代表已插入模块。RC01 没有模块检测线，内核通过读取模块 I2C 推断在位；持续读取失败同样显示为未检出，因此不能据此证明笼位为空。此处不读取模块身份、EEPROM 或光学诊断。启用在位模式（system.led_sfp.rc01_presence=1）后，未检出模块时灯灭，检出模块但无链路时常亮，有链路时显示链路与活动；检测不可用时保留链路/活动灯。"
+
+msgid "Current record from the running guard"
+msgstr "来自当前运行守护进程的记录"
+
+msgid "Last record only; current guard state unknown"
+msgstr "仅为上次记录；当前守护状态未知"
+
+msgid "Guard reported that it exited; last record only"
+msgstr "守护进程报告已退出；仅为上次记录"
+
+msgid "no record"
+msgstr "无记录"
+
+msgid "record unreadable"
+msgstr "记录不可读"
+
+msgid "record too large"
+msgstr "记录过大"
+
+msgid "record invalid"
+msgstr "记录无效"
+
+msgid "guard identity cannot be checked"
+msgstr "无法核对守护进程身份"
+
+msgid "from a previous boot"
+msgstr "来自之前的启动"
+
+msgid "no guard process"
+msgstr "无守护进程"
+
+msgid "more than one guard process"
+msgstr "存在多个守护进程"
+
+msgid "from another guard instance"
+msgstr "来自另一个守护进程实例"
+
+msgid "record age unknown"
+msgstr "记录时间未知"
+
+msgid "not updated within 10 s"
+msgstr "10 秒内未更新"
+
+msgid "Not sampled yet"
+msgstr "尚未采样"
+
+msgid "Guard checks passed"
+msgstr "守护检查通过"
+
+msgid "NSS temperature unreadable or outside 1-130 C"
+msgstr "NSS 温度不可读或超出 1-130 C"
+
+msgid "RPM unreadable"
+msgstr "转速不可读"
+
+msgid "PWM unreadable"
+msgstr "PWM 不可读"
+
+msgid "Fault flag not 0 or unreadable"
+msgstr "故障标志非 0 或不可读"
+
+msgid "Startup check"
+msgstr "启动检查"
+
+msgid "Periodic check"
+msgstr "周期检查"
+
+msgid "Stopped: fan controller missing or ambiguous"
+msgstr "已停止：风扇控制器缺失或不唯一"
+
+msgid "Stopped: PWM write failed"
+msgstr "已停止：PWM 写入失败"
+
+msgid "Stopped by signal"
+msgstr "因信号停止"
+
+msgid "Monitoring loop ended"
+msgstr "监控循环已结束"
+
+msgid "NSS temperature reached 75 C"
+msgstr "NSS 温度达到 75 C"
+
+msgid "Startup check failed"
+msgstr "启动检查失败"
+
+msgid "Three consecutive failed checks"
+msgstr "连续三次检查失败"
+
+msgid "Last record"
+msgstr "上次记录"
+
+msgid "Fan guard record"
+msgstr "风扇守护记录"
+
+msgid "Guard sample age"
+msgstr "守护采样距今"
+
+msgid "No guard sample in this record"
+msgstr "该记录中没有守护采样"
+
+msgid "Guard event"
+msgstr "守护事件"
+
+msgid "Guard sample result"
+msgstr "守护采样结果"
+
+msgid "Consecutive failed checks"
+msgstr "连续失败次数"
+
+msgid "Software full-speed latch"
+msgstr "软件满速锁定"
+
+msgid "Set"
+msgstr "已设置"
+
+msgid "first reason"
+msgstr "首次原因"
+
+msgid "Not set"
+msgstr "未设置"
+
+msgid "The guard record is written by the fan guard itself after each protection step. Publishing is best effort and can lag or be skipped, so it is shown as current only for the one running guard instance and only within 10 s; otherwise it is the last record and the current guard state is unknown. The sample age is when the guard last checked the sensors. A set latch is the guard's software decision to hold full speed until it restarts; it does not prove that the PWM write succeeded or that the fan is running at full speed, and passing checks do not replace hardware acceptance."
+msgstr "守护记录由风扇守护进程在每次保护步骤后自行写入。发布为尽力而为，可能滞后或被跳过，因此仅当记录属于唯一运行中的守护实例且在 10 秒内更新时才显示为当前；否则仅为上次记录，当前守护状态未知。采样时长指距守护进程上次检查传感器的时间。锁定为守护进程在重启前保持满速的软件决定，不证明 PWM 写入成功或风扇实际满速运行；检查通过也不能替代硬件验收。"
