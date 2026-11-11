@@ -61,7 +61,8 @@ python3 -B scripts/verify-rc01-images.py bin/targets/qualcommbe/ipq95xx
 ```
 
 不做完整构建时，`sh scripts/rc01-verify-inputs.sh` 会按本树固定来源准备打过补丁的 Linux/backports 源码、
-BusyBox、锁定的 LuCI 和 host ucode，然后执行 `. build_dir/rc01-verify-inputs/env.sh` 再运行单测和
+BusyBox、锁定的 LuCI 和 host ucode。工作目录仅保存生成物，每次只复用已校验的下载归档，重新准备源码与工具；
+然后执行 `. build_dir/rc01-verify-inputs/env.sh` 再运行单测和
 `scripts/validate-rc01-platform.py`。这只是源码级/离线 DTB 检查，不产生 APK 或镜像；夹具 BusyBox 与目标配置的差异
 见 `docs/rc01-modules/08-integration.md`。
 

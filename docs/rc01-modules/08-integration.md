@@ -61,8 +61,8 @@ BusyBox 的 `timeout` 直接执行自己的 `ip`/`ping` applet，不经过 PATH�
 - `tests/rc01/test_netled.py`：任何 Fixture 运行前，先用无网络探针（PATH 中的 `echo` 桩配合 BusyBox `timeout`）检查；
   如果 `BUSYBOX` 绕过 PATH，所有 Fixture 用例在启动守护进程前就失败，并给出原因。已用目标配置的 BusyBox 验证：
   83 个用例中 73 个在 setUp 阶段失败，未运行守护进程。
-- `scripts/rc01-verify-inputs.sh` 构建的夹具 BusyBox 关闭了 `FEATURE_PREFER_APPLETS`。**与目标的差异**：只差这一项，
-  它影响 applet 执行外部命令时的查找顺序，不改变 ash 语法、语义或 applet 行为。
+- `scripts/rc01-verify-inputs.sh` 构建的夹具 BusyBox 关闭了 `FEATURE_PREFER_APPLETS`。**与目标的主动配置差异**：关闭这一项；oldconfig还会按父功能是否启用归一化默认值。
+  它改变applet调用外部命令时的查找顺序；这里不把该组合等同完整目标运行配置。
   已验证的是：BusyBox 1.38.0 加本树全部 busybox 补丁，使用目标默认 applet/ash 配置（除上述一项），在 x86_64 宿主 glibc 上运行；
   也就是 ash、`timeout`、`sleep`、`mv` 等 applet 的行为。**未验证**的是：目标 PREFER_APPLETS 下真实 `ip`/`ping` applet 的路径，
   以及交叉编译后在设备上的行为。不能写成“目标配置全部通过”。
@@ -70,7 +70,9 @@ BusyBox 的 `timeout` 直接执行自己的 `ip`/`ping` applet，不经过 PATH�
 ## 4. 可复用公开输入
 
 一条命令：`sh scripts/rc01-verify-inputs.sh [工作目录]`。默认工作目录是 `build_dir/rc01-verify-inputs`（已被 git 忽略），
-完成后执行 `. <工作目录>/env.sh`。固定来源全部从本树读取，下载后校验哈希：
+完成后执行 `. <工作目录>/env.sh`。该目录只存生成物；每次运行只复用已校验的下载归档，
+删除并重新准备源码/工具，以当前树的补丁、overlay和配置为准；不读取旧 `.rc01-prepared`、`.rev` 或可执行文件来跳过准备。
+LuCI/ucode按固定提交重新取得，失败时不会保留旧env.sh。固定来源全部从本树读取，下载后校验哈希：
 
 | 输入 | 来源 / 固定值 | 本次路径（本 worktree） |
 | --- | --- | --- |
@@ -87,9 +89,11 @@ worktree 根目录：`/home/illya/.t3/worktrees/immortalwrt/dev-module-08-integr
 ## 5. 实际执行与结果
 
 - `UCODE=<prefix ucode> uv run --offline --no-project python -B -m unittest discover -s tests/rc01`
-  （未设置其他输入）：481 项通过，跳过 64 项。
-- 设置全部输入后（`. env.sh`，夹具 BusyBox 已关闭 PREFER_APPLETS）运行同一命令，加 `-v`：**521 项通过，跳过 3 项**。
-  跳过原因：dnsmasq 预置源码、packages feed 未准备、固定 feed git 对象。这三项需要 `prepare-rc01.sh` 生成 feeds。
+  （未设置其他输入）：原摘要Ran 481 / skipped64；独立核对实际420项成功、61个用例跳过及3个类级跳过。
+- 设置全部输入后（`. env.sh`，夹具 BusyBox 已关闭 PREFER_APPLETS）运行同一命令，加 `-v`：**521个测试方法成功、0失败/错误；另3个类级跳过**（不计入testsRun）。
+  三类实际遮蔽dnsmasq 12项、Go FeedPatch 3项、PackageRecipe 8项，不等于仅3个未执行的方法。
+  Astra另从本树固定公开源独立准备dnsmasq 2.93及补丁，12项全部通过；无需完整feeds。
+  其余两类需固定packages/nikki feed Git对象，在专用构建工作区准备。
 - `uv run --offline --no-project python -B scripts/validate-rc01-platform.py "$RC01_KERNEL_SOURCE" "$RC01_WIRELESS_SOURCE"`：
   通过（Linux 6.18.60、NAND、HW1 MLO 关闭、DS ABI、CMA 320、RGB PWM、预留区域）。
   `control_port_ingress_config` 为 `not-built; source-only validation`；`physical_acceptance` 为 `not-performed`。
@@ -108,7 +112,8 @@ uv run --offline --no-project python -B scripts/validate-rc01-platform.py "$RC01
 
 剩余缺口及下一步：
 
-- 3 个 feeds 相关跳过项：在专用构建工作区执行 `RC01_UPDATE_MODE=locked sh scripts/prepare-rc01.sh`，再运行单测。
+- dnsmasq 12项可独立准备：按 `package/network/services/dnsmasq/Makefile` 下载并校验归档，解包后以 `scripts/patch-kernel.sh` 应用该包patches，再用 `RC01_DNSMASQ_SOURCE` 指向准备目录；不启动dnsmasq服务。Astra已独立执行通过。
+- Go FeedPatch 3项及PackageRecipe 8项需固定packages/nikki feed对象；在专用构建工作区执行 `RC01_UPDATE_MODE=locked sh scripts/prepare-rc01.sh` 后再运行。
 - 实际 APK / 镜像：需要在完整构建（`make download && make`）后对 `bin/targets/qualcommbe/ipq95xx` 执行
   `verify-rc01-images.py`、`verify-rc01-wireless-artifacts.py`、`validate-rc01-nand.sh`、`validate-rc01-public-artifacts.py`，
   并用实际内核/无线构建目录做构建后无跳过回归（见 `docs/rc01-build.md`）。
