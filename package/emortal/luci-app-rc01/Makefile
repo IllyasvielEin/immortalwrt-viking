@@ -2,10 +2,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_VERSION:=1
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 PKG_LICENSE:=GPL-2.0-only
-LUCI_TITLE:=Read-only RC01 hardware and proxy preflight
+LUCI_TITLE:=RC01 hardware status, preflight and connectivity LED settings
 LUCI_DEPENDS:=+luci-base +rc01-platform
 LUCI_PKGARCH:=all
 

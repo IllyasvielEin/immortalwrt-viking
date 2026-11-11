@@ -532,3 +532,237 @@ msgstr "LED 服务进程"
 
 msgid "A present network device does not mean a module is inserted. RC01 has no module-detect line, so the kernel infers presence from module I2C reads; persistent read failures also show as not detected, so this cannot prove the cage is empty. Module identity, EEPROM and optical diagnostics are not read. With presence mode enabled (system.led_sfp.rc01_presence=1) the LED is off without a detected module, lit with a module but no link, and shows link and activity with link; when detection is unavailable it keeps the link/activity LED."
 msgstr "网络设备存在不代表已插入模块。RC01 没有模块检测线，内核通过读取模块 I2C 推断在位；持续读取失败同样显示为未检出，因此不能据此证明笼位为空。此处不读取模块身份、EEPROM 或光学诊断。启用在位模式（system.led_sfp.rc01_presence=1）后，未检出模块时灯灭，检出模块但无链路时常亮，有链路时显示链路与活动；检测不可用时保留链路/活动灯。"
+
+msgid "Connectivity LED"
+msgstr "出口连通状态灯"
+
+msgid "Running; report is current"
+msgstr "运行中；报告为最新"
+
+msgid "Disabled in the configuration; the LEDs are not driven"
+msgstr "配置中已关闭；不驱动指示灯"
+
+msgid "Enabled but the service is not running (invalid configuration, other board, or stopped)"
+msgstr "已启用但服务未运行（配置无效、非本机型或已停止）"
+
+msgid "Starting; no report yet"
+msgstr "正在启动；尚无报告"
+
+msgid "Report is older than its validity bound; result withheld"
+msgstr "报告已超过有效期；不显示结果"
+
+msgid "Report unreadable; result withheld"
+msgstr "报告无法读取；不显示结果"
+
+msgid "All enabled families reach a target"
+msgstr "所有已启用协议族均可到达目标"
+
+msgid "Only some enabled families reach a target"
+msgstr "仅部分已启用协议族可到达目标"
+
+msgid "No enabled family reaches a target"
+msgstr "已启用协议族均无法到达目标"
+
+msgid "Not determined yet, or probes are failing"
+msgstr "尚未确定，或探测无法执行"
+
+msgid "Reachable: a target answered ICMP echo"
+msgstr "可达：有目标响应 ICMP echo"
+
+msgid "Unreachable: a route exists but no target answered"
+msgstr "不可达：有路由但无目标响应"
+
+msgid "No applicable route or source address for this family"
+msgstr "该协议族无适用路由或源地址"
+
+msgid "Chosen interface is missing, down or has no device"
+msgstr "指定接口不存在、未启动或无设备"
+
+msgid "Stale: the probes could not run; the earlier result is withheld"
+msgstr "已过时：探测无法执行，不再显示先前结果"
+
+msgid "Unknown: no confirmed result yet"
+msgstr "未知：尚无确认结果"
+
+msgid "reply"
+msgstr "有响应"
+
+msgid "no reply"
+msgstr "无响应"
+
+msgid "no route/address"
+msgstr "无路由/地址"
+
+msgid "interface unavailable"
+msgstr "接口不可用"
+
+msgid "probe error"
+msgstr "探测错误"
+
+msgid "Driven by this service"
+msgstr "由本服务控制"
+
+msgid "Driven by this service; last write failed, retrying"
+msgstr "由本服务控制；上次写入失败，将重试"
+
+msgid "Left alone: another trigger was selected"
+msgstr "已让出：已选择其他触发器"
+
+msgid "Not driven: configured under System → LED Configuration, or LEDs turned off"
+msgstr "未控制：已在“系统 → LED 配置”中设置，或已关闭所有指示灯"
+
+msgid "LED not found"
+msgstr "未找到指示灯"
+
+msgid "on"
+msgstr "常亮"
+
+msgid "off"
+msgstr "熄灭"
+
+msgid "blinking"
+msgstr "闪烁"
+
+msgid "none yet"
+msgstr "暂无"
+
+msgid "automatic (kernel route)"
+msgstr "自动（内核路由）"
+
+msgid "last"
+msgstr "最近"
+
+msgid "streak"
+msgstr "连续计数"
+
+msgid "Connectivity status is unavailable. Previous values are no longer current."
+msgstr "无法获取连通状态，先前数值已失效。"
+
+msgid "Service"
+msgstr "服务"
+
+msgid "Overall"
+msgstr "总体"
+
+msgid "report age"
+msgstr "报告时长"
+
+msgid "rounds"
+msgstr "轮次"
+
+msgid "confirm"
+msgstr "确认"
+
+msgid "recover"
+msgstr "恢复"
+
+msgid "Family"
+msgstr "协议族"
+
+msgid "Egress"
+msgstr "出口"
+
+msgid "Targets"
+msgstr "目标"
+
+msgid "Last round · ok/bad/error streak"
+msgstr "最近一轮 · 成功/失败/错误连续计数"
+
+msgid "LED"
+msgstr "指示灯"
+
+msgid "Control"
+msgstr "控制"
+
+msgid "Shown"
+msgstr "显示"
+
+msgid "At most %d targets"
+msgstr "最多 %d 个目标"
+
+msgid "Use a unicast %s address (not loopback, link-local or multicast)"
+msgstr "请使用单播 %s 地址（不可为回环、链路本地或组播地址）"
+
+msgid "Whole number without leading zeros"
+msgstr "不带前导零的整数"
+
+msgid "Shows ICMP echo reachability from the chosen egress to the configured target addresses on the front network LEDs (white and amber). It does not test DNS, web pages or proxies: networks that filter ICMP can show unreachable while other traffic works, and a lit white LED does not prove that DNS, web or proxy traffic works. System status, RGB, Ethernet port and SFP LEDs are not touched."
+msgstr "用机身 network 指示灯（白色、琥珀色）显示所选出口到配置目标地址的 ICMP echo 可达性。不检测 DNS、网页或代理：过滤 ICMP 的网络可能显示不可达而其他流量正常；白灯亮起也不代表 DNS、网页或代理可用。不改变系统状态灯、RGB、网口灯和 SFP 灯。"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Off by default. While enabled the service drives the white:network and amber:network LEDs unless a System → LED Configuration entry names them. Stopping turns both off again (board default)."
+msgstr "默认关闭。启用后，服务控制 white:network 和 amber:network 指示灯；若“系统 → LED 配置”已设置某灯，则不接管该灯。停止后两灯恢复熄灭（板级默认）。"
+
+msgid "Check %s"
+msgstr "检测 %s"
+
+msgid "With both families enabled, one reachable family shows as partial (white blinking)."
+msgstr "两个协议族都启用时，仅一个可达显示为部分可达（白灯闪烁）。"
+
+msgid "%s targets"
+msgstr "%s 目标"
+
+msgid "1 to %d addresses. The family counts as reachable when any of them answers; one failing target alone does not mark the egress down. Defaults are public anycast DNS resolvers (AliDNS, DNSPod) and can be replaced."
+msgstr "1 至 %d 个地址。任一地址响应即判定该协议族可达；单个目标失败不会判定出口失联。默认值为公共任播 DNS 解析器（阿里 DNS、DNSPod），可替换。"
+
+msgid "%s egress"
+msgstr "%s 出口"
+
+msgid "\"auto\" follows the kernel route to each target (works with the LAN DHCP bypass, where the default route is on lan). A named interface pins the probe to its device; if that interface is missing or down the family shows \"interface unavailable\", and without a route through it \"no applicable route\"."
+msgstr "“auto”按内核到各目标的路由选择出口（适用于 LAN DHCP 旁路，默认路由位于 lan）。指定接口时探测绑定到该接口设备；接口不存在或未启动显示“接口不可用”，经该接口无路由则显示“无适用路由”。"
+
+msgid "auto (default route)"
+msgstr "auto（默认路由）"
+
+msgid "Interval (s)"
+msgstr "间隔（秒）"
+
+msgid "Seconds between rounds, 10 to 3600."
+msgstr "两轮探测之间的秒数，10 至 3600。"
+
+msgid "Reply timeout (s)"
+msgstr "响应超时（秒）"
+
+msgid "Wait per echo, 1 to 5 s. Each command also has a hard time bound."
+msgstr "每次 echo 等待 1 至 5 秒；每条命令另有强制时限。"
+
+msgid "Failure confirmation (rounds)"
+msgstr "失败确认（轮）"
+
+msgid "Consecutive failed rounds before a family is shown unreachable, 1 to 10. The same number of rounds where the probes cannot run turns a result into stale."
+msgstr "连续失败多少轮后显示不可达，1 至 10。连续相同轮数无法执行探测时，结果转为过时。"
+
+msgid "Recovery confirmation (rounds)"
+msgstr "恢复确认（轮）"
+
+msgid "Consecutive successful rounds before an unreachable family is shown reachable again, 1 to 10."
+msgstr "不可达后需连续成功多少轮才恢复显示可达，1 至 10。"
+
+msgid "Current state"
+msgstr "当前状态"
+
+msgid "LED meaning"
+msgstr "灯态含义"
+
+msgid "White steady: every enabled family reaches a target."
+msgstr "白灯常亮：所有已启用协议族均可到达目标。"
+
+msgid "White blinking: some enabled families reach a target, others do not or are not confirmed."
+msgstr "白灯闪烁：部分已启用协议族可到达目标，其余不可达或未确认。"
+
+msgid "Amber steady: no enabled family reaches a target (unreachable, no route, or interface unavailable)."
+msgstr "琥珀灯常亮：已启用协议族均无法到达目标（不可达、无路由或接口不可用）。"
+
+msgid "Amber blinking: not determined yet, or the probes keep failing to run (stale)."
+msgstr "琥珀灯闪烁：尚未确定，或探测持续无法执行（过时）。"
+
+msgid "Both off: service disabled or stopped, or the LEDs are configured elsewhere."
+msgstr "两灯均灭：服务关闭或已停止，或指示灯由其他配置控制。"
+
+msgid "Results change only after the configured number of consecutive rounds. After a configuration change or restart the service starts again from unknown."
+msgstr "结果需达到配置的连续轮数才会改变。配置更改或重启后，服务从未知状态重新开始。"
