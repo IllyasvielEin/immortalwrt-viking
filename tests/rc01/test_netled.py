@@ -27,6 +27,28 @@ BUSYBOX = os.environ.get("BUSYBOX") or shutil.which("busybox")
 SHELLS = [s for s in ("dash", "busybox") if (BUSYBOX if s == "busybox" else shutil.which(s))]
 APPLETS = ("timeout", "sleep", "mv", "rm", "mkdir", "cat")
 
+
+def busybox_escape():
+    """Return why BUSYBOX cannot be used safely, or None.
+
+    With FEATURE_PREFER_APPLETS its timeout runs its own ip/ping applets
+    instead of the PATH stubs, i.e. real routing queries and ICMP.
+    """
+    with tempfile.TemporaryDirectory(prefix="rc01-netled-busybox-") as temporary:
+        path = Path(temporary)
+        (path / "echo").write_text("#!/bin/sh\nprintf stub\n")
+        (path / "echo").chmod(0o755)
+        (path / "timeout").symlink_to(BUSYBOX)
+        result = subprocess.run([BUSYBOX, "sh", "-c", "timeout 1 echo applet"], env={"PATH": temporary},
+                                capture_output=True, text=True)
+    if result.stdout != "stub":
+        return ("BUSYBOX executes its own applets ahead of PATH (FEATURE_PREFER_APPLETS); "
+                "ip/ping stubs would be bypassed. Use a fixture build without it.")
+    return None
+
+
+BUSYBOX_ESCAPE = busybox_escape() if "busybox" in SHELLS else None
+
 STUBS = {
     "ip": r'''#!/bin/sh
 echo "ip $*" >> "$WORK/calls"
@@ -123,6 +145,8 @@ class Fixture(unittest.TestCase):
     shell = SHELLS[0] if SHELLS else "sh"
 
     def setUp(self):
+        if BUSYBOX_ESCAPE:
+            self.fail(BUSYBOX_ESCAPE)
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-netled-test-")
         self.addCleanup(self.temporary.cleanup)
         self.work = Path(self.temporary.name)
