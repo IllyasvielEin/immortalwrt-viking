@@ -547,3 +547,136 @@ class ChannelHints(Status):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Shaped like the Linux 6.18 sfp driver debugfs "state" file (sfp_debug_state_show).
+def sfp_debug_state(moddef0, module="empty"):
+    return (f"Module state: {module}\nModule probe attempts: 0 0\nDevice state: up\nMain state: down\n"
+            "Fault recovery remaining retries: 5\nPHY probe remaining retries: 12\nSignalling rate: 0 kBd\n"
+            f"Rate select threshold: 0 kBd\nmoddef0: {moddef0}\nrx_los: 0\ntx_fault: 0\ntx_disable: 1\nrs0: 0\nrs1: 0")
+
+
+@unittest.skipUnless(UCODE, "ucode is required for the real status collector")
+class SfpStatus(Status):
+    def setUp(self):
+        super().setUp()
+        driver = self.root / "sys/bus/platform/drivers/sfp"
+        driver.mkdir(parents=True)
+        for entry in ("bind", "unbind", "uevent"):
+            (driver / entry).write_text("")
+        cage = self.root / "sys/devices/platform/sfp"
+        cage.mkdir(parents=True)
+        (driver / "sfp").symlink_to(cage)
+        self.write("sys/kernel/debug/sfp/state", sfp_debug_state(0))
+
+    def sfp(self):
+        return self.run_status()["state"]["sfp"]
+
+    def module(self, moddef0, carrier, module="present"):
+        self.write("sys/kernel/debug/sfp/state", sfp_debug_state(moddef0, module))
+        self.write("sys/class/net/sfp/carrier", carrier)
+
+    def test_three_basic_states(self):
+        for moddef0, carrier, status in ((0, 0, "not-detected"), (1, 0, "detected-no-link"), (1, 1, "link")):
+            with self.subTest(status=status):
+                self.module(moddef0, carrier)
+                state = self.run_status()["state"]
+                sfp = state["sfp"]
+                self.assertEqual(sfp["status"], status)
+                self.assertEqual(sfp["presence"]["status"], "ok")
+                self.assertEqual(sfp["presence"]["detected"], moddef0 == 1)
+                self.assertEqual(sfp["presence"]["source"], "debugfs:sfp/state")
+                self.assertEqual(sfp["presence"]["method"], "i2c-inferred")
+                self.assertEqual(sfp["presence"]["module_state"], "present")
+                self.assertEqual(sfp["carrier"], carrier)
+                self.assertEqual(sfp["sampled_at"], 1000.0)
+                # The net device exists in every case; it is not a module.
+                self.assertTrue([p for p in state["ports"] if p["name"] == "sfp"][0]["present"])
+
+    def test_unavailable_presence_is_unknown_not_empty(self):
+        cases = {
+            "driver-missing": lambda: shutil.rmtree(self.root / "sys/bus/platform/drivers/sfp"),
+            "missing": lambda: shutil.rmtree(self.root / "sys/kernel/debug/sfp"),
+            "malformed": lambda: self.write("sys/kernel/debug/sfp/state", "Module state: empty\nmoddef0: maybe"),
+            "truncated": lambda: self.write("sys/kernel/debug/sfp/state", sfp_debug_state(1) + "\n" + "x" * 5000),
+            "ambiguous": lambda: (self.root / "sys/bus/platform/drivers/sfp/sfp2").symlink_to(self.root / "sys/devices/platform/sfp"),
+        }
+        if os.geteuid() != 0:
+            cases["unreadable"] = lambda: (self.root / "sys/kernel/debug/sfp/state").chmod(0)
+        for expected, damage in cases.items():
+            with self.subTest(expected=expected):
+                self.setUp()
+                self.write("sys/class/net/sfp/carrier", 1)
+                damage()
+                sfp = self.sfp()
+                self.assertEqual(sfp["status"], "unknown")
+                self.assertEqual(sfp["presence"]["status"], expected)
+                self.assertIsNone(sfp["presence"]["detected"])
+                # Link is still reported on its own.
+                self.assertEqual(sfp["carrier"], 1)
+
+    def test_unreadable_carrier_is_not_no_link(self):
+        self.module(1, "")
+        (self.root / "sys/class/net/sfp/carrier").write_text("")
+        sfp = self.sfp()
+        self.assertEqual((sfp["status"], sfp["carrier"], sfp["carrier_status"]), ("detected-link-unknown", None, "unreadable"))
+        (self.root / "sys/class/net/sfp/carrier").unlink()
+        self.assertEqual(self.sfp()["status"], "detected-link-unknown")
+        self.module(0, "")
+        (self.root / "sys/class/net/sfp/carrier").unlink()
+        self.assertEqual(self.sfp()["status"], "not-detected")
+
+    def test_missing_interface_is_distinct(self):
+        self.module(1, 1)
+        shutil.rmtree(self.root / "sys/class/net/sfp")
+        sfp = self.sfp()
+        self.assertEqual((sfp["status"], sfp["interface_present"], sfp["carrier_status"]),
+                         ("interface-missing", False, "interface-missing"))
+        self.assertTrue(sfp["presence"]["detected"])
+
+    def test_led_mode_and_controller_presence(self):
+        led = self.sfp()["led"]
+        self.assertEqual(led, {"presence_mode": False, "controller": "absent"})
+        self.config["system"] = {"led_sfp": {".type": "led", "rc01_presence": "1"}}
+        self.write("proc/90/comm", "rc01-sfp-led")
+        self.write("proc/90/status", "Name:\trc01-sfp-led\nPPid:\t1\n")
+        self.write("proc/91/comm", "rc01-sfp-led")
+        self.write("proc/91/status", "Name:\trc01-sfp-led\nPPid:\t90\n")
+        self.assertEqual(self.sfp()["led"], {"presence_mode": True, "controller": "running"})
+        self.write("proc/92/comm", "rc01-sfp-led")
+        self.write("proc/92/status", "Name:\trc01-sfp-led\nPPid:\t1\n")
+        self.assertEqual(self.sfp()["led"]["controller"], "multiple")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required to render the collected state")
+    def test_collected_states_render_on_the_page(self):
+        view = ROOT / "package/emortal/luci-app-rc01/htdocs/luci-static/resources/view/status/rc01.js"
+        program = r"""
+const fs = require('fs');
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, { declare: () => () => null }, { add: () => {} }, {}, E, v => v);
+process.stdout.write(JSON.stringify(api.render(JSON.parse(fs.readFileSync(0, 'utf8')))));
+"""
+        for moddef0, carrier, text in ((0, 0, "No module detected by the kernel"), (1, 0, "Module detected, no link"),
+                                       (1, 1, "Module detected, link up"), (None, 1, "Unknown: module detection unavailable")):
+            with self.subTest(text=text):
+                if moddef0 is None:
+                    shutil.rmtree(self.root / "sys/kernel/debug/sfp")
+                else:
+                    self.module(moddef0, carrier)
+                result = self.run_status()
+                state = result["state"]
+                state["preflight"] = [result["result"]]
+                page = subprocess.run([shutil.which("node"), "-e", program, str(view)], input=json.dumps(state),
+                                      capture_output=True, text=True, timeout=10)
+                self.assertEqual(page.returncode, 0, page.stderr)
+                self.assertIn(text, page.stdout)
+
+    def test_collection_does_not_modify_the_fixture(self):
+        self.module(1, 1)
+        def fingerprint():
+            return sorted((str(p.relative_to(self.root)), p.stat().st_mode, p.read_bytes() if p.is_file() and not p.is_symlink() else b"")
+                          for p in self.root.rglob("*"))
+        before = fingerprint()
+        self.sfp()
+        self.assertEqual(before, fingerprint())

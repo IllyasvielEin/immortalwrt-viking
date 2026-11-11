@@ -226,6 +226,57 @@ refresh().then(() => {
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_sfp_states_render_and_unknown_never_shows_an_empty_cage(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r"""
+const fs = require('fs');
+const assert = require('assert');
+let refresh, responses = [];
+const rpc = { declare: () => () => Promise.resolve(responses.shift()) };
+const poll = { add: fn => { refresh = fn; } };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const dom = { content: (node, children) => { node.children = children; } };
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
+const base = (uptime, sfp) => ({ schema: 1, sampled_at: { uptime }, temperatures: [], fans: [], ports: [], processes: [],
+  radios: [], storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }], sfp });
+const sfp = (status, detected, carrier, extra) => ({ interface: 'sfp', interface_present: status !== 'interface-missing',
+  sampled_at: 100, status, carrier, carrier_status: carrier == null ? 'unreadable' : 'ok',
+  presence: { source: 'debugfs:sfp/state', method: 'i2c-inferred', status: 'ok', detected, module_state: detected ? 'present' : 'empty' },
+  led: { presence_mode: true, controller: 'running' }, ...extra });
+const node = api.render(base(100, sfp('link', true, 1)));
+let text = JSON.stringify(node);
+assert(text.includes('Module detected, link up'));
+assert(text.includes('Detected'));
+assert(text.includes('debugfs:sfp/state'));
+assert(text.includes('100 s'));
+assert(text.includes('does not mean a module is inserted'));
+assert(text.includes('cannot prove the cage is empty'));
+assert.strictEqual(api.handleSave, null);
+const steps = [
+  [ sfp('detected-no-link', true, 0), [ 'Module detected, no link' ], [ 'link up' ] ],
+  [ sfp('not-detected', false, 0, { led: { presence_mode: false, controller: 'absent' } }),
+    [ 'No module detected by the kernel', 'Not detected', 'Disabled (default link/activity LED)' ], [ 'Module detected' ] ],
+  [ sfp('unknown', null, 1, { presence: { source: 'debugfs:sfp/state', status: 'missing', detected: null, module_state: null } }),
+    [ 'Unknown: module detection unavailable', 'Kernel debug state not available' ], [ 'No module detected', 'Not detected', 'Module detected' ] ],
+  [ sfp('detected-link-unknown', true, null), [ 'Module detected, link state unreadable', 'Unreadable' ], [ 'link up', 'detected, no link' ] ],
+  [ sfp('interface-missing', true, null), [ 'SFP network device missing', 'sfp: Missing' ], [ 'Module detected,' ] ],
+  [ undefined, [], [ 'SFP port', 'Module detected', 'No module detected' ] ]
+];
+let chain = Promise.resolve();
+steps.forEach(([ value, present, absent ], i) => {
+  chain = chain.then(() => { responses.push(base(105 + i, value)); return refresh(); }).then(() => {
+    text = JSON.stringify(node);
+    for (const s of present) assert(text.includes(s), `${i}: missing ${s}`);
+    for (const s of absent) assert(!text.includes(s), `${i}: stale ${s}`);
+  });
+});
+chain.catch(e => { console.error(e); process.exitCode = 1; });
+"""
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

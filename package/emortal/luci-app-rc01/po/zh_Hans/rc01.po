@@ -457,3 +457,78 @@ msgstr "无"
 
 msgid "Advisory only: compares the configured band and primary channel with the frequency list the driver reports for the matching phy. Channel width, country, DFS/CAC and transmit legality are not checked, nothing is changed, and radio startup is not blocked. Configured state does not confirm whether a radio is transmitting."
 msgstr "仅作提示：将配置的频段和主信道与驱动为对应 PHY 报告的频率列表比较。不检查信道带宽、国家/地区、DFS/CAC 或发射合法性，不修改任何配置，也不阻止无线启动。配置状态不能确认无线正在发射。"
+
+msgid "Module detected, link up"
+msgstr "已检出模块，链路已连接"
+
+msgid "Module detected, no link"
+msgstr "已检出模块，无链路"
+
+msgid "Module detected, link state unreadable"
+msgstr "已检出模块，链路状态不可读"
+
+msgid "No module detected by the kernel"
+msgstr "内核未检出模块"
+
+msgid "Unknown: module detection unavailable"
+msgstr "未知：模块检测状态不可用"
+
+msgid "SFP network device missing"
+msgstr "SFP 网络设备缺失"
+
+msgid "SFP driver not bound"
+msgstr "SFP 驱动未绑定"
+
+msgid "More than one SFP cage"
+msgstr "存在多个 SFP 笼"
+
+msgid "Kernel debug state not available"
+msgstr "内核调试状态不可用"
+
+msgid "SFP port"
+msgstr "SFP 端口"
+
+msgid "State"
+msgstr "状态"
+
+msgid "Network device"
+msgstr "网络设备"
+
+msgid "Module detection source"
+msgstr "模块检测来源"
+
+msgid "kernel I2C presence probe"
+msgstr "内核 I2C 在位探测"
+
+msgid "Kernel module detection"
+msgstr "内核模块检测"
+
+msgid "Detected"
+msgstr "已检出"
+
+msgid "Not detected"
+msgstr "未检出"
+
+msgid "Kernel module state"
+msgstr "内核模块状态"
+
+msgid "Link (carrier)"
+msgstr "链路（carrier）"
+
+msgid "Unreadable"
+msgstr "不可读"
+
+msgid "Sampled at uptime"
+msgstr "采样时运行时间"
+
+msgid "LED presence mode"
+msgstr "LED 在位模式"
+
+msgid "Disabled (default link/activity LED)"
+msgstr "未启用（默认链路/活动灯）"
+
+msgid "LED service process"
+msgstr "LED 服务进程"
+
+msgid "A present network device does not mean a module is inserted. RC01 has no module-detect line, so the kernel infers presence from module I2C reads; persistent read failures also show as not detected, so this cannot prove the cage is empty. Module identity, EEPROM and optical diagnostics are not read. With presence mode enabled (system.led_sfp.rc01_presence=1) the LED is off without a detected module, lit with a module but no link, and shows link and activity with link; when detection is unavailable it keeps the link/activity LED."
+msgstr "网络设备存在不代表已插入模块。RC01 没有模块检测线，内核通过读取模块 I2C 推断在位；持续读取失败同样显示为未检出，因此不能据此证明笼位为空。此处不读取模块身份、EEPROM 或光学诊断。启用在位模式（system.led_sfp.rc01_presence=1）后，未检出模块时灯灭，检出模块但无链路时常亮，有链路时显示链路与活动；检测不可用时保留链路/活动灯。"

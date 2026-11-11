@@ -343,6 +343,50 @@ function wireless_state(root, uci, now, query) {
 		hints: map(devices, d => channel_hint(root, d, phys)) };
 }
 
+// SFP cage state as the kernel sfp driver sees it. The net device existing
+// says nothing about a module: presence is the driver's moddef0 bit from its
+// debugfs state file. RC01 wires no MOD_DEF0 GPIO, so the kernel infers
+// presence from an I2C read of the module EEPROM; repeated read failures also
+// clear it, so "not detected" cannot prove the cage is physically empty.
+// No EEPROM, identity or DDM data is read here.
+const SFP_DRIVER_ENTRIES = [ 'bind', 'unbind', 'uevent', 'module', 'new_id', 'remove_id' ];
+
+function sfp_presence(root) {
+	let cages = filter(lsdir(root + '/sys/bus/platform/drivers/sfp') || [], n => index(SFP_DRIVER_ENTRIES, n) < 0);
+	let result = { source: 'debugfs:<cage>/state', method: 'i2c-inferred', cage: null, detected: null, module_state: null };
+	if (length(cages) != 1) {
+		result.status = length(cages) ? 'ambiguous' : 'driver-missing';
+		return result;
+	}
+	result.cage = cages[0];
+	result.source = 'debugfs:' + cages[0] + '/state';
+	let read = bounded(root + '/sys/kernel/debug/' + cages[0] + '/state', 4096);
+	result.status = read.status;
+	if (read.status != 'ok') return result;
+	let moddef0 = match(read.data, /(^|\n)moddef0: ([01])\n/);
+	if (!moddef0) { result.status = 'malformed'; return result; }
+	result.detected = moddef0[2] == '1';
+	result.module_state = match(read.data, /(^|\n)Module state: ([a-z]+)\n/)?.[2];
+	return result;
+}
+
+function sfp_state(root, uci, now, port, processes) {
+	let presence = sfp_presence(root);
+	let carrier = port.present ? (port.carrier == 0 || port.carrier == 1 ? port.carrier : null) : null;
+	let status;
+	if (!port.present) status = 'interface-missing';
+	else if (presence.status != 'ok') status = 'unknown';
+	else if (carrier == 1) status = 'link';
+	else if (!presence.detected) status = 'not-detected';
+	else status = carrier == null ? 'detected-link-unknown' : 'detected-no-link';
+	let controller = filter(processes, p => p.name == 'rc01-sfp-led');
+	return { interface: port.name, interface_present: port.present, sampled_at: now, status,
+		carrier, carrier_status: !port.present ? 'interface-missing' : carrier == null ? 'unreadable' : 'ok',
+		operstate: port.state, presence,
+		led: { presence_mode: enabled(uci?.get('system', 'led_sfp', 'rc01_presence')),
+			controller: length(controller) == 1 ? 'running' : length(controller) ? 'multiple' : 'absent' } };
+}
+
 function executable(path) {
 	let file = stat(path);
 	return file?.type == 'file' && (file.mode & 73) != 0;
@@ -422,15 +466,17 @@ export function collect(root, uci, cache, wiphy_query) {
 	}
 	for (let path in glob(root + '/proc/[0-9]*/comm') || []) {
 		let name = text(path);
-		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', 'rc01-fan-guard' ], name) < 0) continue;
+		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', 'rc01-fan-guard', 'rc01-sfp-led' ], name) < 0) continue;
 		let status = readfile(replace(path, /comm$/, 'status')) || '';
 		let rss = match(status, /(^|\n)VmRSS:\s+(\d+) kB/), ppid = match(status, /(^|\n)PPid:\s+(\d+)/);
 		push(processes, { name, pid: int(split(path, '/')[-2]), ppid: ppid ? int(ppid[2]) : null, rss_kib: rss ? int(rss[2]) : null });
 	}
-	// The shell guard forks short-lived subshells for command substitution;
-	// they keep its name but are not separate guard instances.
-	let guard_pids = map(filter(processes, p => p.name == 'rc01-fan-guard'), p => p.pid);
-	processes = filter(processes, p => p.name != 'rc01-fan-guard' || index(guard_pids, p.ppid) < 0);
+	// The shell services fork short-lived subshells that keep their name;
+	// these are not separate instances.
+	for (let service in [ 'rc01-fan-guard', 'rc01-sfp-led' ]) {
+		let pids = map(filter(processes, p => p.name == service), p => p.pid);
+		processes = filter(processes, p => p.name != service || index(pids, p.ppid) < 0);
+	}
 	uci?.foreach('wireless', 'wifi-device', s => push(radios, { name: s['.name'], disabled: enabled(s.disabled) }));
 	let defaults = [];
 	uci?.foreach('firewall', 'defaults', s => {
@@ -471,6 +517,7 @@ export function collect(root, uci, cache, wiphy_query) {
 			overlay_available_bytes: overlay ? overlay.bavail * overlay.frsize : null },
 		ppe: ppe_state(root, now),
 		wireless: wireless_state(root, uci, now, wiphy_query),
+		sfp: sfp_state(root, uci, now, filter(ports, p => p.name == 'sfp')[0], processes),
 		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,
 			nikki_installed: executable(root + '/usr/libexec/mihomo'),
 			daed_installed: executable(root + '/usr/bin/daed'),

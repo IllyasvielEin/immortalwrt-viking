@@ -185,6 +185,46 @@ function wirelessSection(state) {
 	];
 }
 
+const SFP_STATUS = {
+	link: () => _('Module detected, link up'),
+	'detected-no-link': () => _('Module detected, no link'),
+	'detected-link-unknown': () => _('Module detected, link state unreadable'),
+	'not-detected': () => _('No module detected by the kernel'),
+	unknown: () => _('Unknown: module detection unavailable'),
+	'interface-missing': () => _('SFP network device missing')
+};
+
+const SFP_PRESENCE = {
+	ok: () => _('Available'),
+	'driver-missing': () => _('SFP driver not bound'),
+	ambiguous: () => _('More than one SFP cage'),
+	missing: () => _('Kernel debug state not available'),
+	unreadable: () => _('Present but unreadable'),
+	malformed: () => _('Unrecognized format; values withheld'),
+	truncated: () => _('Output exceeded the read bound; values withheld')
+};
+
+function sfpSection(sfp) {
+	if (!sfp) return [];
+	const presence = sfp.presence || {};
+	const led = sfp.led || {};
+	return [
+		E('h3', {}, _('SFP port')),
+		table([ _('Item'), _('Value') ], [
+			[ _('State'), described(SFP_STATUS, sfp.status) ],
+			[ _('Network device'), `${display(sfp.interface)}: ${sfp.interface_present ? _('Present') : _('Missing')}` ],
+			[ _('Module detection source'), `${described(SFP_PRESENCE, presence.status)} (${presence.source || '-'}; ${_('kernel I2C presence probe')})` ],
+			[ _('Kernel module detection'), presence.detected == null ? _('Unknown') : presence.detected ? _('Detected') : _('Not detected') ],
+			[ _('Kernel module state'), presence.module_state ],
+			[ _('Link (carrier)'), sfp.carrier == null ? _('Unreadable') : sfp.carrier ? _('Up') : _('Down') ],
+			[ _('Sampled at uptime'), seconds(sfp.sampled_at) ],
+			[ _('LED presence mode'), led.presence_mode ? _('Enabled') : _('Disabled (default link/activity LED)') ],
+			[ _('LED service process'), led.controller === 'running' ? _('Process present') : led.controller === 'multiple' ? _('More than one process') : _('Not running') ]
+		]),
+		E('p', {}, _('A present network device does not mean a module is inserted. RC01 has no module-detect line, so the kernel infers presence from module I2C reads; persistent read failures also show as not detected, so this cannot prove the cage is empty. Module identity, EEPROM and optical diagnostics are not read. With presence mode enabled (system.led_sfp.rc01_presence=1) the LED is off without a detected module, lit with a module but no link, and shows link and activity with link; when detection is unavailable it keeps the link/activity LED.'))
+	];
+}
+
 function contents(state, previous) {
 	if (state.schema !== 1 || !Array.isArray(state.preflight))
 		throw new Error(_('Invalid RC01 status response'));
@@ -212,6 +252,7 @@ function contents(state, previous) {
 		E('p', {}, _('Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures.')),
 		...ppeSection(state.ppe),
 		...wirelessSection(state),
+		...sfpSection(state.sfp),
 		E('h3', {}, _('Proxy processes')),
 		table([ _('Process'), _('PID'), _('RSS (KiB)') ], state.processes.map(p => [ p.name, p.pid, p.rss_kib ]))
 	];

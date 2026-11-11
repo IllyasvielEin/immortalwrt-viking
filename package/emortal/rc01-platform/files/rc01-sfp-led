@@ -1,0 +1,117 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+
+# Optional SFP LED states: off while the kernel has not detected a module,
+# lit while it has but the port has no carrier, and the configured netdev
+# link/activity trigger once there is carrier. Presence is not read here: the
+# kernel's own sfp-<cage>:present LED trigger follows it. This loop only
+# chooses between that trigger and netdev from the interface carrier. Without
+# a present trigger the LED stays on netdev (the default link/tx/rx policy).
+#
+# It manages one LED, and only while the LED shows one of the two triggers it
+# sets; any other trigger or netdev device means someone else took the LED
+# and it is left alone. On stop the netdev policy is put back.
+#
+# Arguments: <led sysfs name> <net device> <netdev interval> [mode...]
+RC01_SYSFS="${RC01_SYSFS:-/sys}"
+RC01_SFP_INTERVAL="${RC01_SFP_INTERVAL:-1}"
+
+rc01_sfp_init() {
+	RC01_SFP_LED="$RC01_SYSFS/class/leds/$1"
+	RC01_SFP_DEV="$2"
+	RC01_SFP_NETDEV_INTERVAL="$3"
+	shift 3
+	RC01_SFP_MODES="$*"
+	RC01_SFP_YIELDED=0
+}
+
+rc01_sfp_set_trigger() {
+	printf '%s\n' "$1" > "$RC01_SFP_LED/trigger"
+}
+
+# Selected trigger and the single kernel present trigger, from one read.
+rc01_sfp_triggers() {
+	local line word count=0
+	RC01_SFP_CURRENT=
+	RC01_SFP_PRESENT=
+	read -r line 2>/dev/null < "$RC01_SFP_LED/trigger" || return 1
+	for word in $line; do
+		case "$word" in
+		\[*\]) word="${word#?}"; word="${word%?}"; RC01_SFP_CURRENT="$word" ;;
+		esac
+		case "$word" in
+		sfp-*:present) count=$((count + 1)); RC01_SFP_PRESENT="$word" ;;
+		esac
+	done
+	[ "$count" -eq 1 ] || RC01_SFP_PRESENT=
+}
+
+rc01_sfp_owned() {
+	local device=
+	[ -n "$RC01_SFP_PRESENT" ] && [ "$RC01_SFP_CURRENT" = "$RC01_SFP_PRESENT" ] && return 0
+	[ "$RC01_SFP_CURRENT" = netdev ] || return 1
+	read -r device 2>/dev/null < "$RC01_SFP_LED/device_name"
+	[ "$device" = "$RC01_SFP_DEV" ]
+}
+
+# Same steps as /etc/init.d/led for a netdev LED.
+rc01_sfp_netdev() {
+	local mode offloaded=
+	rc01_sfp_set_trigger netdev || return 1
+	printf '%s\n' "$RC01_SFP_DEV" > "$RC01_SFP_LED/device_name" || return 1
+	for mode in $RC01_SFP_MODES; do
+		[ -e "$RC01_SFP_LED/$mode" ] && printf '1\n' > "$RC01_SFP_LED/$mode"
+	done
+	read -r offloaded 2>/dev/null < "$RC01_SFP_LED/offloaded"
+	[ "$offloaded" = 1 ] || printf '%s\n' "$RC01_SFP_NETDEV_INTERVAL" > "$RC01_SFP_LED/interval" 2>/dev/null
+	return 0
+}
+
+rc01_sfp_step() {
+	local carrier= want
+	rc01_sfp_triggers || return 0
+	if ! rc01_sfp_owned; then
+		[ "$RC01_SFP_YIELDED" = 1 ] ||
+			logger -t rc01-sfp-led "LED trigger changed to '$RC01_SFP_CURRENT'; leaving it alone"
+		RC01_SFP_YIELDED=1
+		return 0
+	fi
+	RC01_SFP_YIELDED=0
+	read -r carrier 2>/dev/null < "$RC01_SYSFS/class/net/$RC01_SFP_DEV/carrier"
+	if [ "$carrier" = 1 ] || [ -z "$RC01_SFP_PRESENT" ]; then
+		want=netdev
+	else
+		want="$RC01_SFP_PRESENT"
+	fi
+	[ "$want" = "$RC01_SFP_CURRENT" ] && return 0
+	if [ "$want" = netdev ]; then
+		rc01_sfp_netdev
+	else
+		rc01_sfp_set_trigger "$want"
+	fi
+}
+
+# Put back netdev only if the LED still shows the present trigger set here.
+rc01_sfp_restore() {
+	rc01_sfp_triggers || return 0
+	[ -n "$RC01_SFP_PRESENT" ] && [ "$RC01_SFP_CURRENT" = "$RC01_SFP_PRESENT" ] && rc01_sfp_netdev
+	return 0
+}
+
+rc01_sfp_main() {
+	[ "$#" -ge 3 ] || return 1
+	set -f
+	rc01_sfp_init "$@"
+	[ -e "$RC01_SFP_LED/trigger" ] || {
+		logger -t rc01-sfp-led "LED $1 not found"
+		return 1
+	}
+	trap 'rc01_sfp_restore; exit 0' INT TERM
+	while :; do
+		rc01_sfp_step
+		sleep "$RC01_SFP_INTERVAL" &
+		wait $!
+	done
+}
+
+[ "${RC01_SFP_LIBRARY:-0}" = 1 ] || rc01_sfp_main "$@"
