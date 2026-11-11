@@ -446,12 +446,80 @@ function layout_matches(root, contract) {
 	return true;
 }
 
+const SHELL_SERVICES = [ 'rc01-fan-guard', 'rc01-sfp-led', 'rc01-netled' ];
+
+function scan_processes(root) {
+	let processes = [];
+	for (let path in glob(root + '/proc/[0-9]*/comm') || []) {
+		let name = text(path);
+		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', ...SHELL_SERVICES ], name) < 0) continue;
+		let status = readfile(replace(path, /comm$/, 'status')) || '';
+		let rss = match(status, /(^|\n)VmRSS:\s+(\d+) kB/), ppid = match(status, /(^|\n)PPid:\s+(\d+)/);
+		push(processes, { name, pid: int(split(path, '/')[-2]), ppid: ppid ? int(ppid[2]) : null, rss_kib: rss ? int(rss[2]) : null });
+	}
+	// The shell services fork short-lived subshells that keep their name;
+	// these are not separate instances.
+	for (let service in SHELL_SERVICES) {
+		let pids = map(filter(processes, p => p.name == service), p => p.pid);
+		processes = filter(processes, p => p.name != service || index(pids, p.ppid) < 0);
+	}
+	return processes;
+}
+
+// Egress connectivity LED service report. The service rewrites its state
+// file every round; a report is only passed on while the configuration is
+// enabled, the writing process is the one running now and the report has
+// not outlived its own validity bound (interval plus worst-case round time).
+// Otherwise the status says why and no previous result is shown.
+const NETLED_STATE = '/var/run/rc01-netled/state.json';
+const NETLED_OVERALL = [ 'up', 'degraded', 'down', 'unknown' ];
+
+function netled_report(data) {
+	let report;
+	try { report = json(data); } catch (error) { return null; }
+	if (type(report) != 'object' || report.schema !== 1 || index(NETLED_OVERALL, report.overall) < 0 ||
+		type(report.pid) != 'int' || type(report.valid_until) != 'int' || type(report.updated_at) != 'int' ||
+		type(report.families?.ipv4) != 'object' || type(report.families?.ipv6) != 'object' || type(report.leds) != 'object')
+		return null;
+	return report;
+}
+
+function netled_state(root, uci, now, processes) {
+	let configured = enabled(uci?.get('rc01_netled', 'main', 'enabled'));
+	let pids = map(filter(processes, p => p.name == 'rc01-netled'), p => p.pid);
+	let result = { source: NETLED_STATE, sampled_at: now, configured_enabled: configured,
+		controller: length(pids) == 1 ? 'running' : length(pids) ? 'multiple' : 'absent', age: null, report: null };
+	let read = bounded(root + NETLED_STATE, 8192);
+	let report = read.status == 'ok' ? netled_report(read.data) : null;
+	if (!configured)
+		result.status = 'disabled';
+	else if (!length(pids))
+		result.status = 'not-running';
+	else if (read.status == 'missing')
+		result.status = 'starting';
+	else if (report == null)
+		result.status = read.status == 'ok' ? 'malformed' : read.status;
+	else if (index(pids, report.pid) < 0)
+		result.status = 'not-running';
+	else if (now == null || now > report.valid_until)
+		result.status = 'stale';
+	else
+		result.status = 'ok';
+	if (report != null && now != null) result.age = now - report.updated_at;
+	if (result.status == 'ok') result.report = report;
+	return result;
+}
+
+export function connectivity(uci) {
+	return netled_state('', uci, uptime(''), scan_processes(''));
+}
+
 export function collect(root, uci, cache, wiphy_query) {
 	root = root || '';
 	let now = uptime(root);
 	let read = (c, s, k) => uci?.get(c, s, k);
 	let board = text(root + '/tmp/sysinfo/board_name');
-	let temperatures = [], fans = [], ports = [], processes = [], radios = [];
+	let temperatures = [], fans = [], ports = [], processes, radios = [];
 	for (let path in glob(root + '/sys/class/thermal/thermal_zone*') || []) {
 		let milli = numeric(path + '/temp');
 		push(temperatures, { name: text(path + '/type'),
@@ -470,19 +538,7 @@ export function collect(root, uci, cache, wiphy_query) {
 			state: text(path + '/operstate'), carrier: numeric(path + '/carrier'),
 			speed_mbps: numeric(path + '/speed'), duplex: text(path + '/duplex') });
 	}
-	for (let path in glob(root + '/proc/[0-9]*/comm') || []) {
-		let name = text(path);
-		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', 'rc01-fan-guard', 'rc01-sfp-led' ], name) < 0) continue;
-		let status = readfile(replace(path, /comm$/, 'status')) || '';
-		let rss = match(status, /(^|\n)VmRSS:\s+(\d+) kB/), ppid = match(status, /(^|\n)PPid:\s+(\d+)/);
-		push(processes, { name, pid: int(split(path, '/')[-2]), ppid: ppid ? int(ppid[2]) : null, rss_kib: rss ? int(rss[2]) : null });
-	}
-	// The shell services fork short-lived subshells that keep their name;
-	// these are not separate instances.
-	for (let service in [ 'rc01-fan-guard', 'rc01-sfp-led' ]) {
-		let pids = map(filter(processes, p => p.name == service), p => p.pid);
-		processes = filter(processes, p => p.name != service || index(pids, p.ppid) < 0);
-	}
+	processes = scan_processes(root);
 	uci?.foreach('wireless', 'wifi-device', s => push(radios, { name: s['.name'], disabled: enabled(s.disabled) }));
 	let defaults = [];
 	uci?.foreach('firewall', 'defaults', s => {
@@ -524,6 +580,7 @@ export function collect(root, uci, cache, wiphy_query) {
 		ppe: ppe_state(root, now),
 		wireless: wireless_state(root, uci, now, wiphy_query),
 		sfp: sfp_state(root, uci, now, filter(ports, p => p.name == 'sfp')[0], processes),
+		connectivity: netled_state(root, uci, now, processes),
 		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,
 			nikki_installed: executable(root + '/usr/libexec/mihomo'),
 			daed_installed: executable(root + '/usr/bin/daed'),

@@ -1,0 +1,648 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+
+# Egress connectivity LED for the RC01 front "network" LEDs.
+#
+# Each round asks the kernel which route a target would use (ip route get,
+# optionally pinned to the device of a chosen logical interface) and sends
+# one ICMP echo to it. A family is reachable when any of its targets replies.
+# This is ICMP reachability from that egress to the configured targets only;
+# it says nothing about DNS, web or proxy health.
+#
+# Round outcome per family: ok, fail (path exists, no reply), nopath (no
+# applicable route or source address), unavail (chosen interface missing or
+# down), error (the probe itself failed: missing tool, killed by the time
+# bound, unparsable output). States only change after fail_count consecutive
+# bad rounds or recover_count good rounds; errors are neutral but fail_count
+# consecutive errors turn a result into stale, so an old success never stays.
+# Every process starts from unknown; nothing is carried across restarts.
+#
+# LEDs: up -> white on; degraded (some family up) -> white blinking;
+# down -> amber on; unknown/stale -> amber blinking. The service only drives
+# a LED while it still shows the trigger written last; a different trigger
+# means the user took it over and it is left alone until the next start.
+# Stopping puts back the board default (trigger none, off).
+#
+# Usage: rc01-netled check|run key=value...
+RC01_NETLED_SYSFS="${RC01_NETLED_SYSFS:-/sys}"
+RC01_NETLED_PROC="${RC01_NETLED_PROC:-/proc}"
+RC01_NETLED_RUN="${RC01_NETLED_RUN:-/var/run/rc01-netled}"
+RC01_NETLED_MAX_TARGETS=3
+RC01_NETLED_ROUTE_BOUND=3
+RC01_NETLED_UBUS_BOUND=5
+
+rc01_netled_log() {
+	logger -t rc01-netled "$*"
+}
+
+rc01_netled_uint_in() {
+	case "$1" in ''|*[!0-9]*|0?*) return 1 ;; esac
+	[ "${#1}" -le 5 ] && [ "$1" -ge "$2" ] && [ "$1" -le "$3" ]
+}
+
+# Unicast IPv4 in dotted-quad form; 0/8, loopback and 224/3 are refused.
+rc01_netled_valid_ipv4() {
+	local IFS=. part first= n=0
+	case "$1" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
+	for part in $1; do
+		rc01_netled_uint_in "$part" 0 255 || return 1
+		[ -n "$first" ] || first="$part"
+		n=$((n + 1))
+	done
+	[ "$n" = 4 ] && [ "$first" -ne 0 ] && [ "$first" -ne 127 ] && [ "$first" -lt 224 ]
+}
+
+rc01_netled_ipv6_groups() {
+	local IFS=: group
+	RC01_NETLED_GROUPS=0
+	[ -n "$1" ] || return 0
+	case "$1" in :*|*:) return 1 ;; esac
+	for group in $1; do
+		[ "${#group}" -ge 1 ] && [ "${#group}" -le 4 ] || return 1
+		RC01_NETLED_GROUPS=$((RC01_NETLED_GROUPS + 1))
+	done
+}
+
+# Plain hexadecimal IPv6 with at most one "::". Embedded IPv4, zone ids,
+# unspecified, loopback, link-local and multicast addresses are refused.
+rc01_netled_valid_ipv6() {
+	local address="$1" head tail count first
+	case "$address" in ''|*[!0-9A-Fa-f:]*|*:::*|*::*::*) return 1 ;; esac
+	[ "${#address}" -le 39 ] || return 1
+	case "$address" in
+	*::*)
+		head="${address%%::*}"
+		tail="${address#*::}"
+		rc01_netled_ipv6_groups "$head" || return 1
+		count="$RC01_NETLED_GROUPS"
+		rc01_netled_ipv6_groups "$tail" || return 1
+		[ $((count + RC01_NETLED_GROUPS)) -le 7 ] || return 1
+		;;
+	*)
+		rc01_netled_ipv6_groups "$address" || return 1
+		[ "$RC01_NETLED_GROUPS" = 8 ] || return 1
+		;;
+	esac
+	case "$address" in ::|::1|::0001|::01|::001) return 1 ;; esac
+	first="${address%%:*}"
+	[ "${#first}" = 4 ] || return 0
+	case "$first" in [fF][fF]??|[fF][eE][89aAbB]?) return 1 ;; esac
+}
+
+# A UCI interface name, or "auto" for the route the kernel picks.
+rc01_netled_valid_interface() {
+	case "$1" in ''|*[!A-Za-z0-9_]*) return 1 ;; esac
+}
+
+rc01_netled_valid_led() {
+	case "$1" in ''|*[!A-Za-z0-9:_.-]*|.*) return 1 ;; esac
+}
+
+rc01_netled_error() {
+	printf 'rc01-netled: %s\n' "$*" >&2
+	RC01_NETLED_INVALID=1
+}
+
+# Parse and validate key=value arguments. Values are only ever expanded in
+# double quotes and passed as separate arguments; nothing is evaluated.
+rc01_netled_parse() {
+	local arg key value
+	RC01_NETLED_INVALID=0
+	RC01_NETLED_V4=0 RC01_NETLED_V6=0
+	RC01_NETLED_T4= RC01_NETLED_T6= RC01_NETLED_N4=0 RC01_NETLED_N6=0
+	RC01_NETLED_IF4=auto RC01_NETLED_IF6=auto
+	RC01_NETLED_INTERVAL=30 RC01_NETLED_TIMEOUT=2
+	RC01_NETLED_FAIL=3 RC01_NETLED_RECOVER=2
+	RC01_NETLED_LED_W= RC01_NETLED_LED_A=
+	for arg in "$@"; do
+		key="${arg%%=*}"
+		value="${arg#*=}"
+		[ "$key" != "$arg" ] || { rc01_netled_error "argument '$arg' is not key=value"; continue; }
+		case "$key" in
+		ipv4|ipv6)
+			case "$value" in 0|1) ;; *) rc01_netled_error "$key must be 0 or 1"; continue ;; esac
+			[ "$key" = ipv4 ] && RC01_NETLED_V4="$value" || RC01_NETLED_V6="$value"
+			;;
+		ipv4_target)
+			rc01_netled_valid_ipv4 "$value" || { rc01_netled_error "invalid IPv4 target '$value'"; continue; }
+			RC01_NETLED_T4="$RC01_NETLED_T4 $value"
+			RC01_NETLED_N4=$((RC01_NETLED_N4 + 1))
+			;;
+		ipv6_target)
+			rc01_netled_valid_ipv6 "$value" || { rc01_netled_error "invalid IPv6 target '$value'"; continue; }
+			RC01_NETLED_T6="$RC01_NETLED_T6 $value"
+			RC01_NETLED_N6=$((RC01_NETLED_N6 + 1))
+			;;
+		ipv4_interface|ipv6_interface)
+			rc01_netled_valid_interface "$value" || { rc01_netled_error "invalid $key '$value'"; continue; }
+			[ "$key" = ipv4_interface ] && RC01_NETLED_IF4="$value" || RC01_NETLED_IF6="$value"
+			;;
+		interval)
+			rc01_netled_uint_in "$value" 10 3600 || rc01_netled_error "interval must be 10..3600 seconds"
+			RC01_NETLED_INTERVAL="$value"
+			;;
+		timeout)
+			rc01_netled_uint_in "$value" 1 5 || rc01_netled_error "timeout must be 1..5 seconds"
+			RC01_NETLED_TIMEOUT="$value"
+			;;
+		fail_count)
+			rc01_netled_uint_in "$value" 1 10 || rc01_netled_error "fail_count must be 1..10"
+			RC01_NETLED_FAIL="$value"
+			;;
+		recover_count)
+			rc01_netled_uint_in "$value" 1 10 || rc01_netled_error "recover_count must be 1..10"
+			RC01_NETLED_RECOVER="$value"
+			;;
+		led_white|led_amber)
+			[ -z "$value" ] || rc01_netled_valid_led "$value" || { rc01_netled_error "invalid LED name '$value'"; continue; }
+			[ "$key" = led_white ] && RC01_NETLED_LED_W="$value" || RC01_NETLED_LED_A="$value"
+			;;
+		*) rc01_netled_error "unknown option '$key'" ;;
+		esac
+	done
+	RC01_NETLED_T4="${RC01_NETLED_T4# }"
+	RC01_NETLED_T6="${RC01_NETLED_T6# }"
+	[ "$RC01_NETLED_V4" = 1 ] || [ "$RC01_NETLED_V6" = 1 ] || rc01_netled_error "enable IPv4 or IPv6"
+	if [ "$RC01_NETLED_V4" = 1 ]; then
+		[ "$RC01_NETLED_N4" -ge 1 ] && [ "$RC01_NETLED_N4" -le "$RC01_NETLED_MAX_TARGETS" ] ||
+			rc01_netled_error "IPv4 needs 1..$RC01_NETLED_MAX_TARGETS targets"
+	fi
+	if [ "$RC01_NETLED_V6" = 1 ]; then
+		[ "$RC01_NETLED_N6" -ge 1 ] && [ "$RC01_NETLED_N6" -le "$RC01_NETLED_MAX_TARGETS" ] ||
+			rc01_netled_error "IPv6 needs 1..$RC01_NETLED_MAX_TARGETS targets"
+	fi
+	[ "$RC01_NETLED_INVALID" = 0 ]
+}
+
+rc01_netled_uptime() {
+	local value rest
+	read -r value rest 2>/dev/null < "$RC01_NETLED_PROC/uptime" || value=
+	value="${value%%.*}"
+	case "$value" in ''|*[!0-9]*) RC01_NETLED_NOW=0 ;; *) RC01_NETLED_NOW="$value" ;; esac
+}
+
+# Run one command under a hard time bound with output to a file. Runs in the
+# background so a stop signal is handled at once rather than after the probe.
+rc01_netled_bounded() {
+	local seconds="$1" output="$2" status
+	shift 2
+	timeout -s KILL "$seconds" "$@" > "$output" 2>/dev/null &
+	RC01_NETLED_CHILD=$!
+	wait "$RC01_NETLED_CHILD"
+	status=$?
+	RC01_NETLED_CHILD=
+	return "$status"
+}
+
+# Device of a logical interface that is up: sets RC01_NETLED_EGRESS to
+# ok/unavail/error and RC01_NETLED_EGRESS_DEV.
+rc01_netled_egress() {
+	local iface="$1" file="$RC01_NETLED_RUN/ifstatus" up dev
+	RC01_NETLED_EGRESS_DEV=
+	rc01_netled_bounded "$RC01_NETLED_UBUS_BOUND" "$file" ubus -t 3 call "network.interface.$iface" status
+	case "$?" in
+	0) ;;
+	4) RC01_NETLED_EGRESS=unavail RC01_NETLED_REASON=interface-missing; return ;;
+	*) RC01_NETLED_EGRESS=error RC01_NETLED_REASON=interface-query-failed; return ;;
+	esac
+	up="$(jsonfilter -i "$file" -e '@.up' 2>/dev/null)"
+	dev="$(jsonfilter -i "$file" -e '@.l3_device' 2>/dev/null)"
+	case "$up" in
+	true|1) ;;
+	false|0) RC01_NETLED_EGRESS=unavail RC01_NETLED_REASON=interface-down; return ;;
+	*) RC01_NETLED_EGRESS=error RC01_NETLED_REASON=interface-query-failed; return ;;
+	esac
+	case "$dev" in
+	''|*[!A-Za-z0-9_.@-]*) RC01_NETLED_EGRESS=unavail RC01_NETLED_REASON=interface-no-device; return ;;
+	esac
+	RC01_NETLED_EGRESS=ok
+	RC01_NETLED_EGRESS_DEV="$dev"
+}
+
+# Route the kernel would use for one target: sets RC01_NETLED_ROUTE to
+# ok/nopath/error, plus RC01_NETLED_ROUTE_DEV.
+rc01_netled_route() {
+	local family="$1" target="$2" dev="$3" file="$RC01_NETLED_RUN/route" line first word next src= rdev=
+	RC01_NETLED_ROUTE_DEV=
+	if [ -n "$dev" ]; then
+		rc01_netled_bounded "$RC01_NETLED_ROUTE_BOUND" "$file" ip "-$family" route get "$target" oif "$dev"
+	else
+		rc01_netled_bounded "$RC01_NETLED_ROUTE_BOUND" "$file" ip "-$family" route get "$target"
+	fi
+	case "$?" in
+	0) ;;
+	1|2) RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON=no-route; return ;;
+	*) RC01_NETLED_ROUTE=error RC01_NETLED_REASON=route-query-failed; return ;;
+	esac
+	read -r line 2>/dev/null < "$file" || line=
+	set -- $line
+	first="$1"
+	next=
+	for word in "$@"; do
+		case "$next" in
+		dev) rdev="$word" ;;
+		src) src="$word" ;;
+		esac
+		next="$word"
+	done
+	case "$first" in
+	*[.:]*) ;;
+	'') RC01_NETLED_ROUTE=error RC01_NETLED_REASON=route-unparsable; return ;;
+	# unreachable, blackhole, prohibit, local, ...: no usable egress.
+	*[!a-z]*) RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON=route-unusable; return ;;
+	*) RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON="route-$first"; return ;;
+	esac
+	case "$rdev" in
+	'') RC01_NETLED_ROUTE=error RC01_NETLED_REASON=route-unparsable; return ;;
+	lo) RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON=route-local; return ;;
+	# Only shown in the report; keep it valid JSON.
+	*[!A-Za-z0-9_.@-]*) rdev= ;;
+	esac
+	case "$src" in
+	'') RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON=no-source-address; return ;;
+	[fF][eE][89aAbB]?:*) RC01_NETLED_ROUTE=nopath RC01_NETLED_REASON=no-source-address; return ;;
+	esac
+	RC01_NETLED_ROUTE=ok
+	RC01_NETLED_ROUTE_DEV="$rdev"
+}
+
+# One round for one family: sets RC01_NETLED_OUTCOME, RC01_NETLED_REASON,
+# RC01_NETLED_DEV and RC01_NETLED_TARGET. Targets are tried in order and the
+# first reply ends the round, so at most one probe per target runs, one at a
+# time, each within timeout+2 seconds.
+rc01_netled_probe() {
+	local family="$1" targets="$2" iface="$3" dev= target saw_fail=0 saw_error=0 reason=
+	RC01_NETLED_DEV= RC01_NETLED_TARGET= RC01_NETLED_REASON=
+	if [ "$iface" != auto ]; then
+		rc01_netled_egress "$iface"
+		case "$RC01_NETLED_EGRESS" in
+		ok) dev="$RC01_NETLED_EGRESS_DEV" ;;
+		*) RC01_NETLED_OUTCOME="$RC01_NETLED_EGRESS"; return ;;
+		esac
+		RC01_NETLED_DEV="$dev"
+	fi
+	for target in $targets; do
+		RC01_NETLED_TARGET="$target"
+		rc01_netled_route "$family" "$target" "$dev"
+		case "$RC01_NETLED_ROUTE" in
+		error) saw_error=1; reason="$RC01_NETLED_REASON"; continue ;;
+		nopath) [ -n "$reason" ] || reason="$RC01_NETLED_REASON"; continue ;;
+		esac
+		RC01_NETLED_DEV="$RC01_NETLED_ROUTE_DEV"
+		if [ -n "$dev" ]; then
+			rc01_netled_bounded $((RC01_NETLED_TIMEOUT + 2)) /dev/null \
+				ping "-$family" -q -c 1 -W "$RC01_NETLED_TIMEOUT" -I "$dev" "$target"
+		else
+			rc01_netled_bounded $((RC01_NETLED_TIMEOUT + 2)) /dev/null \
+				ping "-$family" -q -c 1 -W "$RC01_NETLED_TIMEOUT" "$target"
+		fi
+		case "$?" in
+		0) RC01_NETLED_OUTCOME=ok RC01_NETLED_REASON=reply; return ;;
+		1) saw_fail=1; reason=no-reply ;;
+		*) saw_error=1; reason=probe-failed ;;
+		esac
+	done
+	if [ "$saw_fail" = 1 ]; then
+		RC01_NETLED_OUTCOME=fail RC01_NETLED_REASON=no-reply
+	elif [ "$saw_error" = 1 ]; then
+		RC01_NETLED_OUTCOME=error RC01_NETLED_REASON="$reason"
+	else
+		RC01_NETLED_OUTCOME=nopath RC01_NETLED_REASON="$reason"
+	fi
+}
+
+# Per-family state, copied in and out of the working variables.
+rc01_netled_load() {
+	case "$1" in
+	4) ST="$F4_ST" OKN="$F4_OKN" BADN="$F4_BADN" ERRN="$F4_ERRN" SEEN="$F4_SEEN" ;;
+	6) ST="$F6_ST" OKN="$F6_OKN" BADN="$F6_BADN" ERRN="$F6_ERRN" SEEN="$F6_SEEN" ;;
+	esac
+}
+
+rc01_netled_save() {
+	case "$1" in
+	4) F4_ST="$ST" F4_OKN="$OKN" F4_BADN="$BADN" F4_ERRN="$ERRN" F4_SEEN="$SEEN"
+	   F4_LAST="$RC01_NETLED_OUTCOME" F4_REASON="$RC01_NETLED_REASON"
+	   F4_DEV="$RC01_NETLED_DEV" F4_TARGET="$RC01_NETLED_TARGET" ;;
+	6) F6_ST="$ST" F6_OKN="$OKN" F6_BADN="$BADN" F6_ERRN="$ERRN" F6_SEEN="$SEEN"
+	   F6_LAST="$RC01_NETLED_OUTCOME" F6_REASON="$RC01_NETLED_REASON"
+	   F6_DEV="$RC01_NETLED_DEV" F6_TARGET="$RC01_NETLED_TARGET" ;;
+	esac
+}
+
+rc01_netled_reset() {
+	local f
+	for f in 4 6; do
+		ST=unknown OKN=0 BADN=0 ERRN=0 SEEN=
+		RC01_NETLED_OUTCOME= RC01_NETLED_REASON= RC01_NETLED_DEV= RC01_NETLED_TARGET=
+		rc01_netled_save "$f"
+	done
+}
+
+# Debounce one round outcome into the family state.
+rc01_netled_update() {
+	local family="$1" outcome="$2" bad
+	rc01_netled_load "$family"
+	case "$outcome" in
+	ok)
+		OKN=$((OKN + 1)) BADN=0 ERRN=0 SEEN="$RC01_NETLED_NOW"
+		case "$ST" in
+		up) ;;
+		down|no-path|egress-unavailable) [ "$OKN" -ge "$RC01_NETLED_RECOVER" ] && ST=up ;;
+		*) ST=up ;;
+		esac
+		;;
+	fail|nopath|unavail)
+		case "$outcome" in
+		fail) bad=down ;;
+		nopath) bad=no-path ;;
+		unavail) bad=egress-unavailable ;;
+		esac
+		OKN=0 BADN=$((BADN + 1)) ERRN=0 SEEN="$RC01_NETLED_NOW"
+		[ "$BADN" -ge "$RC01_NETLED_FAIL" ] && ST="$bad"
+		;;
+	*)
+		OKN=0 ERRN=$((ERRN + 1))
+		if [ "$ERRN" -ge "$RC01_NETLED_FAIL" ]; then
+			[ "$ST" = unknown ] || ST=stale
+		fi
+		;;
+	esac
+	rc01_netled_save "$family"
+}
+
+rc01_netled_overall() {
+	local up=0 bad=0 total=0 state
+	for state in ${1:-} ${2:-}; do
+		total=$((total + 1))
+		case "$state" in
+		up) up=$((up + 1)) ;;
+		down|no-path|egress-unavailable) bad=$((bad + 1)) ;;
+		esac
+	done
+	if [ "$total" -gt 0 ] && [ "$up" = "$total" ]; then
+		RC01_NETLED_OVERALL=up
+	elif [ "$up" -gt 0 ]; then
+		RC01_NETLED_OVERALL=degraded
+	elif [ "$bad" -gt 0 ]; then
+		RC01_NETLED_OVERALL=down
+	else
+		RC01_NETLED_OVERALL=unknown
+	fi
+}
+
+# --- LEDs -----------------------------------------------------------------
+
+rc01_netled_sysfs_write() {
+	printf '%s\n' "$2" > "$1"
+}
+
+# Selected trigger and brightness of one LED.
+rc01_netled_led_read() {
+	local dir="$RC01_NETLED_SYSFS/class/leds/$1" line word
+	RC01_NETLED_TRIGGER= RC01_NETLED_BRIGHTNESS=
+	read -r line 2>/dev/null < "$dir/trigger" || return 1
+	for word in $line; do
+		case "$word" in \[*\]) word="${word#?}"; RC01_NETLED_TRIGGER="${word%?}" ;; esac
+	done
+	read -r RC01_NETLED_BRIGHTNESS 2>/dev/null < "$dir/brightness"
+	[ -n "$RC01_NETLED_TRIGGER" ]
+}
+
+# Whether the LED still shows what this process last wrote ("retry" after a
+# failed write accepts any of the triggers this service uses).
+rc01_netled_led_ours() {
+	local led="$1" last="$2"
+	rc01_netled_led_read "$led" || return 1
+	case "$last:$RC01_NETLED_TRIGGER" in
+	off:none|retry:none) [ "$RC01_NETLED_BRIGHTNESS" = 0 ] ;;
+	on:default-on|blink:timer|retry:default-on|retry:timer) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+rc01_netled_led_set() {
+	local dir="$RC01_NETLED_SYSFS/class/leds/$1"
+	case "$2" in
+	off) rc01_netled_sysfs_write "$dir/trigger" none ;;
+	on) rc01_netled_sysfs_write "$dir/trigger" default-on ;;
+	blink)
+		rc01_netled_sysfs_write "$dir/trigger" timer &&
+			rc01_netled_sysfs_write "$dir/delay_on" 1000 &&
+			rc01_netled_sysfs_write "$dir/delay_off" 1000
+		;;
+	esac
+}
+
+# Per-LED control: owned, yielded, unmanaged (claimed by a system LED
+# section or not configured) or missing; plus last written mode and whether
+# the last write failed.
+rc01_netled_led_acquire() {
+	local led="$1" ctrl=owned
+	if [ -z "$led" ]; then
+		ctrl=unmanaged
+	elif ! rc01_netled_led_read "$led"; then
+		ctrl=missing
+		rc01_netled_log "LED $led not found"
+	else
+		case "$RC01_NETLED_TRIGGER" in
+		none) [ "$RC01_NETLED_BRIGHTNESS" = 0 ] || ctrl=yielded ;;
+		default-on|timer) ;;
+		*) ctrl=yielded ;;
+		esac
+		[ "$ctrl" = owned ] ||
+			rc01_netled_log "LED $led shows '$RC01_NETLED_TRIGGER'; leaving it alone"
+	fi
+	RC01_NETLED_CTRL="$ctrl"
+}
+
+rc01_netled_led_apply() {
+	local led="$1" want="$2"
+	rc01_netled_led_get "$3"
+	[ "$CTRL" = owned ] || return 0
+	if ! rc01_netled_led_ours "$led" "$LAST"; then
+		CTRL=yielded
+		rc01_netled_log "LED $led changed to '$RC01_NETLED_TRIGGER'; leaving it alone"
+		rc01_netled_led_put "$3"
+		return 0
+	fi
+	[ "$want" = "$LAST" ] && return 0
+	if rc01_netled_led_set "$led" "$want" 2>/dev/null; then
+		LAST="$want" WFAIL=0
+	else
+		[ "$WFAIL" = 1 ] || rc01_netled_log "cannot set LED $led to $want; retrying next round"
+		LAST=retry WFAIL=1
+	fi
+	rc01_netled_led_put "$3"
+}
+
+rc01_netled_led_get() {
+	case "$1" in
+	W) CTRL="$LW_CTRL" LAST="$LW_LAST" WFAIL="$LW_WFAIL" ;;
+	A) CTRL="$LA_CTRL" LAST="$LA_LAST" WFAIL="$LA_WFAIL" ;;
+	esac
+}
+
+rc01_netled_led_put() {
+	case "$1" in
+	W) LW_CTRL="$CTRL" LW_LAST="$LAST" LW_WFAIL="$WFAIL" ;;
+	A) LA_CTRL="$CTRL" LA_LAST="$LAST" LA_WFAIL="$WFAIL" ;;
+	esac
+}
+
+rc01_netled_leds_init() {
+	rc01_netled_led_acquire "$RC01_NETLED_LED_W"
+	LW_CTRL="$RC01_NETLED_CTRL" LW_LAST=retry LW_WFAIL=0
+	rc01_netled_led_acquire "$RC01_NETLED_LED_A"
+	LA_CTRL="$RC01_NETLED_CTRL" LA_LAST=retry LA_WFAIL=0
+}
+
+rc01_netled_leds_show() {
+	local white amber
+	case "$1" in
+	up) white=on amber=off ;;
+	degraded) white=blink amber=off ;;
+	down) white=off amber=on ;;
+	*) white=off amber=blink ;;
+	esac
+	rc01_netled_led_apply "$RC01_NETLED_LED_W" "$white" W
+	rc01_netled_led_apply "$RC01_NETLED_LED_A" "$amber" A
+}
+
+# Put back the board default (trigger none, off) on LEDs still ours.
+rc01_netled_leds_restore() {
+	local id led
+	for id in W A; do
+		[ "$id" = W ] && led="$RC01_NETLED_LED_W" || led="$RC01_NETLED_LED_A"
+		rc01_netled_led_get "$id"
+		[ "$CTRL" = owned ] || continue
+		rc01_netled_led_ours "$led" "$LAST" || continue
+		rc01_netled_led_set "$led" off 2>/dev/null ||
+			rc01_netled_log "cannot restore LED $led"
+	done
+}
+
+# --- state file -----------------------------------------------------------
+
+rc01_netled_json_list() {
+	local item out=
+	for item in $1; do out="$out,\"$item\""; done
+	printf '[%s]' "${out#,}"
+}
+
+rc01_netled_json_str() {
+	[ -n "$1" ] && printf '"%s"' "$1" || printf null
+}
+
+rc01_netled_json_family() {
+	local enabled="$1" iface="$2" targets="$3"
+	shift 3
+	printf '{"enabled":%s,"interface":"%s","targets":%s,' \
+		"$([ "$enabled" = 1 ] && echo true || echo false)" "$iface" "$(rc01_netled_json_list "$targets")"
+	printf '"state":"%s","last":%s,"reason":%s,"device":%s,"target":%s,' \
+		"$1" "$(rc01_netled_json_str "$2")" "$(rc01_netled_json_str "$3")" \
+		"$(rc01_netled_json_str "$4")" "$(rc01_netled_json_str "$5")"
+	printf '"ok_streak":%s,"bad_streak":%s,"error_streak":%s,"last_result_at":%s}' \
+		"$6" "$7" "$8" "${9:-null}"
+}
+
+rc01_netled_json_led() {
+	local status="$2"
+	[ "$2" = owned ] && [ "$4" = 1 ] && status=write-failed
+	printf '{"name":%s,"control":"%s","shown":%s}' \
+		"$(rc01_netled_json_str "$1")" "$status" \
+		"$([ "$2" = owned ] && [ "$3" != retry ] && rc01_netled_json_str "$3" || echo null)"
+}
+
+rc01_netled_state_write() {
+	local file="$RC01_NETLED_RUN/state.json" budget s4=disabled s6=disabled
+	budget=$(( (RC01_NETLED_N4 * RC01_NETLED_V4 + RC01_NETLED_N6 * RC01_NETLED_V6) * \
+		(RC01_NETLED_ROUTE_BOUND + RC01_NETLED_TIMEOUT + 2) + 2 * RC01_NETLED_UBUS_BOUND + 5 ))
+	[ "$RC01_NETLED_V4" = 1 ] && s4="$F4_ST"
+	[ "$RC01_NETLED_V6" = 1 ] && s6="$F6_ST"
+	{
+		printf '{"schema":1,"pid":%s,"started_at":%s,"updated_at":%s,"valid_until":%s,"rounds":%s,' \
+			"$$" "$RC01_NETLED_STARTED" "$RC01_NETLED_NOW" \
+			"$((RC01_NETLED_NOW + RC01_NETLED_INTERVAL + budget))" "$RC01_NETLED_ROUNDS"
+		printf '"interval":%s,"timeout":%s,"fail_count":%s,"recover_count":%s,"overall":"%s",' \
+			"$RC01_NETLED_INTERVAL" "$RC01_NETLED_TIMEOUT" "$RC01_NETLED_FAIL" "$RC01_NETLED_RECOVER" \
+			"$RC01_NETLED_OVERALL"
+		printf '"families":{"ipv4":'
+		rc01_netled_json_family "$RC01_NETLED_V4" "$RC01_NETLED_IF4" "$RC01_NETLED_T4" "$s4" "$F4_LAST" \
+			"$F4_REASON" "$F4_DEV" "$F4_TARGET" "$F4_OKN" "$F4_BADN" "$F4_ERRN" "$F4_SEEN"
+		printf ',"ipv6":'
+		rc01_netled_json_family "$RC01_NETLED_V6" "$RC01_NETLED_IF6" "$RC01_NETLED_T6" "$s6" "$F6_LAST" \
+			"$F6_REASON" "$F6_DEV" "$F6_TARGET" "$F6_OKN" "$F6_BADN" "$F6_ERRN" "$F6_SEEN"
+		printf '},"leds":{"white":'
+		rc01_netled_json_led "$RC01_NETLED_LED_W" "$LW_CTRL" "$LW_LAST" "$LW_WFAIL"
+		printf ',"amber":'
+		rc01_netled_json_led "$RC01_NETLED_LED_A" "$LA_CTRL" "$LA_LAST" "$LA_WFAIL"
+		printf '}}\n'
+	} > "$file.tmp" 2>/dev/null && mv -f "$file.tmp" "$file" 2>/dev/null
+}
+
+# --- main -----------------------------------------------------------------
+
+rc01_netled_round() {
+	local previous="$RC01_NETLED_OVERALL" s4= s6=
+	if [ "$RC01_NETLED_V4" = 1 ]; then
+		rc01_netled_probe 4 "$RC01_NETLED_T4" "$RC01_NETLED_IF4"
+		rc01_netled_uptime
+		rc01_netled_update 4 "$RC01_NETLED_OUTCOME"
+		s4="$F4_ST"
+	fi
+	if [ "$RC01_NETLED_V6" = 1 ]; then
+		rc01_netled_probe 6 "$RC01_NETLED_T6" "$RC01_NETLED_IF6"
+		rc01_netled_uptime
+		rc01_netled_update 6 "$RC01_NETLED_OUTCOME"
+		s6="$F6_ST"
+	fi
+	RC01_NETLED_ROUNDS=$((RC01_NETLED_ROUNDS + 1))
+	rc01_netled_overall "$s4" "$s6"
+	[ "$RC01_NETLED_OVERALL" = "$previous" ] ||
+		rc01_netled_log "egress ICMP reachability: $RC01_NETLED_OVERALL (IPv4 ${s4:-off}, IPv6 ${s6:-off})"
+	rc01_netled_leds_show "$RC01_NETLED_OVERALL"
+	rc01_netled_state_write
+}
+
+rc01_netled_stop() {
+	[ -z "$RC01_NETLED_CHILD" ] || kill -9 "$RC01_NETLED_CHILD" 2>/dev/null
+	rc01_netled_leds_restore
+	rm -f "$RC01_NETLED_RUN/state.json" "$RC01_NETLED_RUN/state.json.tmp" \
+		"$RC01_NETLED_RUN/route" "$RC01_NETLED_RUN/ifstatus"
+	exit 0
+}
+
+rc01_netled_start() {
+	mkdir -p "$RC01_NETLED_RUN" || return 1
+	rc01_netled_reset
+	RC01_NETLED_ROUNDS=0 RC01_NETLED_OVERALL=unknown RC01_NETLED_CHILD=
+	rc01_netled_uptime
+	RC01_NETLED_STARTED="$RC01_NETLED_NOW"
+	rc01_netled_leds_init
+	# A new process never reports an old result: start from unknown.
+	rc01_netled_leds_show unknown
+	rc01_netled_state_write
+}
+
+rc01_netled_main() {
+	local mode="$1"
+	set -f
+	shift
+	case "$mode" in
+	check) rc01_netled_parse "$@"; return ;;
+	run) rc01_netled_parse "$@" || return 2 ;;
+	*) echo "usage: rc01-netled check|run key=value..." >&2; return 2 ;;
+	esac
+	trap rc01_netled_stop INT TERM
+	rc01_netled_start || return 1
+	while :; do
+		rc01_netled_round
+		sleep "${RC01_NETLED_SLEEP:-$RC01_NETLED_INTERVAL}" &
+		RC01_NETLED_CHILD=$!
+		wait "$RC01_NETLED_CHILD"
+		RC01_NETLED_CHILD=
+	done
+}
+
+[ "${RC01_NETLED_LIBRARY:-0}" = 1 ] || rc01_netled_main "$@"
