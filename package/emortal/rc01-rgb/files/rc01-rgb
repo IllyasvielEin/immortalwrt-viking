@@ -1,0 +1,82 @@
+#!/usr/bin/ucode
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// RC01 RGB light bar service. Started by /etc/init.d/rc01-rgb only when
+// rc01_rgb.main.enabled=1; configuration changes restart it through procd.
+// It drives red/green/blue:ambient and nothing else, and turns them off on
+// SIGTERM/SIGINT/SIGHUP. Status: /var/run/rc01-rgb.status (JSON).
+import { readfile, writefile, rename, unlink } from 'fs';
+import * as rgb from 'rc01.rgb';
+
+// Test hooks only: a fixture root and a JSON section instead of UCI.
+const ROOT = getenv('RC01_ROOT') || '';
+const STATUS = ROOT + '/var/run/rc01-rgb.status';
+const TEST_CONFIG = getenv('RC01_RGB_CONFIG');
+
+function load() {
+	if (TEST_CONFIG) {
+		let data = json(readfile(TEST_CONFIG) || 'null') || {};
+		return { section: data.main, network: name => data.network?.[name] };
+	}
+	let uci = require('uci').cursor();
+	return { section: uci.get_all('rc01_rgb', 'main'), network: name => uci.get('network', name, 'device') };
+}
+
+function log(message) {
+	warn('rc01-rgb: ' + message + '\n');
+}
+
+let source = load();
+let cfg = rgb.config(source.section);
+if (length(cfg.problems))
+	log('invalid option(s) replaced by defaults: ' + join(', ', cfg.problems));
+
+let ctx = rgb.create(ROOT, rgb.traffic_device(cfg, source.network));
+if (length(ctx.missing)) {
+	log('LED not found: ' + join(', ', ctx.missing) + '; nothing changed');
+	exit(1);
+}
+
+let stopping = false;
+for (let name in [ 'SIGTERM', 'SIGINT', 'SIGHUP' ])
+	signal(name, () => { stopping = true; });
+
+if (!rgb.claim(ctx))
+	log('could not clear the trigger of every RGB LED');
+
+function monotonic_ms() {
+	let t = clock(true);
+	return t[0] * 1000 + int(t[1] / 1000000);
+}
+
+let start = monotonic_ms(), last_status, write_failed = false, failure;
+try {
+	while (!stopping) {
+		let now = localtime();
+		let f = rgb.frame(ctx, cfg, now.hour * 60 + now.min, monotonic_ms() - start);
+		let ok = rgb.show(ctx, f.rgb);
+		if (!ok && !write_failed)
+			log('LED write failed; retrying');
+		write_failed = !ok;
+		// Animation frames are not recorded; the status changes with the
+		// mode, period, telemetry detail or a write failure.
+		let status = sprintf('%J\n', { mode: f.mode, level: f.level, period: f.period,
+			fallback: f.fallback, detail: f.detail, led_write_failed: write_failed,
+			ignored_options: cfg.problems, rgb: rgb.ANIMATED[f.mode] ? null : f.rgb });
+		if (status != last_status && writefile(STATUS + '.tmp', status) != null && rename(STATUS + '.tmp', STATUS))
+			last_status = status;
+		if (!stopping)
+			sleep(f.delay);
+	}
+} catch (e) {
+	// Never leave the bar lit by a crashed loop; procd may respawn it.
+	failure = e;
+	log('stopped by error: ' + e);
+}
+
+unlink(STATUS);
+if (!rgb.off(ctx)) {
+	log('could not turn the RGB LEDs off');
+	exit(1);
+}
+exit(failure ? 1 : 0);

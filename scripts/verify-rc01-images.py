@@ -341,7 +341,44 @@ def verify_platform_dtb(blob: bytes) -> dict:
     require(tree.cells(nand, "nand-ecc-strength") == (8,) and
             tree.cells(nand, "nand-ecc-step-size") == (512,), "NAND must use ECC8/512")
     verify_enabled_path(tree, nand)
+
+    # RGB bar: SoC PWM on gpio31-33 (public reference wiring, not measured).
+    pwm = one(lambda n: compatible(n, "qcom,ipq9574-pwm"), "SoC PWM controller")
+    verify_enabled_path(tree, pwm)
+    require(tree.cells(pwm, "#pwm-cells") == (3,), "SoC PWM requires three cells")
+    pins = tree.cells(pwm, "pinctrl-0")
+    require(len(pins) == 1, "invalid SoC PWM pinctrl")
+    pin = resolve_phandle(tree, pins[0])
+    require(sorted(tree.strings(pin, "pins")) == ["gpio31", "gpio32", "gpio33"] and
+            tree.string(pin, "function") == "pwm", "SoC PWM must mux gpio31-33 to pwm")
+    tlmm = one(lambda n: compatible(n, "qcom,ipq9574-tlmm"), "TLMM")
+    tlmm_phandle = tree.cells(tlmm, "phandle")[0]
+    for node, props in tree.nodes.items():
+        if node != pin and "pins" in props:
+            require(not {"gpio31", "gpio32", "gpio33"} & set(tree.strings(node, "pins")),
+                    f"gpio31-33 are also muxed by {node}")
+        for name in props:
+            if name == "gpios" or name.endswith("-gpios"):
+                cells = tree.cells(node, name)
+                for offset in range(0, len(cells) - 2, 3):
+                    require(cells[offset] != tlmm_phandle or cells[offset + 1] not in (31, 32, 33),
+                            f"gpio31-33 are also used by {node}:{name}")
+    pwm_phandle = tree.cells(pwm, "phandle")[0]
+    bars = [n for n in tree.nodes if compatible(n, "pwm-leds")]
+    require(len(bars) == 1, "expected one pwm-leds node")
+    leds = {tree.cells(n, "color")[0]: n for n in tree.nodes
+            if n.startswith(bars[0] + "/") and "pwms" in tree.nodes[n]}
+    require(sorted(leds) == [1, 2, 3], "RGB bar needs exactly red, green and blue")
+    for color, channel in ((1, 3), (2, 2), (3, 1)):
+        led = leds[color]
+        require(tree.string(led, "function") == "ambient", "RGB LEDs must be named <color>:ambient")
+        require(tree.cells(led, "pwms") == (pwm_phandle, channel, 51000, 0),
+                "RGB must be red ch3, green ch2, blue ch1 at 51000 ns, normal polarity")
+        require(tree.cells(led, "max-brightness") == (255,), "RGB brightness range must be 0-255")
+        require(tree.string(led, "default-state") == "off", "RGB must stay off until the service runs")
+
     return {"cma_mib": 320, "radio_board_ids": [1, 4, 2],
+            "rgb": "pwm gpio31-33; red ch3, green ch2, blue ch1; 51000 ns; default off",
             "mac_source": "device-local ART: WAN+0, LAN base6, WiFi base6+2/+3/+4",
             "reserved_regions": [{"node": n, "address": hex(a), "bytes": s} for n, a, s in regions]}
 

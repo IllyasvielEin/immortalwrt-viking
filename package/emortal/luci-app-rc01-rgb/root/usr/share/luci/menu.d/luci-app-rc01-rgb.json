@@ -1,0 +1,8 @@
+{
+  "admin/system/rc01-rgb": {
+    "title": "RGB Light",
+    "order": 61,
+    "action": { "type": "view", "path": "system/rc01-rgb" },
+    "depends": { "acl": [ "luci-app-rc01-rgb" ], "uci": { "rc01_rgb": true } }
+  }
+}

@@ -110,6 +110,40 @@
 		};
 	};
 
+	/*
+	 * Top RGB light bar on the SoC PWM. Pins, channels and the 51000 ns
+	 * period follow the public reference zh8416/immortalwrt 7c30579
+	 * (gpio31/32/33; red ch3, green ch2, blue ch1); not yet measured on
+	 * RC01. Off until the rc01-rgb service is enabled.
+	 */
+	rgb-leds {
+		compatible = "pwm-leds";
+
+		led-ambient-red {
+			color = <LED_COLOR_ID_RED>;
+			function = "ambient";
+			pwms = <&pwm 3 51000 0>;
+			max-brightness = <255>;
+			default-state = "off";
+		};
+
+		led-ambient-green {
+			color = <LED_COLOR_ID_GREEN>;
+			function = "ambient";
+			pwms = <&pwm 2 51000 0>;
+			max-brightness = <255>;
+			default-state = "off";
+		};
+
+		led-ambient-blue {
+			color = <LED_COLOR_ID_BLUE>;
+			function = "ambient";
+			pwms = <&pwm 1 51000 0>;
+			max-brightness = <255>;
+			default-state = "off";
+		};
+	};
+
 	reserved-memory {
 		/delete-node/ tzapp@4d600000;
 		/* All three RC01 radios are PCIe: no enabled Q6 consumer. */
@@ -413,6 +447,13 @@
 	};
 };
 
+/* Only the RGB bar uses the SoC PWM; the fan is on the EMC2301. */
+&pwm {
+	pinctrl-0 = <&pwm_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &qpic_bam {
 	status = "okay";
 };
@@ -521,6 +562,14 @@
 		drive-strength = <8>;
 		bias-pull-down;
 		output-low;
+	};
+
+	/* pcie3 keeps PERST on gpio23, so its default gpio31-33 mux is unused. */
+	pwm_pins: pwm-state {
+		pins = "gpio31", "gpio32", "gpio33";
+		function = "pwm";
+		drive-strength = <8>;
+		bias-disable;
 	};
 
 	sfp_default: sfp-state {
