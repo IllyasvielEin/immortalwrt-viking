@@ -367,6 +367,96 @@ class FanStatus(Status):
         self.write("proc/78/status", "Name:\trc01-fan-guard\nPPid:\t1\n")
         self.assertEqual(self.fan()["fan"]["guard_process"], "multiple")
 
+    BOOT = "0b3d6c1e-5a7f-4c2e-9d10-2f6a8b4c7e91"
+
+    def guard(self, pid=77, ticks=4242, ppid=1):
+        self.write(f"proc/{pid}/comm", "rc01-fan-guard")
+        self.write(f"proc/{pid}/status", f"Name:\trc01-fan-guard\nPPid:\t{ppid}\n")
+        self.write(f"proc/{pid}/stat", f"{pid} (rc01-fan-guard) S {ppid} " + " ".join(["0"] * 17) + f" {ticks} 0 0")
+
+    def guard_record(self, **changes):
+        record = {"schema": 1, "boot_id": self.BOOT, "pid": 77, "start_ticks": 4242, "updated_uptime": 996.0,
+                  "sampled_uptime": 996.0, "phase": "monitoring", "event": "sample", "sample_reason": "ok",
+                  "failures": 0, "latched": True, "latch_reason": "consecutive-failures:rpm-zero"} | changes
+        self.write("var/run/rc01-fan-guard.json", json.dumps(record))
+
+    def protection(self):
+        return self.fan()["fan"]["protection"]
+
+    def test_guard_record_is_current_only_for_the_running_instance(self):
+        self.write("proc/sys/kernel/random/boot_id", self.BOOT)
+        self.guard(); self.guard_record()
+        current = self.protection()
+        self.assertEqual(current, {"status": "current", "detail": None, "age": 4.0, "sample_age": 4.0,
+                                   "phase": "monitoring", "event": "sample", "sample_reason": "ok", "failures": 0,
+                                   "latched": True, "latch_reason": "consecutive-failures:rpm-zero"})
+        # A child subshell of the guard is not another instance.
+        self.guard(pid=79, ppid=77)
+        self.assertEqual(self.protection()["status"], "current")
+        self.guard_record(updated_uptime=990.0, sampled_uptime=980.0)
+        self.assertEqual(self.protection()["status"], "current")
+        cases = [
+            (dict(updated_uptime=989.5, sampled_uptime=989.5), "stale", "expired"),
+            (dict(updated_uptime=1001.0, sampled_uptime=1001.0), "stale", "age-unknown"),
+            (dict(start_ticks=4243), "stale", "other-instance"),
+            (dict(pid=78), "stale", "other-instance"),
+            (dict(boot_id="11111111-2222-3333-4444-555555555555"), "stale", "previous-boot"),
+            (dict(phase="exited", event="signal-stop"), "exited", None),
+        ]
+        for changes, status, detail in cases:
+            with self.subTest(changes=changes):
+                self.guard_record(**changes)
+                result = self.protection()
+                self.assertEqual((result["status"], result["detail"]), (status, detail))
+                # Older records keep their values so the page can label them.
+                self.assertEqual((result["failures"], result["latched"]), (0, True))
+        self.guard_record(boot_id="11111111-2222-3333-4444-555555555555")
+        self.assertIsNone(self.protection()["age"])
+        self.guard_record(sampled_uptime=None, phase="starting", event="startup", sample_reason="not-sampled",
+                          latched=False, latch_reason=None)
+        starting = self.protection()
+        self.assertEqual((starting["status"], starting["sample_age"], starting["latched"]), ("current", None, False))
+
+    def test_guard_record_without_matching_process_is_not_current(self):
+        self.write("proc/sys/kernel/random/boot_id", self.BOOT)
+        self.guard_record()
+        self.assertEqual(self.protection()["detail"], "no-guard-process")
+        self.guard(); self.guard(pid=78)
+        self.assertEqual(self.protection()["detail"], "multiple-guard-processes")
+        shutil.rmtree(self.root / "proc/78")
+        (self.root / "proc/77/stat").unlink()
+        self.assertEqual((self.protection()["status"], self.protection()["failures"]), ("unknown", None))
+        self.guard()
+        (self.root / "proc/sys/kernel/random/boot_id").unlink()
+        self.assertEqual((self.protection()["status"], self.protection()["detail"]), ("unknown", "identity-unavailable"))
+
+    def test_missing_or_invalid_guard_record_is_unknown_not_zero(self):
+        self.write("proc/sys/kernel/random/boot_id", self.BOOT)
+        self.guard()
+        unknown = {"status": "unknown", "detail": "missing", "age": None, "sample_age": None, "phase": None,
+                   "event": None, "sample_reason": None, "failures": None, "latched": None, "latch_reason": None}
+        self.assertEqual(self.protection(), unknown)
+        bad = [dict(schema=2), dict(failures=-1), dict(failures="0"), dict(failures=None), dict(latched="true"),
+               dict(latched=False), dict(latched=True, latch_reason=None), dict(latch_reason="startup:ok"),
+               dict(latch_reason="consecutive-failures:bogus"), dict(sample_reason="hot"), dict(event="other"),
+               dict(phase="running"), dict(updated_uptime="996"), dict(sampled_uptime=997.0), dict(pid=0),
+               dict(boot_id="<script>"), dict(start_ticks=None)]
+        for changes in bad:
+            with self.subTest(changes=changes):
+                self.guard_record(**changes)
+                self.assertEqual(self.protection(), unknown | {"detail": "malformed"})
+        path = self.root / "var/run/rc01-fan-guard.json"
+        for content, detail in (('{"schema":1,"boot_id"', "malformed"), ("", "malformed"),
+                                (" " * 5000, "truncated"), ("[]", "malformed")):
+            with self.subTest(content=content[:20]):
+                path.write_text(content)
+                self.assertEqual(self.protection()["detail"], detail)
+        path.write_text("{}")
+        path.chmod(0)
+        if os.geteuid() != 0:
+            self.assertEqual(self.protection()["detail"], "unreadable")
+        path.chmod(0o644)
+
     def test_trend_is_bounded_rate_limited_and_marks_gaps(self):
         script = r"""import { writefile } from 'fs';
         let cache = {}, out = [];

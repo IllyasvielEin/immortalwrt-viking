@@ -234,6 +234,71 @@ function fan_trend(cache, now, sample) {
 		source: 'rpcd status polling', samples };
 }
 
+// The fan guard's own decision record, written only by rc01-fan-guard after
+// its protection step. It is lossy: a record is current only for the single
+// running guard instance (same boot, PID and process start time) and while
+// recent. Anything else is an older record or unknown, never a healthy guess.
+const GUARD_STATE = '/var/run/rc01-fan-guard.json';
+const GUARD_FRESH = 10;
+const GUARD_PHASES = [ 'starting', 'monitoring', 'exited' ];
+const GUARD_EVENTS = [ 'startup', 'sample', 'controller-unavailable-or-ambiguous', 'pwm-write-failed', 'signal-stop', 'loop-ended' ];
+const GUARD_FAILURES = [ 'sensor-missing', 'sensor-invalid', 'rpm-invalid', 'pwm-invalid', 'pwm-out-of-range', 'fault', 'rpm-zero' ];
+
+function guard_record(read) {
+	if (read.status != 'ok') return null;
+	let r;
+	try { r = json(read.data); } catch (error) { return null; }
+	let count = v => type(v) == 'int' && v >= 0;
+	let seconds = v => (type(v) == 'int' || type(v) == 'double') && v >= 0;
+	let latch = split(type(r?.latch_reason) == 'string' ? r.latch_reason : '', ':');
+	let latch_ok = r?.latch_reason === null ? r?.latched === false : r?.latched === true &&
+		(r.latch_reason == 'over-temperature' || length(latch) == 2 &&
+		 index([ 'startup', 'consecutive-failures' ], latch[0]) >= 0 && index(GUARD_FAILURES, latch[1]) >= 0);
+	if (type(r) != 'object' || r.schema !== 1 || type(r.boot_id) != 'string' || !match(r.boot_id, /^[0-9a-f-]+$/) ||
+	    !count(r.pid) || r.pid == 0 || !count(r.start_ticks) || !seconds(r.updated_uptime) ||
+	    !(r.sampled_uptime === null || seconds(r.sampled_uptime) && r.sampled_uptime <= r.updated_uptime) ||
+	    index(GUARD_PHASES, r.phase) < 0 || index(GUARD_EVENTS, r.event) < 0 ||
+	    index([ 'not-sampled', 'ok', ...GUARD_FAILURES ], r.sample_reason) < 0 || !count(r.failures) || !latch_ok)
+		return null;
+	return r;
+}
+
+function start_ticks(root, pid) {
+	let stat = text(root + '/proc/' + pid + '/stat');
+	let at = stat == null ? -1 : rindex(stat, ') ');
+	return at < 0 ? null : number(split(substr(stat, at + 2), ' ')[19]);
+}
+
+function guard_unknown(detail) {
+	return { status: 'unknown', detail, age: null, sample_age: null, phase: null, event: null,
+		sample_reason: null, failures: null, latched: null, latch_reason: null };
+}
+
+function fan_protection(root, now, guard) {
+	let read = bounded(root + GUARD_STATE, 4096);
+	let r = guard_record(read), status = 'current', detail = null;
+	if (r == null)
+		return guard_unknown(read.status == 'ok' ? 'malformed' : read.status);
+	let boot = text(root + '/proc/sys/kernel/random/boot_id');
+	let ticks = length(guard) == 1 && guard[0].pid == r.pid ? start_ticks(root, r.pid) : null;
+	if (boot == null) status = 'unknown', detail = 'identity-unavailable';
+	else if (boot != r.boot_id) status = 'stale', detail = 'previous-boot';
+	else if (r.phase == 'exited') status = 'exited';
+	else if (!length(guard)) status = 'stale', detail = 'no-guard-process';
+	else if (length(guard) > 1) status = 'stale', detail = 'multiple-guard-processes';
+	else if (guard[0].pid != r.pid || ticks != null && ticks != r.start_ticks) status = 'stale', detail = 'other-instance';
+	else if (ticks == null) status = 'unknown', detail = 'identity-unavailable';
+	else if (now == null || now < r.updated_uptime) status = 'stale', detail = 'age-unknown';
+	else if (now - r.updated_uptime > GUARD_FRESH) status = 'stale', detail = 'expired';
+	if (status == 'unknown')
+		return guard_unknown(detail);
+	// Uptime restarts at boot, so ages are only computed within this boot.
+	let since = t => t == null || now == null || detail == 'previous-boot' || now < t ? null : now - t;
+	return { status, detail, age: since(r.updated_uptime), sample_age: since(r.sampled_uptime),
+		phase: r.phase, event: r.event, sample_reason: r.sample_reason, failures: r.failures,
+		latched: r.latched, latch_reason: r.latch_reason };
+}
+
 function enabled(value) {
 	return value == '1' || value == 'true' || value == 'yes' || value == 'on';
 }
@@ -505,7 +570,8 @@ export function collect(root, uci, cache, wiphy_query) {
 		temperature: nss,
 		// Process presence only: it does not show that protection is working.
 		guard_process: length(guard) == 1 ? 'running' : length(guard) ? 'multiple' : 'absent',
-		trend: fan_trend(cache, now, { celsius: nss.celsius, rpm: fan?.rpm, pwm: fan?.pwm, health: fan?.health })
+		trend: fan_trend(cache, now, { celsius: nss.celsius, rpm: fan?.rpm, pwm: fan?.pwm, health: fan?.health }),
+		protection: fan_protection(root, now, guard)
 	};
 	return {
 		schema: 1, board, supported: board == 'xiaomi,be10000',
