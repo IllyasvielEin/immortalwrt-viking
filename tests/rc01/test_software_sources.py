@@ -2,6 +2,7 @@
 from pathlib import Path
 import base64
 import copy
+import gzip
 import importlib.util
 import io
 import json
@@ -21,12 +22,13 @@ spec.loader.exec_module(sources)
 
 def archive(path, root, files):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(path, "w:gz") as output:
-        for name, value in files.items():
-            member = tarfile.TarInfo(root + "/" + name)
-            member.size = len(value)
-            member.mode = 0o755 if name.endswith(".sh") else 0o644
-            output.addfile(member, io.BytesIO(value))
+    with path.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w") as output:
+            for name, value in files.items():
+                member = tarfile.TarInfo(root + "/" + name)
+                member.size = len(value)
+                member.mode = 0o755 if name.endswith(".sh") else 0o644
+                output.addfile(member, io.BytesIO(value))
     return path
 
 
@@ -349,9 +351,13 @@ class BuildLock(unittest.TestCase):
         recipes = {("packages", "net/tailscale/Makefile"): (baseline/"tailscale.Makefile").read_bytes(),
                    ("nikki", "mihomo-meta/Makefile"): (baseline/"mihomo.Makefile").read_bytes()}
         self.lock["go"] = {"version": "1.27.3"}
+        archive_times = iter(range(100, 200))
         def source(release, package, expected=None):
-            return archive(self.root/"dl"/(package+"-"+release["version"]+".tar.gz"), package+"-"+release["version"],
-                           {"go.mod": b"module example.invalid/app\ngo 1.27.0\n"})
+            # Replay regenerates this fixture; crossing a second must not
+            # change its source digest or mask a real provenance mismatch.
+            with mock.patch("time.time", return_value=next(archive_times)):
+                return archive(self.root/"dl"/(package+"-"+release["version"]+".tar.gz"), package+"-"+release["version"],
+                               {"go.mod": b"module example.invalid/app\ngo 1.27.0\n"})
         def release(repo):
             return {"repository": repo, "version": "1.2.3", "tag": "v1.2.3", "commit": "d"*40, "epoch": 1}
         with mock.patch.object(sources, "pristine", side_effect=lambda feed,path: recipes[(feed,path)]), mock.patch.object(sources, "stable_release", side_effect=release), mock.patch.object(sources, "git_archive_source", side_effect=source):

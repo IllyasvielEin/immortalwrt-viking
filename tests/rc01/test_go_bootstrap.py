@@ -451,11 +451,12 @@ class FeedPatchTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
         self.checkout = self.work / "packages"
-        # No checkout/branch change in the shared feed. Reuse its local objects
-        # in a disposable repository and materialize only the files under test.
-        subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout", str(self.feed), str(self.checkout)], check=True)
-        # The feed under build may be newer. These exact baseline patch tests
-        # only detach their private clone at the already-verified old object.
+        # A shallow feed's clone may omit the separately fetched baseline.
+        # Import that exact local object into this disposable repository;
+        # never move the shared feed or query its network remote.
+        subprocess.run(["git", "init", "--quiet", str(self.checkout)], check=True)
+        subprocess.run(["git", "-C", str(self.checkout), "fetch", "--quiet", "--no-tags", "--depth=1",
+                        str(self.feed.resolve()), FEED_REVISION], check=True)
         subprocess.run(["git", "-C", str(self.checkout), "update-ref", "--no-deref", "HEAD", FEED_REVISION], check=True)
         self.assertEqual(subprocess.check_output(["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip(), FEED_REVISION)
         self.golang = self.checkout / "lang/golang"
