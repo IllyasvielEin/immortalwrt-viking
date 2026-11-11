@@ -95,7 +95,7 @@ function fanSection(state) {
 		]),
 		E('p', {}, `${_('Trend samples are taken only while this page polls, at most every')} ${seconds(trend.interval)}, ` +
 			`${_('keeping')} ${samples.length}/${display(trend.capacity)} ${_('samples over')} ${seconds(trend.window)}. ` +
-			_('Gaps mark periods without samples. A running guard process does not prove that fan protection is working; the kernel thermal curve, 77 PWM floor and full-speed fault latch remain in control.'))
+			_('Gaps mark periods without samples. The sample time is when this page read the hardware, not a heartbeat from the fan guard, and a running guard process does not prove that fan protection is working. This page does not change the kernel thermal curve, the 77 PWM floor or the full-speed fault latch.'))
 	];
 	return nodes;
 }

@@ -318,9 +318,14 @@ export function collect(root, uci, cache) {
 	for (let path in glob(root + '/proc/[0-9]*/comm') || []) {
 		let name = text(path);
 		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', 'rc01-fan-guard' ], name) < 0) continue;
-		let rss = match(readfile(replace(path, /comm$/, 'status')) || '', /(^|\n)VmRSS:\s+(\d+) kB/);
-		push(processes, { name, pid: int(split(path, '/')[-2]), rss_kib: rss ? int(rss[2]) : null });
+		let status = readfile(replace(path, /comm$/, 'status')) || '';
+		let rss = match(status, /(^|\n)VmRSS:\s+(\d+) kB/), ppid = match(status, /(^|\n)PPid:\s+(\d+)/);
+		push(processes, { name, pid: int(split(path, '/')[-2]), ppid: ppid ? int(ppid[2]) : null, rss_kib: rss ? int(rss[2]) : null });
 	}
+	// The shell guard forks short-lived subshells for command substitution;
+	// they keep its name but are not separate guard instances.
+	let guard_pids = map(filter(processes, p => p.name == 'rc01-fan-guard'), p => p.pid);
+	processes = filter(processes, p => p.name != 'rc01-fan-guard' || index(guard_pids, p.ppid) < 0);
 	uci?.foreach('wireless', 'wifi-device', s => push(radios, { name: s['.name'], disabled: enabled(s.disabled) }));
 	let defaults = [];
 	uci?.foreach('firewall', 'defaults', s => {

@@ -356,7 +356,15 @@ class FanStatus(Status):
         self.assertEqual(self.fan()["fan"]["guard_process"], "absent")
         self.write("proc/77/comm", "rc01-fan-guard")
         self.assertEqual(self.fan()["fan"]["guard_process"], "running")
+        self.write("proc/77/status", "Name:\trc01-fan-guard\nPPid:\t1\n")
+        # A command-substitution subshell forked by the guard keeps its name.
+        self.write("proc/79/comm", "rc01-fan-guard")
+        self.write("proc/79/status", "Name:\trc01-fan-guard\nPPid:\t77\n")
+        state = self.fan()
+        self.assertEqual(state["fan"]["guard_process"], "running")
+        self.assertEqual([p["pid"] for p in state["processes"]], [77])
         self.write("proc/78/comm", "rc01-fan-guard")
+        self.write("proc/78/status", "Name:\trc01-fan-guard\nPPid:\t1\n")
         self.assertEqual(self.fan()["fan"]["guard_process"], "multiple")
 
     def test_trend_is_bounded_rate_limited_and_marks_gaps(self):

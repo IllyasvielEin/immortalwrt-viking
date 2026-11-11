@@ -376,8 +376,8 @@ msgstr "保留"
 msgid "samples over"
 msgstr "个样本，时间范围"
 
-msgid "Gaps mark periods without samples. A running guard process does not prove that fan protection is working; the kernel thermal curve, 77 PWM floor and full-speed fault latch remain in control."
-msgstr "空白表示该时段没有样本。保护进程存在不代表风扇保护有效；内核温控曲线、77 PWM 下限和故障满速锁定仍负责控制。"
+msgid "Gaps mark periods without samples. The sample time is when this page read the hardware, not a heartbeat from the fan guard, and a running guard process does not prove that fan protection is working. This page does not change the kernel thermal curve, the 77 PWM floor or the full-speed fault latch."
+msgstr "空白表示该时段没有样本。采样时间是本页读取硬件的时间，不是风扇保护进程的心跳；保护进程存在也不代表风扇保护有效。本页不改变内核温控曲线、77 PWM 下限或故障满速锁定。"
 
 msgid "Not collected; avoids a full hardware table scan"
 msgstr "未采集，以避免扫描完整硬件表"

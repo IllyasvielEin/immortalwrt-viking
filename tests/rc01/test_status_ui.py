@@ -172,6 +172,7 @@ assert(text.includes('NSS sensor missing'));
 assert(text.includes('Process present'));
 assert(text.includes('▁█ ·'), 'gap and missing temperature must stay visible: ' + text.match(/[▁-█· ]{3,}/));
 assert(text.includes('does not prove that fan protection is working'));
+assert(text.includes('not a heartbeat from the fan guard'), 'page sample time must not read as a guard heartbeat');
 '''
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
