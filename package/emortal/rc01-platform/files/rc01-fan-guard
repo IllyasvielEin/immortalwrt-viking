@@ -14,6 +14,7 @@ RC01_FAN_REASON=not-sampled
 RC01_FAN_EVENT=startup
 RC01_FAN_LATCH=
 RC01_FAN_SAMPLED=
+RC01_FAN_SAMPLE_PENDING=0
 RC01_FAN_PUBLISHER=
 
 rc01_fan_find() {
@@ -96,11 +97,16 @@ rc01_fan_write() {
 # or touch PWM and runs without the protection traps. Nothing here changes
 # protection variables or return codes.
 rc01_fan_report() {
-	local up rest
+	local up rest sampled="${2:-$RC01_FAN_SAMPLE_PENDING}"
+	RC01_FAN_SAMPLE_PENDING=0
+	# Consume a completed sample after its protection action, including an
+	# EXIT caused by a failed PWM write. A failed clock read must not pair
+	# that new result with the preceding sample's timestamp.
+	[ "$sampled" != 1 ] || RC01_FAN_SAMPLED=
 	[ -n "$RC01_FAN_BOOT" ] && [ -n "$RC01_FAN_TICKS" ] || return 0
 	read -r up rest 2>/dev/null < "$RC01_PROC/uptime" || return 0
 	case "$up" in ''|*[!0-9.]*) return 0 ;; esac
-	[ "$2" != 1 ] || RC01_FAN_SAMPLED="$up"
+	[ "$sampled" != 1 ] || RC01_FAN_SAMPLED="$up"
 	if [ -n "$RC01_FAN_PUBLISHER" ]; then
 		kill -0 "$RC01_FAN_PUBLISHER" 2>/dev/null && return 0
 		# Already reaped, so this returns at once. Without it a
@@ -128,8 +134,10 @@ rc01_fan_main() {
 	rc01_fan_report starting
 	sleep 3
 	if rc01_fan_sample; then
+		RC01_FAN_SAMPLE_PENDING=1
 		rc01_fan_pwm "$RC01_MIN_PWM" || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 	else
+		RC01_FAN_SAMPLE_PENDING=1
 		latched=1 RC01_FAN_LATCH="startup:$RC01_FAN_REASON"
 		logger -p daemon.err -t rc01-fan 'Startup health check failed; full-speed floor latched'
 	fi
@@ -137,6 +145,7 @@ rc01_fan_main() {
 	RC01_FAN_EVENT=sample
 	while sleep 2; do
 		if rc01_fan_sample; then
+			RC01_FAN_SAMPLE_PENDING=1
 			failures=0
 			if [ "$RC01_FAN_TEMP" -ge 75000 ] && [ "$latched" -eq 0 ]; then
 				latched=1 RC01_FAN_LATCH=over-temperature
@@ -144,6 +153,7 @@ rc01_fan_main() {
 				logger -p daemon.err -t rc01-fan 'Temperature exceeds 75 C; full-speed floor latched'
 			fi
 		else
+			RC01_FAN_SAMPLE_PENDING=1
 			failures=$((failures + 1))
 			if [ "$failures" -ge 3 ] && [ "$latched" -eq 0 ]; then
 				latched=1 RC01_FAN_LATCH="consecutive-failures:$RC01_FAN_REASON"
