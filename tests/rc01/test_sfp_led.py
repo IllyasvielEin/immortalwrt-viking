@@ -25,8 +25,12 @@ PRESENT = "sfp-sfp:present"
 FAKE_KERNEL = r'''
 logger() { printf '%s\n' "$*" >> "$WORK/syslog"; }
 rc01_sfp_set_trigger() {
-	local t out=
+	local t out= previous=
 	case " $(cat "$WORK/available") " in *" $1 "*) ;; *) return 1 ;; esac
+	read -r previous < "$RC01_SFP_LED/trigger"
+	printf '%s\n' "$1" >> "$WORK/writes"
+	# Selecting the current trigger does not recreate its kernel attributes.
+	case " $previous " in *" [$1] "*) return 0 ;; esac
 	for t in $(cat "$WORK/available"); do
 		[ "$t" = "$1" ] && t="[$t]"
 		out="$out $t"
@@ -37,7 +41,6 @@ rc01_sfp_set_trigger() {
 		: > "$RC01_SFP_LED/device_name"
 		for t in link tx rx interval; do echo 0 > "$RC01_SFP_LED/$t"; done
 	fi
-	printf '%s\n' "$1" >> "$WORK/writes"
 }
 '''
 
@@ -108,21 +111,36 @@ class SfpLed(unittest.TestCase):
         self.assertEqual(self.writes(), [PRESENT])
 
     def test_carrier_switches_to_netdev_and_back(self):
-        self.step()
-        self.carrier(1)
-        self.step()
-        self.assert_netdev_policy()
-        self.step()
-        self.carrier(0)
-        self.step()
+        self.run_shell('''
+rc01_sfp_step
+echo 1 > "$RC01_SYSFS/class/net/sfp/carrier"
+rc01_sfp_step
+rc01_sfp_step
+echo 0 > "$RC01_SYSFS/class/net/sfp/carrier"
+rc01_sfp_step
+''')
         self.assertEqual(self.selected(), PRESENT)
         self.assertEqual(self.writes(), [PRESENT, "netdev", PRESENT])
 
-    def test_link_keeps_the_existing_netdev_policy_untouched(self):
+    def test_link_applies_config_once_without_repeated_writes(self):
         self.carrier(1)
-        self.step()
-        self.assertEqual(self.writes(), [])
+        self.run_shell("rc01_sfp_step; rc01_sfp_step; rc01_sfp_step")
+        self.assertEqual(self.writes(), ["none", "netdev"])
         self.assert_netdev_policy()
+
+    def test_restart_applies_new_modes_and_interval_with_link_still_up(self):
+        self.carrier(1)
+        self.run_shell('''
+rc01_sfp_step
+rc01_sfp_restore
+rc01_sfp_init green:sfp sfp 100 link
+rc01_sfp_step
+rc01_sfp_step
+''')
+        self.assertEqual(self.selected(), "netdev")
+        self.assertEqual([(self.led / m).read_text().strip() for m in ("link", "tx", "rx", "interval")],
+                         ["1", "0", "0", "100"])
+        self.assertEqual(self.writes(), ["none", "netdev", "none", "netdev"])
 
     def test_unreadable_carrier_is_treated_as_no_link(self):
         self.carrier(None)
@@ -138,19 +156,46 @@ class SfpLed(unittest.TestCase):
                 self.setUp()
                 self.available(triggers)
                 self.kernel_select("netdev")
-                self.step()
-                self.assertEqual(self.writes(), [])
+                self.run_shell("rc01_sfp_step; rc01_sfp_step")
+                self.assertEqual(self.writes(), ["none", "netdev"])
                 self.assert_netdev_policy()
 
     def test_present_trigger_lost_falls_back_to_netdev(self):
-        self.step()
-        self.assertEqual(self.selected(), PRESENT)
-        # e.g. sfp module unloaded: the kernel drops the trigger (LED reads "none").
-        self.available("none timer netdev")
-        self.kernel_select("none")
-        self.step()
-        self.assertEqual(self.writes(), [PRESENT])
+        for action in ("rc01_sfp_step", "rc01_sfp_restore"):
+            with self.subTest(action=action):
+                self.setUp()
+                self.run_shell('''
+rc01_sfp_step
+echo 'none timer netdev' > "$WORK/available"
+echo '[none] timer netdev' > "$RC01_SFP_LED/trigger"
+''' + action)
+                self.assert_netdev_policy()
+                self.assertEqual(self.writes(), [PRESENT, "netdev"])
+
+    def test_previously_selected_trigger_becoming_ambiguous_falls_back(self):
+        for action in ("rc01_sfp_step", "rc01_sfp_restore"):
+            with self.subTest(action=action):
+                self.setUp()
+                self.run_shell(f'''
+rc01_sfp_step
+echo 'none netdev {PRESENT} sfp-second:present' > "$WORK/available"
+echo 'none netdev [{PRESENT}] sfp-second:present' > "$RC01_SFP_LED/trigger"
+''' + action)
+                self.assert_netdev_policy()
+                self.assertEqual(self.writes(), [PRESENT, "netdev"])
+
+    def test_user_none_is_left_alone_and_clears_old_ownership(self):
+        self.run_shell('''
+rc01_sfp_step
+rc01_sfp_set_trigger none
+rc01_sfp_step
+echo 'none timer netdev' > "$WORK/available"
+echo '[none] timer netdev' > "$RC01_SFP_LED/trigger"
+rc01_sfp_step
+rc01_sfp_restore
+''')
         self.assertEqual(self.selected(), "none")
+        self.assertEqual(self.writes(), [PRESENT, "none"])
 
     def test_user_trigger_is_left_alone_until_the_policy_returns(self):
         self.step()

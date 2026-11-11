@@ -23,6 +23,8 @@ rc01_sfp_init() {
 	shift 3
 	RC01_SFP_MODES="$*"
 	RC01_SFP_YIELDED=0
+	RC01_SFP_LAST_PRESENT=
+	RC01_SFP_NETDEV_APPLIED=0
 }
 
 rc01_sfp_set_trigger() {
@@ -34,11 +36,13 @@ rc01_sfp_triggers() {
 	local line word count=0
 	RC01_SFP_CURRENT=
 	RC01_SFP_PRESENT=
+	RC01_SFP_LAST_AVAILABLE=0
 	read -r line 2>/dev/null < "$RC01_SFP_LED/trigger" || return 1
 	for word in $line; do
 		case "$word" in
 		\[*\]) word="${word#?}"; word="${word%?}"; RC01_SFP_CURRENT="$word" ;;
 		esac
+		[ "$word" = "$RC01_SFP_LAST_PRESENT" ] && RC01_SFP_LAST_AVAILABLE=1
 		case "$word" in
 		sfp-*:present) count=$((count + 1)); RC01_SFP_PRESENT="$word" ;;
 		esac
@@ -49,14 +53,24 @@ rc01_sfp_triggers() {
 rc01_sfp_owned() {
 	local device=
 	[ -n "$RC01_SFP_PRESENT" ] && [ "$RC01_SFP_CURRENT" = "$RC01_SFP_PRESENT" ] && return 0
+	if [ -n "$RC01_SFP_LAST_PRESENT" ]; then
+		[ "$RC01_SFP_CURRENT" = "$RC01_SFP_LAST_PRESENT" ] && return 0
+		# Unregistering our selected trigger makes the kernel select none.
+		# A user selecting none while that trigger still exists is left alone.
+		[ "$RC01_SFP_CURRENT" = none ] && [ "$RC01_SFP_LAST_AVAILABLE" = 0 ] && return 0
+	fi
 	[ "$RC01_SFP_CURRENT" = netdev ] || return 1
 	read -r device 2>/dev/null < "$RC01_SFP_LED/device_name"
 	[ "$device" = "$RC01_SFP_DEV" ]
 }
 
-# Same steps as /etc/init.d/led for a netdev LED.
+# Rebind an already selected netdev trigger so modes removed from the new
+# configuration are cleared too, then follow /etc/init.d/led's setup steps.
 rc01_sfp_netdev() {
 	local mode offloaded=
+	if [ "$RC01_SFP_CURRENT" = netdev ]; then
+		rc01_sfp_set_trigger none || return 1
+	fi
 	rc01_sfp_set_trigger netdev || return 1
 	printf '%s\n' "$RC01_SFP_DEV" > "$RC01_SFP_LED/device_name" || return 1
 	for mode in $RC01_SFP_MODES; do
@@ -64,6 +78,8 @@ rc01_sfp_netdev() {
 	done
 	read -r offloaded 2>/dev/null < "$RC01_SFP_LED/offloaded"
 	[ "$offloaded" = 1 ] || printf '%s\n' "$RC01_SFP_NETDEV_INTERVAL" > "$RC01_SFP_LED/interval" 2>/dev/null
+	RC01_SFP_LAST_PRESENT=
+	RC01_SFP_NETDEV_APPLIED=1
 	return 0
 }
 
@@ -74,6 +90,8 @@ rc01_sfp_step() {
 		[ "$RC01_SFP_YIELDED" = 1 ] ||
 			logger -t rc01-sfp-led "LED trigger changed to '$RC01_SFP_CURRENT'; leaving it alone"
 		RC01_SFP_YIELDED=1
+		RC01_SFP_LAST_PRESENT=
+		RC01_SFP_NETDEV_APPLIED=0
 		return 0
 	fi
 	RC01_SFP_YIELDED=0
@@ -83,18 +101,26 @@ rc01_sfp_step() {
 	else
 		want="$RC01_SFP_PRESENT"
 	fi
-	[ "$want" = "$RC01_SFP_CURRENT" ] && return 0
+	if [ "$want" = "$RC01_SFP_CURRENT" ]; then
+		if [ "$want" != netdev ]; then
+			RC01_SFP_LAST_PRESENT="$want"
+			return 0
+		fi
+		[ "$RC01_SFP_NETDEV_APPLIED" = 1 ] && return 0
+	fi
 	if [ "$want" = netdev ]; then
 		rc01_sfp_netdev
 	else
-		rc01_sfp_set_trigger "$want"
+		rc01_sfp_set_trigger "$want" && RC01_SFP_LAST_PRESENT="$want"
 	fi
 }
 
-# Put back netdev only if the LED still shows the present trigger set here.
+# Restore our presence policy, including a trigger the kernel unregistered.
 rc01_sfp_restore() {
 	rc01_sfp_triggers || return 0
-	[ -n "$RC01_SFP_PRESENT" ] && [ "$RC01_SFP_CURRENT" = "$RC01_SFP_PRESENT" ] && rc01_sfp_netdev
+	if [ "$RC01_SFP_CURRENT" != netdev ] && rc01_sfp_owned; then
+		rc01_sfp_netdev
+	fi
 	return 0
 }
 

@@ -364,9 +364,15 @@ function sfp_presence(root) {
 	result.status = read.status;
 	if (read.status != 'ok') return result;
 	let moddef0 = match(read.data, /(^|\n)moddef0: ([01])\n/);
-	if (!moddef0) { result.status = 'malformed'; return result; }
+	let module_state = match(read.data, /^Module state: ([a-z]+)\n/);
+	// The pinned producer ends with rs1. Require its final complete line so
+	// a short read after moddef0 cannot masquerade as a valid state record.
+	if (!moddef0 || !module_state || !match(read.data, /\nrs1: [01]\n$/)) {
+		result.status = 'malformed';
+		return result;
+	}
 	result.detected = moddef0[2] == '1';
-	result.module_state = match(read.data, /(^|\n)Module state: ([a-z]+)\n/)?.[2];
+	result.module_state = module_state[1];
 	return result;
 }
 

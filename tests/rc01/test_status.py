@@ -626,6 +626,24 @@ class SfpStatus(Status):
         (self.root / "sys/class/net/sfp/carrier").unlink()
         self.assertEqual(self.sfp()["status"], "not-detected")
 
+    def test_incomplete_or_bad_module_record_withholds_presence(self):
+        complete = sfp_debug_state(1, "present") + "\n"
+        cases = {
+            "moddef0-only": "moddef0: 1\n",
+            "module-state-missing": complete.split("\n", 1)[1],
+            "module-state-invalid": complete.replace("Module state: present", "Module state: ???"),
+            "short-after-moddef0": complete.split("rx_los:")[0],
+            "short-final-line": complete[:-2],
+        }
+        for name, data in cases.items():
+            with self.subTest(name=name):
+                (self.root / "sys/kernel/debug/sfp/state").write_text(data)
+                sfp = self.sfp()
+                self.assertEqual(sfp["status"], "unknown")
+                self.assertEqual(sfp["presence"]["status"], "malformed")
+                self.assertIsNone(sfp["presence"]["detected"])
+                self.assertIsNone(sfp["presence"]["module_state"])
+
     def test_missing_interface_is_distinct(self):
         self.module(1, 1)
         shutil.rmtree(self.root / "sys/class/net/sfp")
