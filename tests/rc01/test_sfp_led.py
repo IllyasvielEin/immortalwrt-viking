@@ -25,12 +25,10 @@ PRESENT = "sfp-sfp:present"
 FAKE_KERNEL = r'''
 logger() { printf '%s\n' "$*" >> "$WORK/syslog"; }
 rc01_sfp_set_trigger() {
-	local t out= previous=
+	local t out=
 	case " $(cat "$WORK/available") " in *" $1 "*) ;; *) return 1 ;; esac
-	read -r previous < "$RC01_SFP_LED/trigger"
 	printf '%s\n' "$1" >> "$WORK/writes"
-	# Selecting the current trigger does not recreate its kernel attributes.
-	case " $previous " in *" [$1] "*) return 0 ;; esac
+	# The pinned kernel deactivates/reactivates even the current trigger.
 	for t in $(cat "$WORK/available"); do
 		[ "$t" = "$1" ] && t="[$t]"
 		out="$out $t"
