@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import io
+import json
 import shlex
 import shutil
 import tarfile
@@ -11,6 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ROOT / "package/emortal/rc01-platform/files"
+LAYOUT = json.loads((ROOT / 'config/rc01/layout.json').read_text())
 BUSYBOX = os.environ.get("BUSYBOX") or shutil.which("busybox")
 DTC, FDTGET = shutil.which("dtc"), shutil.which("fdtget")
 
@@ -22,6 +24,7 @@ class Runtime(unittest.TestCase):
         self.work = Path(self.temporary.name)
         self.env = os.environ | {"RC01_SYSFS": str(self.work / "sys"), "RC01_FAN_LIBRARY": "1",
                                  "RC01_PROC": str(self.work / "proc"),
+                                 "RC01_LAYOUT_FILE": str(FILES / 'rc01-layout.sh'),
                                  "RC01_ENV_CONFIG": str(self.work / "fw_env.config")}
 
     def write(self, name, value):
@@ -45,13 +48,18 @@ class Runtime(unittest.TestCase):
         (self.work / "sys/class/hwmon/hwmon8/device").symlink_to(device)
 
     def layout(self):
-        self.write("proc/mtd", 'dev: size erasesize name\nmtd12: 00080000 00020000 "0:APPSBLENV"\nmtd41: 07800000 00020000 "rootfs"')
-        for key, value in (("mtd41/size", 125829120), ("mtd41/erasesize", 131072),
-                           ("mtd41/writesize", 2048), ("mtd12/size", 524288), ("mtd12/erasesize", 131072)):
-            self.write("sys/class/mtd/" + key, value)
+        lines = ['dev: size erasesize name']
+        for key, part in LAYOUT['partitions'].items():
+            index = {'rootfs': 41, 'appsblenv': 12}.get(key, part['index'] + 100)
+            lines.append(f'mtd{index}: {part["bytes"]:08x} 00020000 "{part["name"]}"')
+            for field, value in {'name': part['name'], 'offset': part['offset'], 'size': part['bytes'],
+                                 'erasesize': 131072, 'writesize': 2048, 'bad_blocks': 0, 'ecc_failures': 0}.items():
+                self.write(f'sys/class/mtd/mtd{index}/{field}', value)
+        self.write('proc/mtd', '\n'.join(lines))
         self.write("sys/class/ubi/ubi0/mtd_num", 41)
         self.write("sys/class/ubi/ubi0_0/name", "kernel")
         self.write("sys/class/ubi/ubi0_1/name", "rootfs")
+        self.write("sys/class/ubi/ubi0_2/name", "rootfs_data")
         self.write("fw_env.config", "/dev/mtd12 0x0 0x10000 0x20000 2")
 
     def preflight(self, crc=True):
@@ -104,6 +112,34 @@ class Runtime(unittest.TestCase):
 
     def test_stock_dual_slot_layout_is_rejected(self):
         self.layout(); self.write("sys/class/mtd/mtd41/size", 60 * 1024 * 1024)
+        self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_wrong_start_with_correct_size_is_rejected(self):
+        self.layout(); self.write('sys/class/mtd/mtd41/offset', 24641536)
+        self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_identity_partition_must_be_at_the_new_location(self):
+        self.layout(); self.write('sys/class/mtd/mtd124/offset', 150470656)
+        self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_identity_bad_block_or_uncorrectable_ecc_is_rejected(self):
+        for node, field in [('mtd124', 'bad_blocks'), ('mtd123', 'ecc_failures')]:
+            with self.subTest(node=node, field=field):
+                self.layout(); self.write(f'sys/class/mtd/{node}/{field}', 1)
+                self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_rootfs_bad_block_reserve_is_enforced(self):
+        self.layout(); self.write('sys/class/mtd/mtd41/bad_blocks', 40)
+        self.assertEqual(self.preflight().returncode, 0)
+        self.write('sys/class/mtd/mtd41/bad_blocks', 41)
+        self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_missing_layout_contract_fails_closed(self):
+        self.layout(); self.env['RC01_LAYOUT_FILE'] = str(self.work / 'missing-layout.sh')
+        self.assertNotEqual(self.preflight().returncode, 0)
+
+    def test_missing_data_volume_is_rejected(self):
+        self.layout(); (self.work / 'sys/class/ubi/ubi0_2/name').unlink()
         self.assertNotEqual(self.preflight().returncode, 0)
 
     def test_changed_rootfs_volume_id_is_rejected(self):

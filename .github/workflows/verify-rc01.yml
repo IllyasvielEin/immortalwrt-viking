@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       source_run_id:
-        description: 'Build run containing rc01-unverified-images; no recompilation'
+        description: 'Build run containing current-layout unverified images; no recompilation'
         type: string
         required: true
 
@@ -39,7 +39,7 @@ jobs:
       - name: Download preserved candidate
         uses: actions/download-artifact@v4
         with:
-          name: rc01-unverified-images
+          name: rc01-identity-preserved-unverified-images
           path: candidate
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -47,16 +47,42 @@ jobs:
       - name: Install image test tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends device-tree-compiler mtd-utils
+          sudo apt-get install --yes --no-install-recommends device-tree-compiler mtd-utils squashfs-tools
 
-      - name: Run image regression checks
-        run: python3 -B -m unittest discover -s tests/rc01 -p test_images.py -v
+      - name: Run boot material and image regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests/rc01 -p test_boot_materials.py -v
+          python3 -B -m unittest discover -s tests/rc01 -p test_images.py -v
+
+      - name: Validate private U-Boot and frozen partition table
+        env:
+          RC01_UBOOT_R1_01: ${{ secrets.RC01_UBOOT_R1_01 }}
+          RC01_UBOOT_R1_02: ${{ secrets.RC01_UBOOT_R1_02 }}
+          RC01_UBOOT_R1_03: ${{ secrets.RC01_UBOOT_R1_03 }}
+          RC01_UBOOT_R1_04: ${{ secrets.RC01_UBOOT_R1_04 }}
+          RC01_UBOOT_R1_05: ${{ secrets.RC01_UBOOT_R1_05 }}
+          RC01_UBOOT_R1_06: ${{ secrets.RC01_UBOOT_R1_06 }}
+          RC01_UBOOT_R1_07: ${{ secrets.RC01_UBOOT_R1_07 }}
+          RC01_UBOOT_R1_08: ${{ secrets.RC01_UBOOT_R1_08 }}
+          RC01_UBOOT_R1_09: ${{ secrets.RC01_UBOOT_R1_09 }}
+          RC01_UBOOT_R1_10: ${{ secrets.RC01_UBOOT_R1_10 }}
+          RC01_UBOOT_R1_11: ${{ secrets.RC01_UBOOT_R1_11 }}
+        shell: bash
+        run: python3 -B scripts/verify-rc01-boot-materials.py > rc01-boot-materials.json
 
       - name: Verify preserved images without rebuilding
         shell: bash
         run: |
           set -euo pipefail
           grep -Fqx "source_commit=$SOURCE_COMMIT" candidate/rc01-build-metadata.txt
+          grep -Fqx 'layout_id=rc01-identity-preserved-r1' candidate/rc01-build-metadata.txt
+          grep -Fqx 'boot_materials_scope=static-candidate-validation' candidate/rc01-build-metadata.txt
+          grep -Fqx 'bootloader_sha256=86092e052a2dcc734e3a84572f544bd4f00061f8746d75d659c2d063511316cc' candidate/rc01-build-metadata.txt
+          cmp config/rc01/layout.json candidate/rc01-layout.json
+          cmp config/rc01/boot/mibib-front-bdata-r1.bin candidate/rc01-mibib-front-bdata-r1.bin
+          cmp rc01-boot-materials.json candidate/rc01-boot-materials.json
           (cd candidate; sha256sum -c rc01-images.sha256)
           python3 -B scripts/verify-rc01-images.py candidate > candidate/rc01-revalidation.json
           {
@@ -66,10 +92,13 @@ jobs:
             echo 'physical_acceptance=not-performed'
           } > candidate/rc01-revalidation-source.txt
 
+      - name: Check revalidation text before publishing
+        run: python3 -B scripts/validate-rc01-public-artifacts.py candidate
+
       - name: Upload revalidated images
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-revalidated-${{ inputs.source_run_id }}-${{ github.run_number }}
+          name: rc01-identity-preserved-revalidated-${{ inputs.source_run_id }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: candidate/

@@ -2,7 +2,7 @@ PART_NAME=firmware
 REQUIRE_IMAGE_METADATA=1
 
 RAMFS_COPY_BIN='fw_printenv fw_setenv head cmp sha256sum tr mktemp'
-RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock /tmp/sysinfo/board_name'
+RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock /tmp/sysinfo/board_name /lib/upgrade/rc01-layout.sh /usr/share/rc01/layout.json'
 
 platform_check_image() {
 	case "$(board_name)" in

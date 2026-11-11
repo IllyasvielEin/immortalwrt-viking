@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "scope": "static-candidate-validation",
+  "mibib": {
+    "file": "mibib-front-bdata-r1.bin",
+    "bytes": 262144,
+    "sha256": "697764db15a752a61e9aed8820f7b78593a65521f3491b8d4aa5062201e36b31",
+    "preserved_physical_records_sha256": "08aa82183d0578e3d90e3eb115757199310a0803a17dbd4ccdf3e1d1a918dc86",
+    "preserved_user_records_sha256": "be89d084664e0b47d82bca1c378b1f69c49e62acf8d78ce995ee4ec865bff64c"
+  },
+  "uboot": {
+    "bytes": 520684,
+    "sha256": "86092e052a2dcc734e3a84572f544bd4f00061f8746d75d659c2d063511316cc",
+    "baseline_source": "https://github.com/VIKINGYFY/u-boot-2016/tree/1f0979a2f6871eeb93e191e1dc9052a222b83919",
+    "provenance": "user-supplied candidate; additional changes not reproducibly mapped to source",
+    "dtb_gzip_offset": 458384,
+    "dtb_offset": 16,
+    "environment": {
+      "bytes": 65536,
+      "evidence": "prior reviewed static disassembly; CI does not execute ENV import or save"
+    },
+    "input": "private Actions secrets or explicitly supplied local file",
+    "private_input": {
+      "codec": "gzip+base64",
+      "prefix": "RC01_UBOOT_R1_",
+      "chunks": 11,
+      "compressed_bytes": 316818,
+      "compressed_sha256": "900fd41e3c3845d0b85db1f769f5571d6d5acccde723757002981d7faf1b86d1",
+      "chunk_max_bytes": 42000
+    }
+  }
+}

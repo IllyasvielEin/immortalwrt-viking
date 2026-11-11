@@ -4,6 +4,7 @@
 RC01_PROC="${RC01_PROC:-/proc}"
 RC01_SYSFS="${RC01_SYSFS:-/sys}"
 RC01_ENV_CONFIG="${RC01_ENV_CONFIG:-/etc/fw_env.config}"
+RC01_LAYOUT_FILE="${RC01_LAYOUT_FILE:-/lib/upgrade/rc01-layout.sh}"
 
 rc01_fail() {
 	echo "RC01 preflight: $*" >&2
@@ -21,22 +22,44 @@ rc01_mtd_index() {
 }
 
 rc01_check_layout() {
-	local root env map value machid config
-	root="$(rc01_mtd_index rootfs)" || { rc01_fail 'rootfs partition is missing or ambiguous'; return 1; }
-	env="$(rc01_mtd_index 0:appsblenv)" || { rc01_fail 'APPSBLENV partition is missing or ambiguous'; return 1; }
-	[ "$(cat "$RC01_SYSFS/class/mtd/mtd$root/size")" = 125829120 ] &&
-		[ "$(cat "$RC01_SYSFS/class/mtd/mtd$root/erasesize")" = 131072 ] &&
-		[ "$(cat "$RC01_SYSFS/class/mtd/mtd$root/writesize")" = 2048 ] || {
-		rc01_fail 'requires the verified 120 MiB rootfs / 128 KiB erase / 2 KiB page layout'
-		return 1
-	}
-	[ "$(cat "$RC01_SYSFS/class/mtd/mtd$env/size")" = 524288 ] &&
-		[ "$(cat "$RC01_SYSFS/class/mtd/mtd$env/erasesize")" = 131072 ] || {
-		rc01_fail 'unexpected APPSBLENV NAND geometry'; return 1
+	local root= env= map value machid config name offset size index count bad
+	[ -r "$RC01_LAYOUT_FILE" ] || { rc01_fail 'layout contract is missing'; return 1; }
+	# This generated projection is installed and copied into upgrade ramfs.
+	. "$RC01_LAYOUT_FILE" || return 1
+	count="$(awk '/^mtd[0-9]+:/ { count++ } END { print count+0 }' "$RC01_PROC/mtd")"
+	[ "$count" = "$RC01_PARTITION_COUNT" ] || { rc01_fail 'unexpected partition count'; return 1; }
+	while IFS='|' read -r name offset size; do
+		index="$(rc01_mtd_index "$name")" || { rc01_fail 'partition is missing or ambiguous'; return 1; }
+		[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/offset")" = "$offset" ] &&
+			[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/size")" = "$size" ] &&
+			[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/erasesize")" = "$RC01_NAND_ERASE" ] &&
+			[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/writesize")" = "$RC01_NAND_PAGE" ] || {
+			rc01_fail 'partition geometry does not match the identity-preserved layout'; return 1
+		}
+		case "$name" in
+			rootfs) root="$index" ;;
+			0:APPSBLENV) env="$index" ;;
+			0:LICENSE|bdata)
+				[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/bad_blocks")" = 0 ] &&
+					[ "$(cat "$RC01_SYSFS/class/mtd/mtd$index/ecc_failures")" = 0 ] || {
+					rc01_fail 'identity partition bad-block/ECC check failed'; return 1
+				}
+				;;
+		esac
+	done <<EOF
+$RC01_LAYOUT_PARTITIONS
+EOF
+	[ -n "$root" ] && [ -n "$env" ] || { rc01_fail 'required layout names missing'; return 1; }
+	bad="$(cat "$RC01_SYSFS/class/mtd/mtd$root/bad_blocks")"
+	case "$bad" in ''|*[!0-9]*) rc01_fail 'invalid rootfs bad-block count'; return 1 ;; esac
+	[ "$bad" -le "$RC01_BAD_BLOCK_RESERVE" ] &&
+		[ "$(cat "$RC01_SYSFS/class/mtd/mtd$root/ecc_failures")" = 0 ] || {
+		rc01_fail 'rootfs exceeds the bad-block reserve or has uncorrectable ECC'; return 1
 	}
 	[ "$(cat "$RC01_SYSFS/class/ubi/ubi0/mtd_num" 2>/dev/null)" = "$root" ] &&
 		[ "$(cat "$RC01_SYSFS/class/ubi/ubi0_0/name" 2>/dev/null)" = kernel ] &&
-		[ "$(cat "$RC01_SYSFS/class/ubi/ubi0_1/name" 2>/dev/null)" = rootfs ] || {
+		[ "$(cat "$RC01_SYSFS/class/ubi/ubi0_1/name" 2>/dev/null)" = rootfs ] &&
+		[ "$(cat "$RC01_SYSFS/class/ubi/ubi0_2/name" 2>/dev/null)" = rootfs_data ] || {
 		rc01_fail 'expected kernel/rootfs at UBI0 volume IDs 0/1'; return 1
 	}
 	map="$(awk 'NF && $1 !~ /^#/ { print }' "$RC01_ENV_CONFIG")"
@@ -51,8 +74,8 @@ rc01_check_layout() {
 			rc01_fail 'invalid numeric field in environment map'; return 1
 		}
 	done
-	[ "$(($1))" -eq 0 ] && [ "$(($2))" -eq 65536 ] &&
-		[ "$(($3))" -eq 131072 ] && [ "$(($4))" -eq 2 ] || {
+	[ "$(($1))" -eq 0 ] && [ "$(($2))" -eq "$RC01_ENV_BYTES" ] &&
+		[ "$(($3))" -eq "$RC01_ENV_ERASE" ] && [ "$(($4))" -eq "$RC01_ENV_RANGE" ] || {
 		rc01_fail 'environment map must use offset 0, size 64 KiB, erase 128 KiB, range 2 sectors'
 		return 1
 	}
@@ -105,10 +128,9 @@ rc01_check_image() (
 	}
 	root_bytes="$(wc -c < "$work/root")"
 	[ "$root_bytes" -gt 0 ] || { rc01_fail 'missing rootfs payload'; exit 1; }
-	# 960 PEBs total. Reserve 40 for the 256 MiB NAND bad-block budget,
-	# four for UBI overhead, and at least 32 MiB of data-volume LEBs.
-	payload_pebs=$(( (kernel_bytes + 126975) / 126976 + (root_bytes + 126975) / 126976 ))
-	[ $((payload_pebs + 44 + (33554432 + 126975) / 126976)) -le 960 ] || {
+	# Reserve whole-NAND bad-block capacity, UBI overhead and writable data.
+	payload_pebs=$(( (kernel_bytes + RC01_LEB_BYTES - 1) / RC01_LEB_BYTES + (root_bytes + RC01_LEB_BYTES - 1) / RC01_LEB_BYTES ))
+	[ $((payload_pebs + RC01_RESERVE_PEBS + (RC01_MIN_DATA_BYTES + RC01_LEB_BYTES - 1) / RC01_LEB_BYTES)) -le "$RC01_ROOTFS_PEBS" ] || {
 		rc01_fail 'image leaves less than the required rootfs_data budget'; exit 1
 	}
 )

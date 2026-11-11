@@ -74,7 +74,7 @@ const state = {
   schema: 1, board: 'xiaomi,be10000', kernel: '6.18.55',
   temperatures: [{ name: 'nss-top-thermal', celsius: 45 }],
   fans: [{ hwmon: 'hwmon8', rpm: 960, pwm: 77 }], ports: [], processes: [],
-  storage: { rootfs: { size: 125829120 }, environment_map_valid: true },
+  storage: { rootfs: { size: 241434624 }, environment_map_valid: true },
   ppe: { active_flows: { total: 0 } }, proxy: { btf: false },
   preflight: [{ target: 'hardware', checks: [{ level: 'ok', message: 'Requires Xiaomi RC01 / BE10000' }] }]
 };

@@ -6,17 +6,25 @@ import argparse
 import gzip
 import hashlib
 import io
+import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
 import tarfile
+import tempfile
 import zlib
 
-PEB = 131072
-LEB = 126976
-PARTITION_PEBS = 960
-RESERVE_PEBS = 44  # Whole-NAND bad-block budget plus UBI overhead.
-MIN_DATA_BYTES = 32 * 1024 * 1024
+ROOT = Path(__file__).resolve().parents[1]
+_layout_spec = importlib.util.spec_from_file_location('rc01_layout', ROOT / 'scripts/rc01-layout.py')
+_layout_module = importlib.util.module_from_spec(_layout_spec)
+_layout_spec.loader.exec_module(_layout_module)
+LAYOUT = _layout_module.load_layout()
+PEB = LAYOUT['nand']['erase_bytes']
+LEB = LAYOUT['nand']['leb_bytes']
+PARTITION_PEBS = LAYOUT['partitions']['rootfs']['bytes'] // PEB
+RESERVE_PEBS = LAYOUT['nand']['bad_block_reserve_pebs'] + LAYOUT['nand']['ubi_overhead_pebs']
+MIN_DATA_BYTES = LAYOUT['ubi']['minimum_data_bytes']
 CONFIGS = ("config@al02-c4", "config@al02-c6")
 
 
@@ -394,7 +402,7 @@ def read_sysupgrade(path: Path) -> tuple[bytes, bytes]:
         kernel_member = kernels[0]
         root_member = archive.getmember(kernel_member.name.rsplit("/", 1)[0] + "/root")
         require(kernel_member.isfile() and root_member.isfile(), "payload must be a regular file")
-        require(0 < kernel_member.size <= 16 * 1024 * 1024 and 0 < root_member.size <= 120 * 1024 * 1024,
+        require(0 < kernel_member.size <= 16 * 1024 * 1024 and 0 < root_member.size <= LAYOUT['partitions']['rootfs']['bytes'],
                 "unexpected sysupgrade payload size")
         return archive.extractfile(kernel_member).read(), archive.extractfile(root_member).read()
 
@@ -460,6 +468,26 @@ def verify_factory(path: Path, kernel: bytes, root: bytes) -> dict:
     return {"factory_bytes": len(blob), "ubi_volume_ids": {"kernel": 0, "rootfs": 1, "rootfs_data": 2}}
 
 
+def verify_runtime_payload(root: bytes) -> dict:
+    """Check the shipped filesystem, not only the source used to build it."""
+    expected = {
+        'usr/share/rc01/layout.json': ROOT / 'config/rc01/layout.json',
+        'lib/upgrade/rc01-layout.sh': ROOT / 'package/emortal/rc01-platform/files/rc01-layout.sh',
+        'lib/upgrade/rc01.sh': ROOT / 'package/emortal/rc01-platform/files/rc01.sh',
+        'usr/share/ucode/rc01/platform.uc': ROOT / 'package/emortal/rc01-platform/files/platform.uc',
+        'lib/upgrade/platform.sh': ROOT / 'target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh',
+    }
+    with tempfile.TemporaryDirectory(prefix='rc01-image-runtime-') as directory:
+        path = Path(directory) / 'root.squashfs'
+        path.write_bytes(root)
+        for name, source in expected.items():
+            result = subprocess.run(['unsquashfs', '-no-progress', '-cat', str(path), name], capture_output=True)
+            require(result.returncode == 0 and result.stdout == source.read_bytes(),
+                    'shipped runtime layout/preflight mismatch: ' + name)
+    return {'layout_id': LAYOUT['layout_id'], 'rootfs_partition_bytes': LAYOUT['partitions']['rootfs']['bytes'],
+            'runtime_layout_files_verified': len(expected)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("target_dir", type=Path)
@@ -468,7 +496,7 @@ def main() -> None:
     upgrades = list(args.target_dir.glob("*xiaomi_be10000-squashfs-sysupgrade.bin"))
     require(len(factories) == len(upgrades) == 1, "expected exactly one RC01 factory and sysupgrade image")
     kernel, root = read_sysupgrade(upgrades[0])
-    result = verify_fit(kernel) | image_budget(kernel, root) | verify_factory(factories[0], kernel, root)
+    result = verify_fit(kernel) | image_budget(kernel, root) | verify_factory(factories[0], kernel, root) | verify_runtime_payload(root)
     fit = Fdt(kernel)
     ref = fit.string("/configurations/" + CONFIGS[0], "fdt")
     result.update(verify_platform_dtb(fit.prop("/images/" + ref, "data")))

@@ -4,6 +4,7 @@ set -eu
 umask 022
 
 cd "$(dirname "$0")/.."
+python3 -B scripts/rc01-layout.py --check-generated
 [ -z "${RC01_WITH_DAED+x}" ] || {
 	echo 'RC01_WITH_DAED was replaced by RC01_WITH_DAE (dae + daede)' >&2; exit 1
 }

@@ -54,7 +54,7 @@ env:
 
 jobs:
   build:
-    name: RC01 Du v2 / 120 MiB / DHCP complete
+    name: RC01 identity-preserved / DHCP complete
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -148,6 +148,38 @@ jobs:
           RC01_COMPILER_RESTORE_OUTCOME: ${{ steps.compiler_cache.outcome }}
           RC01_COMPILER_RESTORED_KEY: ${{ steps.compiler_cache.outputs.cache-matched-key }}
         run: python3 -B scripts/rc01-ci-cache.py
+
+      - name: Validate frozen partition table and U-Boot candidate
+        id: boot_materials
+        env:
+          RC01_UBOOT_R1_01: ${{ secrets.RC01_UBOOT_R1_01 }}
+          RC01_UBOOT_R1_02: ${{ secrets.RC01_UBOOT_R1_02 }}
+          RC01_UBOOT_R1_03: ${{ secrets.RC01_UBOOT_R1_03 }}
+          RC01_UBOOT_R1_04: ${{ secrets.RC01_UBOOT_R1_04 }}
+          RC01_UBOOT_R1_05: ${{ secrets.RC01_UBOOT_R1_05 }}
+          RC01_UBOOT_R1_06: ${{ secrets.RC01_UBOOT_R1_06 }}
+          RC01_UBOOT_R1_07: ${{ secrets.RC01_UBOOT_R1_07 }}
+          RC01_UBOOT_R1_08: ${{ secrets.RC01_UBOOT_R1_08 }}
+          RC01_UBOOT_R1_09: ${{ secrets.RC01_UBOOT_R1_09 }}
+          RC01_UBOOT_R1_10: ${{ secrets.RC01_UBOOT_R1_10 }}
+          RC01_UBOOT_R1_11: ${{ secrets.RC01_UBOOT_R1_11 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-rc01-boot-materials.py > rc01-boot-materials.json
+          python3 -B scripts/validate-rc01-public-artifacts.py config/rc01/boot config/rc01/layout.json rc01-boot-materials.json
+
+      - name: Preserve static boot validation records
+        if: ${{ steps.boot_materials.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-static-boot-validation-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            config/rc01/boot/
+            config/rc01/layout.json
+            rc01-boot-materials.json
 
       - name: Run offline regression checks
         run: python3 -B -m unittest discover -s tests/rc01 -v
@@ -278,6 +310,9 @@ jobs:
           cp .rc01-sources/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
           cp .rc01-sources/lock.json "$TARGET_DIR/rc01-software-source-lock.json"
           cp scripts/rc01-platform-sources.json "$TARGET_DIR/rc01-platform-sources.json"
+          cp config/rc01/layout.json "$TARGET_DIR/rc01-layout.json"
+          cp config/rc01/boot/mibib-front-bdata-r1.bin "$TARGET_DIR/rc01-mibib-front-bdata-r1.bin"
+          cp rc01-boot-materials.json "$TARGET_DIR/rc01-boot-materials.json"
           python3 -c 'import json, pathlib, sys; s=json.loads(pathlib.Path(".rc01-sources/lock.json").read_text()); pathlib.Path(sys.argv[1]).write_text(json.dumps(s["package_manifest"], indent=2)+"\n")' "$TARGET_DIR/rc01-package-sources.json"
           python3 -B scripts/rc01-source-metadata.py "$TARGET_DIR/rc01-source-metadata.json"
           cp -a config/rc01/patches/packages "$TARGET_DIR/rc01-package-patches"
@@ -317,7 +352,10 @@ jobs:
             echo "ccache_compiler_check=$CCACHE_COMPILERCHECK"
             echo "cold_cache=${{ inputs.cold_cache }}"
             echo "physical_acceptance=not-performed"
-            echo "boot_verified_base=43fc40c991523305d8ec5ff1b5714f063dfeb091"
+            echo 'layout_id=rc01-identity-preserved-r1'
+            echo 'boot_materials_scope=static-candidate-validation'
+            echo 'bootloader_runtime=not-performed'
+            echo 'bootloader_sha256=86092e052a2dcc734e3a84572f544bd4f00061f8746d75d659c2d063511316cc'
             echo "lan_address_mode=dhcp-client"
             echo "dhcp_client_hostname=RC01"
             echo "fan_pwm_output=push-pull"
@@ -352,7 +390,7 @@ jobs:
         if: ${{ !cancelled() && steps.firmware.outcome == 'success' && steps.image_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-unverified-images
+          name: rc01-identity-preserved-unverified-images
           if-no-files-found: error
           retention-days: 7
           path: ${{ env.TARGET_DIR }}/
@@ -403,10 +441,25 @@ jobs:
           sys.exit(not result.wasSuccessful() or bool(result.skipped))
           PYTEST
 
-      - name: Verify boot compatibility and image budget
+      - name: Verify static boot contracts and image budget
+        env:
+          RC01_UBOOT_R1_01: ${{ secrets.RC01_UBOOT_R1_01 }}
+          RC01_UBOOT_R1_02: ${{ secrets.RC01_UBOOT_R1_02 }}
+          RC01_UBOOT_R1_03: ${{ secrets.RC01_UBOOT_R1_03 }}
+          RC01_UBOOT_R1_04: ${{ secrets.RC01_UBOOT_R1_04 }}
+          RC01_UBOOT_R1_05: ${{ secrets.RC01_UBOOT_R1_05 }}
+          RC01_UBOOT_R1_06: ${{ secrets.RC01_UBOOT_R1_06 }}
+          RC01_UBOOT_R1_07: ${{ secrets.RC01_UBOOT_R1_07 }}
+          RC01_UBOOT_R1_08: ${{ secrets.RC01_UBOOT_R1_08 }}
+          RC01_UBOOT_R1_09: ${{ secrets.RC01_UBOOT_R1_09 }}
+          RC01_UBOOT_R1_10: ${{ secrets.RC01_UBOOT_R1_10 }}
+          RC01_UBOOT_R1_11: ${{ secrets.RC01_UBOOT_R1_11 }}
         shell: bash
         run: |
           set -euo pipefail
+          python3 -B scripts/verify-rc01-boot-materials.py > "$TARGET_DIR/rc01-boot-materials.json"
+          cmp config/rc01/layout.json "$TARGET_DIR/rc01-layout.json"
+          cmp config/rc01/boot/mibib-front-bdata-r1.bin "$TARGET_DIR/rc01-mibib-front-bdata-r1.bin"
           python3 -B scripts/verify-rc01-images.py "$TARGET_DIR" | tee "$TARGET_DIR/rc01-image-validation.json"
           python3 -B scripts/verify-rc01-wireless-artifacts.py "$TARGET_DIR" > "$TARGET_DIR/rc01-wireless-artifacts.json"
 
@@ -418,7 +471,7 @@ jobs:
         if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-duv2-120m-dhcp-complete-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
+          name: rc01-identity-preserved-dhcp-complete-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |

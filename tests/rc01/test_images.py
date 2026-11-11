@@ -220,7 +220,7 @@ class Images(unittest.TestCase):
 
     def test_oversized_image_is_rejected(self):
         with self.assertRaisesRegex(images.VerificationError, "32 MiB"):
-            images.image_budget(b"x" * 1000000, rootfs(100 * 1024 * 1024))
+            images.image_budget(b"x" * 1000000, rootfs(200 * 1024 * 1024))
 
     def test_duplicate_alias_is_rejected_by_generator(self):
         result = subprocess.run(["sh", str(ROOT / "scripts/mkits.sh"), "-A", "arm64", "-C", "gzip",

@@ -246,6 +246,11 @@ class BootstrapTests(unittest.TestCase):
             (project / directory).mkdir(parents=True, exist_ok=True)
         for name in ("prepare-rc01.sh", "rc01-go-bootstrap.py", "kconfig.pl"):
             shutil.copy2(ROOT / "scripts" / name, project / "scripts" / name)
+        for relative in ('scripts/rc01-layout.py', 'config/rc01/layout.json', 'config/rc01/layout.mk',
+                         'package/emortal/rc01-platform/files/rc01-layout.sh'):
+            target = project / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, target)
         (project / "config/rc01/feeds.conf").write_text(f"src-git packages local^{FEED_REVISION}\n")
         for name in ("board.d/99-rc01-wireless", "uci-defaults/89-rc01-bypass"):
             (project / "config/rc01/files/etc" / name).write_text("fixture\n")

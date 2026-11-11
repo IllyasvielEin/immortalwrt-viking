@@ -1,0 +1,207 @@
+{
+  "schema": 1,
+  "layout_id": "rc01-identity-preserved-r1",
+  "nand": {
+    "bytes": 268435456,
+    "erase_bytes": 131072,
+    "page_bytes": 2048,
+    "leb_bytes": 126976,
+    "bad_block_reserve_pebs": 40,
+    "ubi_overhead_pebs": 4
+  },
+  "partitions": {
+    "sbl1": {
+      "name": "0:SBL1",
+      "index": 0,
+      "offset": 0,
+      "attributes": 65535,
+      "bytes": 1572864
+    },
+    "sbl1_1": {
+      "name": "0:SBL1_1",
+      "index": 1,
+      "offset": 1572864,
+      "attributes": 65535,
+      "bytes": 1572864
+    },
+    "mibib": {
+      "name": "0:MIBIB",
+      "index": 2,
+      "offset": 3145728,
+      "attributes": 65535,
+      "bytes": 1048576
+    },
+    "bootconfig": {
+      "name": "0:BOOTCONFIG",
+      "index": 3,
+      "offset": 4194304,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "bootconfig1": {
+      "name": "0:BOOTCONFIG1",
+      "index": 4,
+      "offset": 4718592,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "qsee": {
+      "name": "0:QSEE",
+      "index": 5,
+      "offset": 5242880,
+      "attributes": 65535,
+      "bytes": 3670016
+    },
+    "qsee_1": {
+      "name": "0:QSEE_1",
+      "index": 6,
+      "offset": 8912896,
+      "attributes": 65535,
+      "bytes": 3670016
+    },
+    "devcfg": {
+      "name": "0:DEVCFG",
+      "index": 7,
+      "offset": 12582912,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "devcfg_1": {
+      "name": "0:DEVCFG_1",
+      "index": 8,
+      "offset": 13107200,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "apdp": {
+      "name": "0:APDP",
+      "index": 9,
+      "offset": 13631488,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "apdp_1": {
+      "name": "0:APDP_1",
+      "index": 10,
+      "offset": 14155776,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "tme": {
+      "name": "0:TME",
+      "index": 11,
+      "offset": 14680064,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "tme_1": {
+      "name": "0:TME_1",
+      "index": 12,
+      "offset": 15204352,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "rpm": {
+      "name": "0:RPM",
+      "index": 13,
+      "offset": 15728640,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "rpm_1": {
+      "name": "0:RPM_1",
+      "index": 14,
+      "offset": 16252928,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "cdt": {
+      "name": "0:CDT",
+      "index": 15,
+      "offset": 16777216,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "cdt_1": {
+      "name": "0:CDT_1",
+      "index": 16,
+      "offset": 17301504,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "appsblenv": {
+      "name": "0:APPSBLENV",
+      "index": 17,
+      "offset": 17825792,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "appsbl": {
+      "name": "0:APPSBL",
+      "index": 18,
+      "offset": 18350080,
+      "attributes": 65535,
+      "bytes": 1572864
+    },
+    "appsbl_1": {
+      "name": "0:APPSBL_1",
+      "index": 19,
+      "offset": 19922944,
+      "attributes": 65535,
+      "bytes": 1572864
+    },
+    "art": {
+      "name": "0:ART",
+      "index": 20,
+      "offset": 21495808,
+      "attributes": 65535,
+      "bytes": 1310720
+    },
+    "ethphyfw": {
+      "name": "0:ETHPHYFW",
+      "index": 21,
+      "offset": 22806528,
+      "attributes": 65535,
+      "bytes": 1048576
+    },
+    "training": {
+      "name": "0:TRAINING",
+      "index": 22,
+      "offset": 23855104,
+      "attributes": 65535,
+      "bytes": 524288
+    },
+    "license": {
+      "name": "0:LICENSE",
+      "index": 23,
+      "offset": 24379392,
+      "attributes": 65535,
+      "bytes": 262144
+    },
+    "bdata": {
+      "name": "bdata",
+      "index": 24,
+      "offset": 24641536,
+      "attributes": 65535,
+      "bytes": 262144
+    },
+    "rootfs": {
+      "name": "rootfs",
+      "index": 25,
+      "offset": 24903680,
+      "attributes": 65535,
+      "bytes": 241434624
+    }
+  },
+  "ubi": {
+    "kernel_id": 0,
+    "rootfs_id": 1,
+    "data_id": 2,
+    "minimum_data_bytes": 33554432
+  },
+  "environment": {
+    "bytes": 65536,
+    "erase_bytes": 131072,
+    "range_blocks": 2
+  }
+}

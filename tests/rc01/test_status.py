@@ -29,8 +29,11 @@ class Status(unittest.TestCase):
         }
         self.write("tmp/sysinfo/board_name", "xiaomi,be10000")
         self.write("proc/sys/kernel/osrelease", "6.18.55")
-        for idx, name, size in [(12, "0:APPSBLENV", 524288), (41, "rootfs", 125829120)]:
-            for field, value in {"name": name, "size": size, "erasesize": 131072,
+        layout = json.loads((ROOT / 'config/rc01/layout.json').read_text())
+        self.write('usr/share/rc01/layout.json', json.dumps(layout))
+        for key, part in layout['partitions'].items():
+            idx = {'rootfs': 41, 'appsblenv': 12}.get(key, part['index'] + 100)
+            for field, value in {"name": part['name'], "offset": part['offset'], "size": part['bytes'], "erasesize": 131072,
                                  "writesize": 2048, "bad_blocks": 0, "ecc_failures": 0}.items():
                 self.write(f"sys/class/mtd/mtd{idx}/{field}", value)
         self.write("etc/fw_env.config", "/dev/mtd12 0x0 0x10000 0x20000 2 # verified map")
@@ -86,6 +89,29 @@ class Status(unittest.TestCase):
     def test_wrong_environment_length_fails(self):
         self.write("etc/fw_env.config", "/dev/mtd12 0 0x40000 0x20000 2")
         self.assertEqual(self.levels(self.run_status())["environment-map"], "error")
+
+    def test_moved_identity_and_rootfs_offsets_are_required(self):
+        for node in ['mtd124', 'mtd41']:
+            with self.subTest(node=node):
+                path = self.root / f'sys/class/mtd/{node}/offset'
+                before = path.read_text()
+                self.write(f'sys/class/mtd/{node}/offset', 0)
+                self.assertEqual(self.levels(self.run_status())['layout'], 'error')
+                path.write_text(before)
+
+    def test_missing_contract_fails_closed(self):
+        (self.root / 'usr/share/rc01/layout.json').unlink()
+        self.assertEqual(self.levels(self.run_status())['layout'], 'error')
+
+    def test_identity_ecc_is_not_reported_healthy(self):
+        self.write('sys/class/mtd/mtd123/ecc_failures', 1)
+        self.assertEqual(self.levels(self.run_status())['identity-storage'], 'error')
+
+    def test_missing_rootfs_ecc_cannot_pass(self):
+        (self.root / 'sys/class/mtd/mtd41/ecc_failures').unlink()
+        result = self.run_status()
+        self.assertEqual(self.levels(result)['nand-ecc'], 'error')
+        self.assertFalse(result['result']['passed'])
 
     def test_read_only_mtd_alias_is_not_a_second_partition(self):
         shutil.copytree(self.root / "sys/class/mtd/mtd41", self.root / "sys/class/mtd/mtd41ro")

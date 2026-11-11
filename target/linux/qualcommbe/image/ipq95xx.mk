@@ -115,14 +115,15 @@ define Device/xiaomi_be10000-common
 		kmod-phy-aquantia kmod-sfp kmod-usb-storage uboot-envtools
 endef
 
+include $(TOPDIR)/config/rc01/layout.mk
+
 define Device/xiaomi_be10000
 	$(call Device/xiaomi_be10000-common)
 	DEVICE_MODEL := BE10000
 	SOC := ipq9570
-	# Du v2 selects C4 explicitly; retain C6 for other bootloader setups.
+	# The selected bootloader uses C4; C6 remains a same-payload FIT alias.
 	DEVICE_DTS_CONFIG_ALIASES := config@al02-c6
-	# This profile targets the merged 120 MiB RC01 MIBIB layout.
-	IMAGE_SIZE := 122880k
+	IMAGE_SIZE := $(RC01_ROOTFS_SIZE_KIB)k
 	NAND_SIZE := 256m
 	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000 rc01-platform
 endef

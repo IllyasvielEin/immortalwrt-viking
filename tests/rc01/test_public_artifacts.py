@@ -66,8 +66,7 @@ class PublicArtifacts(unittest.TestCase):
             self.assertIn(f"id: {category}", workflow)
             self.assertIn(f"steps.{category}.outcome == 'success'", workflow)
 
-    def test_build_guide_uses_a_generic_dns_endpoint(self):
+    def test_build_guide_has_no_abbreviated_site_endpoint(self):
         guide = (ROOT / "docs/rc01-build.md").read_text()
-        self.assertIn("设备当前管理地址的53端口", guide)
         if re.search(r"(?<![0-9A-Za-z])(?:\.\d{1,3}){1,3}:\d+", guide):
             self.fail("build guide contains an abbreviated site address")

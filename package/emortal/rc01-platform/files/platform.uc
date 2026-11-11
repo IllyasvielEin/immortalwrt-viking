@@ -51,6 +51,7 @@ function partition(root, wanted) {
 		if (lc(text(path + '/name') || '') != wanted) continue;
 		push(found, {
 			device: '/dev/' + split(path, '/')[-1],
+			offset: numeric(path + '/offset'),
 			size: numeric(path + '/size'), erase_size: numeric(path + '/erasesize'),
 			page_size: numeric(path + '/writesize'),
 			bad_blocks: numeric(path + '/bad_blocks'),
@@ -60,16 +61,35 @@ function partition(root, wanted) {
 	return length(found) == 1 ? found[0] : null;
 }
 
-function environment_map(root, env) {
+function environment_map(root, env, contract) {
 	let entries = [];
 	for (let line in split(readfile(root + '/etc/fw_env.config') || '', '\n')) {
 		line = trim(split(line, '#')[0]);
 		if (length(line)) push(entries, split(line, /\s+/));
 	}
 	let fields = length(entries) == 1 ? entries[0] : [];
-	return env != null && length(fields) == 5 && fields[0] == env.device &&
-		number(fields[1]) == 0 && number(fields[2]) == 65536 &&
-		number(fields[3]) == 131072 && number(fields[4]) == 2;
+	return env != null && contract != null && length(fields) == 5 && fields[0] == env.device &&
+		number(fields[1]) == 0 && number(fields[2]) == contract.environment?.bytes &&
+		number(fields[3]) == contract.environment?.erase_bytes && number(fields[4]) == contract.environment?.range_blocks;
+}
+
+function layout_contract(root) {
+	try {
+		let value = json(readfile(root + '/usr/share/rc01/layout.json') || 'null');
+		return value?.schema == 1 && value?.layout_id == 'rc01-identity-preserved-r1' ? value : null;
+	} catch (error) { return null; }
+}
+
+function layout_matches(root, contract) {
+	if (type(contract?.partitions) != 'object' || length(keys(contract.partitions)) != 26) return false;
+	let devices = filter(glob(root + '/sys/class/mtd/mtd[0-9]*') || [], path => match(split(path, '/')[-1], /^mtd[0-9]+$/));
+	if (length(devices) != 26) return false;
+	for (let key, wanted in contract.partitions) {
+		let actual = partition(root, lc(wanted.name));
+		if (actual == null || actual.offset !== wanted.offset || actual.size !== wanted.bytes ||
+			actual.erase_size !== contract.nand?.erase_bytes || actual.page_size !== contract.nand?.page_bytes) return false;
+	}
+	return true;
 }
 
 export function collect(root, uci) {
@@ -109,6 +129,9 @@ export function collect(root, uci) {
 	let firewall = length(defaults) == 1 ? defaults[0] : { available: false, software: null, hardware: null };
 	let rootfs = partition(root, 'rootfs');
 	let env = partition(root, '0:appsblenv');
+	let license = partition(root, '0:license');
+	let bdata = partition(root, 'bdata');
+	let contract = layout_contract(root);
 	let ubi = root + '/sys/class/ubi/ubi0';
 	let ppe_flows = ppe_counts(text(root + '/sys/kernel/debug/ppe/active_flows'));
 	let overlay = statvfs(root + '/overlay');
@@ -117,7 +140,10 @@ export function collect(root, uci) {
 		kernel: text(root + '/proc/sys/kernel/osrelease'),
 		physical_acceptance: false,
 		temperatures, fans, ports, processes, radios,
-		storage: { rootfs, environment: env, environment_map_valid: environment_map(root, env),
+		storage: { rootfs, environment: env, license, bdata,
+			layout_id: contract?.layout_id, layout_matches: layout_matches(root, contract),
+			bad_block_reserve: contract?.nand?.bad_block_reserve_pebs,
+			environment_map_valid: environment_map(root, env, contract),
 			environment_crc_checked: false,
 			ubi_root_matches: rootfs != null && '/dev/mtd' + numeric(ubi + '/mtd_num') == rootfs.device,
 			volumes: map([ 0, 1, 2 ], id => text(root + '/sys/class/ubi/ubi0_' + id + '/name')),
@@ -140,15 +166,18 @@ export function assess(state, target) {
 	function check(code, level, message) { push(checks, { code, level, message }); }
 	check('board', state.supported ? 'ok' : 'error', 'Requires Xiaomi RC01 / BE10000');
 	let storage = state.storage;
-	let geometry = storage.rootfs?.size == 125829120 && storage.rootfs?.erase_size == 131072 &&
-		storage.rootfs?.page_size == 2048 && storage.environment?.size == 524288 &&
-		storage.environment?.erase_size == 131072;
-	check('layout', geometry ? 'ok' : 'error', 'Requires the verified 120 MiB NAND layout');
+	check('layout', storage.layout_matches === true ? 'ok' : 'error', 'Requires the identity-preserved NAND layout');
+	let identities = [ storage.license, storage.bdata ];
+	check('identity-storage', !length(filter(identities, part => part == null || part.bad_blocks !== 0 ||
+		part.uncorrectable_ecc !== 0)) ? 'ok' : 'error', 'Identity partitions require readable ECC and no bad blocks');
+	let bad = storage.rootfs?.bad_blocks;
+	check('nand-reserve', bad == null || storage.bad_block_reserve == null || bad > storage.bad_block_reserve ? 'error' : 'ok',
+		'Rootfs bad blocks must fit the reserved capacity');
 	check('environment-map', storage.environment_map_valid ? 'ok' : 'error', 'Requires the 64 KiB environment map; CRC is checked separately during upgrade');
 	check('ubi', storage.ubi_root_matches && join(' ', storage.volumes) == 'kernel rootfs rootfs_data' ? 'ok' : 'error',
 		'Requires kernel/rootfs/rootfs_data at UBI0 IDs 0/1/2');
 	let ecc = storage.rootfs?.uncorrectable_ecc;
-	check('nand-ecc', ecc == null ? 'warn' : ecc > 0 ? 'error' : 'ok', 'NAND uncorrectable ECC counter');
+	check('nand-ecc', ecc === 0 ? 'ok' : 'error', 'NAND uncorrectable ECC counter must be readable and zero');
 	let fan = length(state.fans) == 1 ? state.fans[0] : null;
 	check('fan', fan != null && fan.rpm > 0 && fan.pwm != null && fan.pwm >= 77 && fan.pwm <= 255 &&
 		(!fan.fault_available || fan.fault === 0) ? 'ok' : 'error', 'Requires one healthy EMC2301 at address 0x2f');

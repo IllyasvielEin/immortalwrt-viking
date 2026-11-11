@@ -56,7 +56,7 @@
     "release_scope": "local selected-commits; not upstream r47 or a full merge"
   },
   "local_preserved": [
-    "RC01 120MiB layout and 32MiB writable budget",
+    "RC01 identity-preserved layout and 32MiB minimum writable budget",
     "five-argument 64KiB envtools mapping",
     "C4 default and C6 same-payload alias",
     "442 per-entry NAND ID correction and 0412 full-length probe diagnostics",
@@ -152,7 +152,6 @@
     "906_split": "retain existing 906; no unproved source-equivalence refactor",
     "1635_cleanup": "not a prerequisite for old-317-compatible 914",
     "DFS911": "pending request A/B/A ordering defect unresolved",
-    "uboot": "not needed for source integration; downloaded MIBIB has a different layout",
     "3db8bb9": "WCSS copied dump has no direct benefit with RC01 Q6 disabled"
   },
   "ath12k_firmware": {
@@ -183,5 +182,11 @@
     "lock": "config/rc01/patches/daede/sources.json",
     "native_api_default": "disabled; when enabled default loopback, remote needs secret",
     "kernel_btf": "actual-built-kernel only"
+  },
+  "boot_contract": {
+    "layout": "config/rc01/layout.json",
+    "materials": "config/rc01/boot/materials.json",
+    "validation": "static-candidate-only; no device boot or flashing",
+    "runtime": "not-performed"
   }
 }
