@@ -766,3 +766,9 @@ msgstr "两灯均灭：服务关闭或已停止，或指示灯由其他配置控
 
 msgid "Results change only after the configured number of consecutive rounds. After a configuration change or restart the service starts again from unknown."
 msgstr "结果需达到配置的连续轮数才会改变。配置更改或重启后，服务从未知状态重新开始。"
+
+msgid "At least one %s target is required"
+msgstr "至少需要一个 %s 目标"
+
+msgid "Enable IPv4 or IPv6 before enabling the service"
+msgstr "启用服务前，请至少启用 IPv4 或 IPv6"

@@ -20,6 +20,7 @@ APP = ROOT / "package/emortal/luci-app-rc01"
 UCODE = os.environ.get("UCODE") or shutil.which("ucode")
 NODE = shutil.which("node")
 VALIDATION = os.environ.get("LUCI_VALIDATION_JS")
+FORM = os.environ.get("LUCI_FORM_JS") or (str(Path(VALIDATION).with_name("form.js")) if VALIDATION else None)
 
 
 def report(pid=4242, updated=990, valid_until=1050, overall="up"):
@@ -163,7 +164,7 @@ api.render([ null, [ { getName: () => 'lan' }, { getName: () => 'wan' }, { getNa
             self.assertEqual(options[name]["datatype"], f"and(uinteger,range({low},{high}))")
             self.assertTrue(options[name]["custom"])
         self.assertEqual(options["ipv4_interface"]["values"], ["auto", "lan", "wan"])
-        self.assertEqual(options["ipv6_target"]["deps"], [["ipv6", "1"]])
+        self.assertEqual(options["ipv6_target"]["deps"], [[{"enabled": "1", "ipv6": "1"}, None]])
         self.assertIsNone(options["enabled"]["default"], "enabled stays as configured (off)")
         description = data["description"]
         self.assertIn("does not test DNS, web pages or proxies", description)
@@ -290,6 +291,53 @@ class Parity(unittest.TestCase):
             for value in values:
                 with self.subTest(key=key, value=value):
                     self.assertEqual(page[key][value], self.backend(key, value))
+
+    @unittest.skipUnless(FORM and Path(FORM or "/").is_file(), "set LUCI_FORM_JS to the pinned LuCI form.js")
+    def test_real_form_save_enforces_family_and_target_requirements(self):
+        cases = [
+            {"name": "empty-ipv4", "values": {"ipv4_target": []}, "accepted": False},
+            {"name": "empty-ipv6", "values": {"ipv6_target": []}, "accepted": False},
+            {"name": "empty-both", "values": {"ipv4_target": [], "ipv6_target": []}, "accepted": False},
+            {"name": "blank-entry", "values": {"ipv4_target": [""]}, "accepted": False},
+            {"name": "neither-family", "values": {"ipv4": "0", "ipv6": "0"}, "accepted": False},
+            {"name": "too-many-targets", "values": {"ipv4_target": [f"203.0.113.{i}" for i in range(1, 5)]},
+             "accepted": False},
+            {"name": "both-families", "values": {}, "accepted": True},
+            {"name": "ipv4-only", "values": {"ipv6": "0", "ipv6_target": []}, "accepted": True},
+            {"name": "ipv6-only", "values": {"ipv4": "0", "ipv4_target": []}, "accepted": True},
+            {"name": "three-targets", "values": {"ipv4_target": [f"203.0.113.{i}" for i in range(1, 4)]},
+             "accepted": True},
+            {"name": "disable-without-families", "values": {"enabled": "0", "ipv4": "0", "ipv6": "0",
+                                                             "ipv4_target": [], "ipv6_target": []}, "accepted": True},
+            {"name": "disable-empty-targets", "values": {"enabled": "0", "ipv4_target": [], "ipv6_target": []},
+             "accepted": True},
+        ]
+        harness = Path(__file__).with_name("netled-form-check.js")
+        result = subprocess.run([NODE, str(harness), str(VIEW), FORM, VALIDATION], input=json.dumps(cases),
+                                text=True, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        results = json.loads(result.stdout)
+        self.assertEqual(len(results), len(cases))
+        for case, parsed in zip(cases, results):
+            with self.subTest(case=case["name"]):
+                self.assertEqual(parsed["accepted"], case["accepted"], parsed["errors"])
+                if not parsed["accepted"]:
+                    continue
+                saved = parsed["saved"]
+                # Hiding disabled targets must preserve the prior list.
+                self.assertNotIn("ipv4_target", parsed["removed"])
+                self.assertNotIn("ipv6_target", parsed["removed"])
+                if saved["enabled"] == "0":
+                    continue  # The real init returns before backend check.
+                arguments = []
+                for key, value in saved.items():
+                    if key != "enabled":
+                        arguments.extend(f"{key}={v}" for v in (value if isinstance(value, list) else [value]))
+                checked = subprocess.run([str(self.bin / "sh"), "-c",
+                                          f'. "{DAEMON}"\nrc01_netled_main check "$@"', "x", *arguments],
+                                         env={"PATH": str(self.bin), "RC01_NETLED_LIBRARY": "1"},
+                                         text=True, capture_output=True, timeout=10)
+                self.assertEqual(checked.returncode, 0, checked.stderr)
 
 
 class Translations(unittest.TestCase):
