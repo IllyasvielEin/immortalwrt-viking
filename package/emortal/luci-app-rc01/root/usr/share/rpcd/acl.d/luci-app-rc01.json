@@ -4,5 +4,15 @@
     "read": {
       "ubus": { "rc01": [ "status" ] }
     }
+  },
+  "luci-app-rc01-netled": {
+    "description": "Configure the RC01 egress connectivity LED",
+    "read": {
+      "ubus": { "rc01": [ "connectivity" ] },
+      "uci": [ "rc01_netled" ]
+    },
+    "write": {
+      "uci": [ "rc01_netled" ]
+    }
   }
 }

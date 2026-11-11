@@ -22,7 +22,8 @@ class StatusInterfaces(unittest.TestCase):
             path = Path(temporary)
             (path / "rc01").mkdir()
             (path / "uci.uc").write_text("export function cursor() { return {}; }\n")
-            (path / "rc01/platform.uc").write_text('''export function snapshot() {
+            (path / "rc01/platform.uc").write_text('''export function connectivity() { return { status: 'disabled' }; }
+            export function snapshot() {
                 return { schema: 1, preflight: [
                   { target: 'hardware', passed: true, checks: [] },
                   { target: 'nikki', passed: true, checks: [] },
@@ -43,19 +44,27 @@ class StatusInterfaces(unittest.TestCase):
                     self.assertIsInstance(json.loads(result.stdout), dict)
             rpc = APP / "root/usr/share/rpcd/ucode/rc01.uc"
             source = f"let api = loadfile({json.dumps(str(rpc))})();\n"
-            source += "print(sprintf('%J', { objects: keys(api), methods: keys(api.rc01), status: api.rc01.status.call() }));\n"
+            source += "print(sprintf('%J', { objects: keys(api), methods: keys(api.rc01), status: api.rc01.status.call(),\n"
+            source += "  connectivity: api.rc01.connectivity.call() }));\n"
             result = subprocess.run(command + ["-"], input=source, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             api = json.loads(result.stdout)
             self.assertEqual(api["objects"], ["rc01"])
-            self.assertEqual(api["methods"], ["status"])
+            # Both methods only read; neither takes arguments.
+            self.assertEqual(api["methods"], ["status", "connectivity"])
             self.assertEqual(api["status"]["schema"], 1)
+            self.assertEqual(api["connectivity"], {"status": "disabled"})
 
     def test_rpc_acl_grants_only_status_read(self):
         acl = json.loads((APP / "root/usr/share/rpcd/acl.d/luci-app-rc01.json").read_text())
         entry = acl["luci-app-rc01"]
         self.assertNotIn("write", entry)
         self.assertEqual(entry["read"], {"ubus": {"rc01": ["status"]}})
+        # The connectivity LED page may write only its own UCI package.
+        netled = acl["luci-app-rc01-netled"]
+        self.assertEqual(netled["read"], {"ubus": {"rc01": ["connectivity"]}, "uci": ["rc01_netled"]})
+        self.assertEqual(netled["write"], {"uci": ["rc01_netled"]})
+        self.assertEqual(set(acl), {"luci-app-rc01", "luci-app-rc01-netled"})
 
     @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
     def test_status_view_clears_readings_on_refresh_failure_and_has_no_save(self):
