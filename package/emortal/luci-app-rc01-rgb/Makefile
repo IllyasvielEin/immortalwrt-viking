@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_VERSION:=1
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 PKG_LICENSE:=GPL-2.0-or-later
 LUCI_TITLE:=RC01 RGB light bar settings

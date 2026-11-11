@@ -27,6 +27,8 @@ VIEW = LUCI / "htdocs/luci-static/resources/view/system/rc01-rgb.js"
 UCODE = os.environ.get("UCODE") or shutil.which("ucode")
 SHELLS = [s for s in ("dash", "busybox") if shutil.which(s)] or ["sh"]
 KERNEL = os.environ.get("RC01_KERNEL_SOURCE")
+LUCI_VALIDATION = Path(os.environ.get("RC01_LUCI_VALIDATION_SOURCE") or
+                       ROOT / "feeds/luci/modules/luci-base/htdocs/luci-static/resources/validation.js")
 
 RGB = ["red:ambient", "green:ambient", "blue:ambient"]
 # LEDs and controls that must never be written by the RGB service.
@@ -207,6 +209,67 @@ class Logic(Fixture):
         stat.unlink()
         f = self.frames(cfg, [0])[0]
         self.assertEqual((f["fallback"], f["detail"]), (True, "source unavailable"))
+
+    def test_cpu_detail_is_real_load_while_sensitivity_changes_colour(self):
+        stat = self.root / "proc/stat"
+        frames = []
+        for sensitivity in ("1", "5", "10"):
+            with self.subTest(sensitivity=sensitivity):
+                self.write("proc/stat", "cpu 100 0 0 100 0 0 0 0 0 0")
+                frame = self.uc(f'''import {{ writefile }} from 'fs';
+                    let ctx = rgb.create(root, "wan");
+                    rgb.frame(ctx, cfg, 720, 0);
+                    writefile({json.dumps(str(stat))}, "cpu 150 0 0 150 0 0 0 0 0 0\\n");
+                    print(sprintf("%J", rgb.frame(ctx, cfg, 720, 1000)));''',
+                    {"mode": "cpu", "brightness": "255", "sensitivity": sensitivity})
+                self.assertEqual(frame["detail"], "50%")
+                self.assertFalse(frame["fallback"])
+                frames.append(frame["rgb"])
+        self.assertEqual(len({tuple(rgb) for rgb in frames}), 3)
+
+    @unittest.skipUnless(shutil.which("node") and LUCI_VALIDATION.is_file(),
+                         "Node and the pinned LuCI validation source (feed or RC01_LUCI_VALIDATION_SOURCE) are required")
+    def test_page_integer_validation_agrees_with_real_backend(self):
+        # Run the actual view's datatypes through the real feed validator;
+        # only the form/translation scaffolding is stubbed.
+        program = r'''
+const fs = require('fs');
+String.prototype.format = function(...args) { let i = 0; return this.replace(/%[dfs]/g, () => args[i++]); };
+const options = {};
+const Value = { extend: () => function() {} };
+const form = { Value, Map: function() {
+    this.section = () => ({ option: (type, name) => options[name] = { depends() {}, value() {} } });
+    this.render = () => options;
+} };
+const api = new Function('view', 'form', 'fs', 'rpc', 'uci', '_', fs.readFileSync(process.argv[1], 'utf8'))(
+    { extend: value => value }, form, {}, { declare: () => () => ({}) }, {}, value => value);
+api.render([null, {}, null]);
+const validation = new Function('baseclass', '_', 'L', fs.readFileSync(process.argv[2], 'utf8'))(
+    { extend: value => value }, value => value, { raise: (type, message) => { throw new Error(message); } });
+const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
+const results = cases.map(item => {
+    const stack = validation.compile(options[item.option].datatype);
+    const context = { value: item.value, factory: validation, assert: value => !!value };
+    return { ...item, accepted: stack[0].apply(context, stack[1]) };
+});
+process.stdout.write(JSON.stringify(results));
+'''
+        cases = []
+        for option, low, high in (("brightness", 0, 255), ("minimum_brightness", 0, 255),
+                                  ("night_brightness", 0, 255), ("speed", 1, 10), ("sensitivity", 1, 10)):
+            for value, accepted in ((str(low), True), (str(high), True), (str((low + high) // 2), True),
+                                    (f"{low}.5", False), (str(low - 1), False), (str(high + 1), False)):
+                cases.append({"option": option, "value": value, "expected": accepted})
+        run = subprocess.run([shutil.which("node"), "-e", program, str(VIEW), str(LUCI_VALIDATION)],
+                             input=json.dumps(cases), text=True, capture_output=True, timeout=10)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        for case in json.loads(run.stdout):
+            with self.subTest(option=case["option"], value=case["value"]):
+                self.assertEqual(case["accepted"], case["expected"])
+                if case["accepted"]:
+                    config = self.uc('print(sprintf("%J", cfg));', {case["option"]: case["value"]})
+                    self.assertEqual(config[case["option"]], int(case["value"]))
+                    self.assertNotIn(case["option"], config["problems"])
 
     def test_traffic_rate_device_resolution_and_counter_reset(self):
         cfg = {"mode": "traffic", "brightness": "255", "sensitivity": "5", "traffic_interface": "lan"}

@@ -135,22 +135,22 @@ return view.extend({
 		o.depends('mode', 'duotone');
 
 		o = s.option(form.Value, 'brightness', _('Brightness'), _('0 (off) to 255.'));
-		o.datatype = 'range(0,255)';
+	o.datatype = 'and(uinteger,range(0,255))';
 		o.default = '96';
 		o.rmempty = false;
 
 		o = s.option(form.Value, 'minimum_brightness', _('Minimum brightness'), _('Lowest level of the breathe effect, 0-255.'));
-		o.datatype = 'range(0,255)';
+	o.datatype = 'and(uinteger,range(0,255))';
 		o.default = '8';
 		o.depends('mode', 'breathe');
 
 		o = s.option(form.Value, 'speed', _('Effect speed'), _('1 (slow) to 10 (fast).'));
-		o.datatype = 'range(1,10)';
+	o.datatype = 'and(uinteger,range(1,10))';
 		o.default = '5';
 		dependsOnModes(o, DYNAMIC);
 
 		o = s.option(form.Value, 'sensitivity', _('Sensitivity'), _('1 to 10; higher values change colour sooner.'));
-		o.datatype = 'range(1,10)';
+	o.datatype = 'and(uinteger,range(1,10))';
 		o.default = '5';
 		dependsOnModes(o, TELEMETRY);
 
@@ -188,7 +188,7 @@ return view.extend({
 		o.validate = validateTime;
 		o.depends('night_enabled', '1');
 		o = s.option(form.Value, 'night_brightness', _('Night maximum brightness'), _('0 (off) to 255.'));
-		o.datatype = 'range(0,255)';
+	o.datatype = 'and(uinteger,range(0,255))';
 		o.default = '24';
 		o.depends('night_enabled', '1');
 
