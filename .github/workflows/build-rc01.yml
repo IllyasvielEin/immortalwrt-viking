@@ -429,8 +429,13 @@ jobs:
           wireless_dir="$(find build_dir -type d -path '*/backports-7.2' -print -quit)"
           test -n "$wireless_dir"
           python3 -B scripts/validate-rc01-platform.py "$kernel_dir" "$wireless_dir" > "$TARGET_DIR/rc01-platform-validation.json"
+          luci_resources="$PWD/feeds/luci/modules/luci-base/htdocs/luci-static/resources"
+          test -s "$luci_resources/validation.js"
+          test -s "$luci_resources/form.js"
           UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
             RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
+            LUCI_VALIDATION_JS="$luci_resources/validation.js" LUCI_FORM_JS="$luci_resources/form.js" \
+            RC01_LUCI_VALIDATION_SOURCE="$luci_resources/validation.js" \
             python3 -B - <<'PYTEST'
           import sys
           import unittest

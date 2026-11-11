@@ -66,6 +66,9 @@ BusyBox、锁定的 LuCI 和 host ucode。工作目录仅保存生成物，每�
 `scripts/validate-rc01-platform.py`。这只是源码级/离线 DTB 检查，不产生 APK 或镜像；夹具 BusyBox 与目标配置的差异
 见 `docs/rc01-modules/08-integration.md`。
 
+构建后的零跳过回归须同时传入本次 LuCI feed 的 `LUCI_VALIDATION_JS`、`LUCI_FORM_JS` 和
+`RC01_LUCI_VALIDATION_SOURCE`，与 CI 的调用一致；仅提供内核、无线源码和 ucode 不足以运行新增的页面保存校验。
+
 可选准备方式（各自用于一次独立构建）：
 
 ```sh
