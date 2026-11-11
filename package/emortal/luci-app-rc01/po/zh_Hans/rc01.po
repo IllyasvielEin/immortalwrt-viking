@@ -223,12 +223,6 @@ msgstr "未加载"
 msgid "Kernel debug interface"
 msgstr "内核调试接口"
 
-msgid "Mounted"
-msgstr "已挂载"
-
-msgid "Not mounted"
-msgstr "未挂载"
-
 msgid "Active hardware flows source"
 msgstr "硬件活动流来源"
 
@@ -274,59 +268,11 @@ msgstr "无故障标志"
 msgid "refill failures"
 msgstr "补充失败"
 
-msgid "Flow events and reject stages are sampled at most every"
-msgstr "流事件与拒绝阶段的最小采样间隔为"
-
-msgid "sample age"
-msgstr "样本时长"
-
-msgid "stale"
-msgstr "已过时"
-
 msgid "Flow event source"
 msgstr "流事件来源"
 
-msgid "Event"
-msgstr "事件"
-
-msgid "Rejected at"
-msgstr "拒绝阶段"
-
-msgid "Topology"
-msgstr "拓扑"
-
-msgid "Flow rule"
-msgstr "流规则"
-
 msgid "CPU/drop reason source"
 msgstr "CPU/丢弃原因来源"
-
-msgid "Rows with unreadable hardware counters"
-msgstr "硬件计数读取失败的行数"
-
-msgid "CPU code"
-msgstr "CPU 代码"
-
-msgid "Drop code"
-msgstr "丢弃代码"
-
-msgid "port"
-msgstr "端口"
-
-msgid "packets"
-msgstr "包"
-
-msgid "bytes"
-msgstr "字节"
-
-msgid "Counter"
-msgstr "计数项"
-
-msgid "Cumulative value"
-msgstr "累计值"
-
-msgid "Counts are read from the kernel and are cumulative since the driver loaded. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput."
-msgstr "计数直接读自内核，为驱动加载以来的累计值。模块已加载、设置已开启或读取成功均不表示流量已被加速；流数不是吞吐量。"
 
 msgid "uptime at sample"
 msgstr "采样时运行时间"
@@ -432,3 +378,9 @@ msgstr "个样本，时间范围"
 
 msgid "Gaps mark periods without samples. A running guard process does not prove that fan protection is working; the kernel thermal curve, 77 PWM floor and full-speed fault latch remain in control."
 msgstr "空白表示该时段没有样本。保护进程存在不代表风扇保护有效；内核温控曲线、77 PWM 下限和故障满速锁定仍负责控制。"
+
+msgid "Not collected; avoids a full hardware table scan"
+msgstr "未采集，以避免扫描完整硬件表"
+
+msgid "Active counts and resource use are current state; software event counters accumulate until reset. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput."
+msgstr "活动数量和资源占用是当前状态，软件事件计数在重置前累计。模块已加载、设置已开启或读取成功均不表示流量已被加速；流数不是吞吐量。"

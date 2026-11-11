@@ -108,14 +108,13 @@ const base = {
   schema: 1, board: 'xiaomi,be10000', kernel: '6.18.60', sampled_at: { uptime: 100 },
   temperatures: [], fans: [], ports: [], processes: [], radios: [],
   storage: { rootfs: { size: 241434624 }, environment_map_valid: true }, proxy: { btf: false },
-  ppe: { present: true, debugfs_mounted: true, active_flows: null,
+  ppe: { present: true, debugfs_accessible: true, active_flows: null,
     active_flows_source: { source: 'debugfs:ppe/active_flows', status: 'missing' },
     resources: { source: 'debugfs:ppe/resource_stats', status: 'ok', failures: {
-      core_role: { enospc: '18446744073709551615', enoent: '0', last_errno: '-28' } } },
+      core_role: { enospc: '18446744073709551615', enomem: '9007199254740993', enoent: '0', last_errno: '-28' } } },
     direct_switch: { source: 'debugfs:ppe/direct_switch', status: 'malformed' },
-    detail: { interval: 60, age: 0, flows: { source: 'debugfs:ppe/flows', status: 'ok',
-      events: { bound: '1' }, rejects: { resource: '9007199254740993' } },
-      reasons: { source: 'debugfs:ppe/reason_counters', status: 'truncated' } } },
+    detail: { flows: { source: 'debugfs:ppe/flows', status: 'not-collected' },
+      reasons: { source: 'debugfs:ppe/reason_counters', status: 'not-collected' } } },
   preflight: [{ target: 'hardware', checks: [] }]
 };
 const node = api.render(base);
@@ -124,10 +123,14 @@ assert(text.includes('18,446,744,073,709,551,615'), 'u64 counter rounded');
 assert(text.includes('9,007,199,254,740,993'), '2^53+1 counter rounded');
 assert(text.includes('Not exported by this kernel (debugfs:ppe/active_flows)'));
 assert(text.includes('Unrecognized format; values withheld (debugfs:ppe/direct_switch)'));
-assert(text.includes('Output exceeded the read bound; values withheld'));
+assert(text.includes('Not collected; avoids a full hardware table scan (debugfs:ppe/flows)'));
+assert(text.includes('Not collected; avoids a full hardware table scan (debugfs:ppe/reason_counters)'));
+assert(!text.includes('cumulative since the driver loaded'));
+assert(text.includes('Active counts and resource use are current state'));
 assert(!text.includes('did not advance'));
 responses.push(JSON.parse(JSON.stringify(base)));
-const old = JSON.parse(JSON.stringify(base)); old.sampled_at.uptime = 250; old.ppe.detail.age = 121;
+const old = JSON.parse(JSON.stringify(base)); old.sampled_at.uptime = 250;
+old.ppe.resources = { source: 'debugfs:ppe/resource_stats', status: 'truncated' };
 responses.push(old);
 refresh().then(() => {
   assert(JSON.stringify(node).includes('sample time did not advance'));
@@ -135,7 +138,8 @@ refresh().then(() => {
 }).then(() => {
   const now = JSON.stringify(node);
   assert(!now.includes('did not advance'));
-  assert(now.includes('stale'), 'old detail sample must be marked stale');
+  assert(now.includes('Output exceeded the read bound; values withheld'));
+  assert(!now.includes('18,446,744,073,709,551,615'), 'failed source must not retain old counts');
 }).catch(e => { console.error(e); process.exitCode = 1; });
 '''
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)

@@ -162,79 +162,14 @@ function ppe_direct_switch(path) {
 	return result;
 }
 
-// The flows view prints named header lines (counters, topology, reject
-// stages, rule refreshes) followed by one line per installed flow, which
-// starts with an address. Only the header is parsed; the bound caps cost.
-const PPE_FLOW_HEADER_GROUPS = [ 'topology', 'reject', 'rule' ];
-
-function ppe_flow_events(path) {
-	let read = bounded(path, 4096), result = source_record('debugfs:ppe/flows', read);
-	if (read.status != 'ok' && read.status != 'truncated') return result;
-	let lines = split(read.data, '\n'), groups = {}, ended = false;
-	// A truncated read ends in a partial line, which is never trusted.
-	if (read.status == 'truncated') pop(lines);
-	else if (lines[-1] == '') pop(lines);
-	if (!length(lines)) { result.status = read.status == 'truncated' ? 'truncated' : 'malformed'; return result; }
-	let events = token_groups('events ' + lines[0]);
-	if (length(events) != 1 || events[0].values.bound == null || !counters_only(events[0].values)) {
-		result.status = 'malformed';
-		return result;
-	}
-	for (let i = 1; i < length(lines); i++) {
-		if (!match(lines[i], /^[a-z]/)) { ended = true; break; }
-		let parsed = token_groups(lines[i]);
-		if (length(parsed) != 1 || exists(groups, parsed[0].name) || !counters_only(parsed[0].values)) {
-			result.status = 'malformed';
-			return result;
-		}
-		groups[parsed[0].name] = parsed[0].values;
-	}
-	if (!ended && read.status == 'truncated') { result.status = 'truncated'; return result; }
-	if (groups.reject == null) { result.status = 'malformed'; return result; }
-	result.status = 'ok';
-	result.events = events[0].values;
-	result.rejects = groups.reject;
-	result.topology = groups.topology;
-	result.rule = groups.rule;
-	result.ignored_groups = length(filter(keys(groups), k => index(PPE_FLOW_HEADER_GROUPS, k) < 0));
-	return result;
-}
-
-function ppe_reasons(path) {
-	let read = bounded(path, 131072), result = source_record('debugfs:ppe/reason_counters', read);
-	if (read.status != 'ok') return result;
-	let rows = [], failed = 0, total = 0;
-	for (let line in split(read.data, '\n')) {
-		if (!length(trim(line))) continue;
-		let row = match(line, /^(cpu|drop) code:([0-9]+)( port:(-?[0-9]+) index:([0-9]+))? read:(-?[0-9]+) packets:([0-9]+) bytes:([0-9]+) name:(.{1,64})$/);
-		if (!row || (row[1] == 'drop') != (row[3] != null)) { result.status = 'malformed'; return result; }
-		total++;
-		if (row[6] != '0') { failed++; continue; }
-		if (row[7] == '0') continue;
-		push(rows, { kind: row[1], code: int(row[2]), port: row[4] == null ? null : int(row[4]),
-			packets: row[7], bytes: row[8], name: row[9] });
-	}
-	// Keep the most active rows; compare decimal strings without rounding.
-	sort(rows, (a, b) => length(b.packets) - length(a.packets) || (b.packets > a.packets) - (b.packets < a.packets));
-	result.rows = slice(rows, 0, 32);
-	result.nonzero_rows = length(rows);
-	result.listed_rows = total;
-	result.read_failures = failed;
-	return result;
-}
-
-// Flows and reason counters walk the flow table or hardware counter rows,
-// so they are sampled at most once per interval and returned with their age.
-const PPE_DETAIL_INTERVAL = 60;
-
-function ppe_state(root, now, cache) {
+function ppe_state(root, now) {
 	let base = root + '/sys/kernel/debug/ppe';
 	let present = stat(root + '/sys/module/qcom_ppe') != null;
 	let debugfs = length(lsdir(root + '/sys/kernel/debug') || []) > 0;
 	let flows = bounded(base + '/active_flows', 256);
 	let state = {
 		present,
-		debugfs_mounted: debugfs,
+		debugfs_accessible: debugfs,
 		sampled_at: now,
 		active_flows: flows.status == 'ok' ? ppe_counts(trim(flows.data)) : null,
 		active_flows_source: { source: 'debugfs:ppe/active_flows',
@@ -243,14 +178,12 @@ function ppe_state(root, now, cache) {
 		direct_switch: ppe_direct_switch(base + '/direct_switch'),
 		direct_switch_status_available: stat(base + '/direct_switch') != null
 	};
-	let detail = cache?.ppe_detail;
-	if (detail == null || now == null || detail.sampled_at == null || now - detail.sampled_at >= PPE_DETAIL_INTERVAL ||
-		now < detail.sampled_at) {
-		detail = { sampled_at: now, flows: ppe_flow_events(base + '/flows'), reasons: ppe_reasons(base + '/reason_counters') };
-		if (cache != null && now != null) cache.ppe_detail = detail;
-	}
-	state.detail = { ...detail, interval: PPE_DETAIL_INTERVAL,
-		age: now == null || detail.sampled_at == null ? null : now - detail.sampled_at };
+	// These single_open producers scan complete hardware tables before a
+	// userspace read limit takes effect. Ordinary status calls never open them.
+	state.detail = {
+		flows: { source: 'debugfs:ppe/flows', status: 'not-collected' },
+		reasons: { source: 'debugfs:ppe/reason_counters', status: 'not-collected' }
+	};
 	return state;
 }
 
@@ -426,7 +359,7 @@ export function collect(root, uci, cache) {
 			ubi_root_matches: rootfs != null && '/dev/mtd' + numeric(ubi + '/mtd_num') == rootfs.device,
 			volumes: map([ 0, 1, 2 ], id => text(root + '/sys/class/ubi/ubi0_' + id + '/name')),
 			overlay_available_bytes: overlay ? overlay.bavail * overlay.frsize : null },
-		ppe: ppe_state(root, now, cache),
+		ppe: ppe_state(root, now),
 		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,
 			nikki_installed: executable(root + '/usr/libexec/mihomo'),
 			daed_installed: executable(root + '/usr/bin/daed'),

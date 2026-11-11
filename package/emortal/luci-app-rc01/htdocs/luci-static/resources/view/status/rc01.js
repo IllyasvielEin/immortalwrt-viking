@@ -27,7 +27,8 @@ const SOURCE_STATUS = {
 	missing: () => _('Not exported by this kernel'),
 	unreadable: () => _('Present but unreadable'),
 	malformed: () => _('Unrecognized format; values withheld'),
-	truncated: () => _('Output exceeded the read bound; values withheld')
+	truncated: () => _('Output exceeded the read bound; values withheld'),
+	'not-collected': () => _('Not collected; avoids a full hardware table scan')
 };
 
 function sourceStatus(record) {
@@ -99,14 +100,14 @@ function fanSection(state) {
 	return nodes;
 }
 
-function ppeSection(ppe, stale) {
+function ppeSection(ppe) {
 	if (!ppe) return [];
 	const nodes = [ E('h3', {}, _('Acceleration diagnostics')) ];
 	const flows = ppe.active_flows;
 	const resources = ppe.resources || {};
 	const rows = [
 		[ _('PPE module'), ppe.present ? _('Loaded') : _('Not loaded') ],
-		[ _('Kernel debug interface'), ppe.debugfs_mounted ? _('Mounted') : _('Not mounted') ],
+		[ _('Kernel debug interface'), ppe.debugfs_accessible ? _('Available') : _('Unavailable') ],
 		[ _('Active hardware flows source'), sourceStatus(ppe.active_flows_source) ],
 		[ _('Active hardware flows (IPv4 / IPv6 / total / capacity)'), flows == null ? _('Unavailable') :
 			[ flows.ipv4, flows.ipv6, flows.total, flows.capacity ].map(v => v == null ? '-' : v).join(' / ') ],
@@ -131,27 +132,11 @@ function ppeSection(ppe, stale) {
 	nodes.push(table([ _('Item'), _('Value') ], rows));
 
 	const detail = ppe.detail || {};
-	const old = detail.age != null && detail.interval != null && detail.age > 2 * detail.interval;
-	nodes.push(E('p', {}, `${_('Flow events and reject stages are sampled at most every')} ${seconds(detail.interval)}; ` +
-		`${_('sample age')} ${seconds(detail.age)}${old || stale ? ' — ' + _('stale') : ''}.`));
-	const events = detail.flows;
-	const eventRows = [ [ _('Flow event source'), sourceStatus(events) ] ];
-	if (events?.status === 'ok') {
-		for (const [ k, v ] of Object.entries(events.events || {})) eventRows.push([ `${_('Event')}: ${k}`, counter(v) ]);
-		for (const [ k, v ] of Object.entries(events.rejects || {})) eventRows.push([ `${_('Rejected at')}: ${k}`, counter(v) ]);
-		for (const [ k, v ] of Object.entries(events.topology || {})) eventRows.push([ `${_('Topology')}: ${k}`, counter(v) ]);
-		for (const [ k, v ] of Object.entries(events.rule || {})) eventRows.push([ `${_('Flow rule')}: ${k}`, counter(v) ]);
-	}
-	const reasons = detail.reasons;
-	eventRows.push([ _('CPU/drop reason source'), sourceStatus(reasons) ]);
-	if (reasons?.status === 'ok') {
-		eventRows.push([ _('Rows with unreadable hardware counters'), reasons.read_failures ]);
-		for (const row of reasons.rows || [])
-			eventRows.push([ `${row.kind === 'cpu' ? _('CPU code') : _('Drop code')} ${row.code}${row.port != null ? ' / ' + _('port') + ' ' + row.port : ''}: ${row.name}`,
-				`${counter(row.packets)} ${_('packets')}, ${counter(row.bytes)} ${_('bytes')}` ]);
-	}
-	nodes.push(table([ _('Counter'), _('Cumulative value') ], eventRows));
-	nodes.push(E('p', {}, _('Counts are read from the kernel and are cumulative since the driver loaded. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput.')));
+	nodes.push(table([ _('Item'), _('Value') ], [
+		[ _('Flow event source'), sourceStatus(detail.flows) ],
+		[ _('CPU/drop reason source'), sourceStatus(detail.reasons) ]
+	]));
+	nodes.push(E('p', {}, _('Active counts and resource use are current state; software event counters accumulate until reset. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput.')));
 	return nodes;
 }
 
@@ -180,7 +165,7 @@ function contents(state, previous) {
 			[ _('Kernel BTF'), state.proxy.btf ? _('Present') : _('Missing') ]
 		]),
 		E('p', {}, _('Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures.')),
-		...ppeSection(state.ppe, stale),
+		...ppeSection(state.ppe),
 		E('h3', {}, _('Wireless configuration')),
 		table([ _('Radio'), _('Configured state') ], (state.radios || []).map(r =>
 			[ r.name, r.disabled ? _('Disabled') : _('Enabled') ])),

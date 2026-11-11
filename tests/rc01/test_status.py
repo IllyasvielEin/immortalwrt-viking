@@ -71,7 +71,7 @@ class Status(unittest.TestCase):
           foreach: (c, t, fn) => { for (let s, v in values[c] || {}) if (v['.type'] == t) fn(v); }
         };\n'''
         source += f"let root = {json.dumps(str(self.root))};\n" + body
-        result = subprocess.run([UCODE, "-"], input=source, capture_output=True, text=True)
+        result = subprocess.run([UCODE, "-"], input=source, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
@@ -84,7 +84,7 @@ class Status(unittest.TestCase):
         };\n'''
         source += f"let state = collect({json.dumps(str(self.root))}, uci);\n"
         source += f"print(sprintf('%J', {{ state, result: assess(state, {json.dumps(target)}) }}));\n"
-        result = subprocess.run([UCODE, "-"], input=source, capture_output=True, text=True)
+        result = subprocess.run([UCODE, "-"], input=source, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
@@ -243,28 +243,12 @@ PPE_DS = ("node:0 ring:1 queue:2 running:1 faulted:0 down_desc:92233720368547758
           "node:1 unregistered\n"
           "node:2 ring:3 queue:4 running:0 faulted:1 down_desc:0 up_desc:0 refill:0 release:0 sync:0 "
           "refill_fail:0 poll_retry:0 refill_wake:0 tx_deferred:0\n")
-PPE_FLOWS_HEADER = (
-    "bound:1 replace:5 unsupported:0 failed:1 destroy:2 zombies:0 index_conflict:0 readback_fail:0 "
-    "stale_replace:0 stale_stats:0 stale_destroy:0\n"
-    "topology seq:4 invalidated:18446744073709551615\n"
-    "reject parse:1 action:0 output:0 output_dev:0 input_dev:0 input_vp:0 output_vp:0 nat:0 pppoe:0 "
-    "resource:9007199254740993\n"
-    "rule refresh:3 replace:1\n")
-PPE_REASONS = (
-    "cpu code:148 read:0 packets:10 bytes:18446744073709551615 name:L2 MTU checking fail drop\n"
-    "drop code:73 port:1 index:300 read:0 packets:0 bytes:0 name:labelled zero row\n"
-    "drop code:74 port:2 index:310 read:0 packets:4294967295 bytes:12 name:unlabelled\n"
-    "cpu code:3 read:-5 packets:0 bytes:0 name:unlabelled\n")
-
-
 @unittest.skipUnless(UCODE, "ucode is required for the real status collector")
 class AccelerationDiagnostics(Status):
     def setUp(self):
         super().setUp()
         self.write("sys/kernel/debug/ppe/resource_stats", PPE_RESOURCES)
         self.write("sys/kernel/debug/ppe/direct_switch", PPE_DS)
-        self.write("sys/kernel/debug/ppe/flows", PPE_FLOWS_HEADER + "10.0.0.1:1 -> 10.0.0.2:2 proto:6\n")
-        self.write("sys/kernel/debug/ppe/reason_counters", PPE_REASONS)
 
     def ppe(self):
         return self.run_status()["state"]["ppe"]
@@ -279,27 +263,16 @@ class AccelerationDiagnostics(Status):
         self.assertEqual(ppe["direct_switch"]["nodes"][0]["counters"]["down_desc"], "9223372036854775807")
         self.assertEqual([n["registered"] for n in ppe["direct_switch"]["nodes"]], [True, False, True])
         self.assertTrue(ppe["direct_switch"]["nodes"][2]["faulted"])
-        detail = ppe["detail"]
-        self.assertEqual(detail["flows"]["rejects"]["resource"], "9007199254740993")
-        self.assertEqual(detail["flows"]["events"]["readback_fail"], "0")
-        self.assertEqual(detail["flows"]["topology"]["invalidated"], "18446744073709551615")
-        self.assertEqual(detail["flows"]["rule"], {"refresh": "3", "replace": "1"})
-        # Zero rows are omitted, failed hardware reads are counted, never shown as zero.
-        self.assertEqual([r["code"] for r in detail["reasons"]["rows"]], [74, 148])
-        self.assertEqual(detail["reasons"]["rows"][1]["bytes"], "18446744073709551615")
-        self.assertEqual(detail["reasons"]["read_failures"], 1)
-        self.assertEqual(detail["reasons"]["listed_rows"], 4)
-
     def test_absent_debugfs_is_unavailable_not_zero(self):
         shutil.rmtree(self.root / "sys/kernel/debug")
         result = self.run_status()
         ppe = result["state"]["ppe"]
-        self.assertFalse(ppe["debugfs_mounted"])
+        self.assertFalse(ppe["debugfs_accessible"])
         self.assertIsNone(ppe["active_flows"])
         for key in ("resources", "direct_switch"):
             self.assertEqual(ppe[key], {"source": f"debugfs:ppe/{key if key == 'direct_switch' else 'resource_stats'}",
                                         "status": "missing"})
-        self.assertEqual(ppe["detail"]["flows"]["status"], "missing")
+        self.assertEqual(ppe["detail"]["flows"]["status"], "not-collected")
         self.assertEqual(ppe["active_flows_source"]["status"], "missing")
         self.assertTrue(result["result"]["passed"])
 
@@ -308,58 +281,39 @@ class AccelerationDiagnostics(Status):
             "resource_stats": ["host active:x capacity:1\n", "failure stage:a enoent:1\nfailure stage:a enoent:2\n",
                                "host active:1 active:2\n", "garbage\x00\n", "\n"],
             "direct_switch": ["node:0 ring:1 running:2 faulted:0\n", "node:x unregistered\n", "\n"],
-            "flows": ["bound:1\n", "bound:1\nnot-reject parse:1\n\n", "bound:x\nreject parse:1\n",
-                      "bound:1\nreject parse:1\nreject parse:2\n", "bound:1\ntopology seq:1\n10.0.0.1:1 -> x\nreject parse:1\n",
-                      "bound:1\nreject parse:x\n"],
-            "reason_counters": ["cpu code:1 port:1 index:2 read:0 packets:1 bytes:1 name:x\n",
-                                "drop code:1 read:0 packets:1 bytes:1 name:x\n", "cpu code:1 read:0 packets:-1 bytes:1 name:x\n"],
         }
         for name, texts in cases.items():
             for text in texts:
                 with self.subTest(name=name, text=text):
                     (self.root / f"sys/kernel/debug/ppe/{name}").write_text(text)
                     ppe = self.ppe()
-                    record = {"resource_stats": ppe["resources"], "direct_switch": ppe["direct_switch"],
-                              "flows": ppe["detail"]["flows"], "reason_counters": ppe["detail"]["reasons"]}[name]
+                    record = {"resource_stats": ppe["resources"], "direct_switch": ppe["direct_switch"]}[name]
                     self.assertEqual(record["status"], "malformed")
                     self.assertEqual(set(record), {"source", "status"})
             self.setUp()
 
-    def test_oversized_outputs_are_bounded(self):
-        many_flows = PPE_FLOWS_HEADER + "[2001:db8::1]:1 -> [2001:db8::2]:2 proto:17\n" * 200000
-        self.write("sys/kernel/debug/ppe/flows", many_flows)
-        self.write("sys/kernel/debug/ppe/reason_counters", PPE_REASONS * 4000)
-        detail = self.ppe()["detail"]
-        # The fixed header remains readable although the flow listing is cut.
-        self.assertEqual(detail["flows"]["status"], "ok")
-        self.assertEqual(detail["reasons"]["status"], "truncated")
-        self.assertNotIn("rows", detail["reasons"])
-        self.write("sys/kernel/debug/ppe/flows", "bound:1 " + "x" * 5000)
-        self.assertEqual(self.ppe()["detail"]["flows"]["status"], "truncated")
-        # A header cut before the flow listing begins is truncated, not partial data.
-        self.write("sys/kernel/debug/ppe/flows", "bound:1\nreject parse:1\n" + "topology seq:1 " * 400)
-        self.assertEqual(self.ppe()["detail"]["flows"]["status"], "truncated")
+    def test_oversized_lightweight_output_withholds_values(self):
+        self.write("sys/kernel/debug/ppe/resource_stats", PPE_RESOURCES * 100)
+        record = self.ppe()["resources"]
+        self.assertEqual(record["status"], "truncated")
+        self.assertEqual(set(record), {"source", "status"})
+
+    def test_hardware_table_views_are_never_opened(self):
+        # An open for reading would block: the FIFO deliberately has no writer.
+        # The collector subprocess has a timeout so a regression fails the test.
+        for name in ("flows", "reason_counters"):
+            path = self.root / "sys/kernel/debug/ppe" / name
+            os.mkfifo(path)
+        ppe = self.ppe()
+        self.assertEqual(ppe["resources"]["status"], "ok")
+        for key, name in (("flows", "flows"), ("reasons", "reason_counters")):
+            self.assertEqual(ppe["detail"][key], {
+                "source": f"debugfs:ppe/{name}", "status": "not-collected"})
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root bypasses file permissions")
     def test_unreadable_source_is_distinct_from_missing(self):
         (self.root / "sys/kernel/debug/ppe/resource_stats").chmod(0)
         self.assertEqual(self.ppe()["resources"]["status"], "unreadable")
-
-    def test_expensive_views_are_rate_limited_with_age(self):
-        script = '''let cache = {};
-        let a = collect(root, uci, cache).ppe.detail;
-        writefile(root + '/sys/kernel/debug/ppe/flows', 'garbage\\n');
-        writefile(root + '/proc/uptime', '1030.00 0\\n');
-        let b = collect(root, uci, cache).ppe.detail;
-        writefile(root + '/proc/uptime', '1061.00 0\\n');
-        let c = collect(root, uci, cache).ppe.detail;
-        writefile(root + '/proc/uptime', '10.00 0\\n');
-        let d = collect(root, uci, {}).ppe.detail;
-        print(sprintf('%J', [ a.flows.status, b.flows.status, b.age, c.flows.status, c.age, d.sampled_at ]));
-        '''
-        result = self.run_script("import { writefile } from 'fs';\n" + script)
-        self.assertEqual(result, ["ok", "ok", 30.0, "malformed", 0.0, 10.0])
-
 
 @unittest.skipUnless(UCODE, "ucode is required for the real status collector")
 class FanStatus(Status):
