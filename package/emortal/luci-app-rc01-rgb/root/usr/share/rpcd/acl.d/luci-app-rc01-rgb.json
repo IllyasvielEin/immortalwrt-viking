@@ -1,0 +1,13 @@
+{
+  "luci-app-rc01-rgb": {
+    "description": "Configure the RC01 RGB light bar",
+    "read": {
+      "file": { "/var/run/rc01-rgb.status": [ "read" ] },
+      "ubus": { "rc": [ "list" ] },
+      "uci": [ "rc01_rgb" ]
+    },
+    "write": {
+      "uci": [ "rc01_rgb" ]
+    }
+  }
+}

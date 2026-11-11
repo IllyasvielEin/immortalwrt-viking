@@ -1,0 +1,155 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: zh_Hans\n"
+
+msgid "RGB Light"
+msgstr "RGB 灯光"
+
+msgid "Top RGB light bar. Off by default; the wiring is taken from a public reference and still needs checking colour by colour on the device. This service only drives red/green/blue:ambient, never the system, network, port or SFP LEDs, and never the fan."
+msgstr "顶部 RGB 灯条。默认关闭；接线取自公开参考，仍需在设备上逐色核对。本服务只控制 red/green/blue:ambient，不控制系统灯、network 灯、网口灯、SFP 灯，也不控制风扇。"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Service"
+msgstr "服务"
+
+msgid "Service disabled at boot"
+msgstr "服务未设为开机启动"
+
+msgid "Not running (RGB off, LED missing or system LEDs off)"
+msgstr "未运行（RGB 未启用、未找到灯或系统已关闭所有 LED）"
+
+msgid "Running; no status yet"
+msgstr "运行中；暂无状态"
+
+msgid "normal"
+msgstr "正常"
+
+msgid "night brightness"
+msgstr "夜间亮度"
+
+msgid "off by schedule"
+msgstr "按定时关闭"
+
+msgid "Running: %s, %s, brightness %d"
+msgstr "运行中：%s，%s，亮度 %d"
+
+msgid "data %s, showing primary colour"
+msgstr "数据%s，显示主颜色"
+
+msgid "being sampled"
+msgstr "采样中"
+
+msgid "unavailable"
+msgstr "不可用"
+
+msgid "LED write failed"
+msgstr "LED 写入失败"
+
+msgid "invalid options replaced by defaults: %s"
+msgstr "以下无效选项已使用默认值：%s"
+
+msgid "Light"
+msgstr "灯光"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Mode"
+msgstr "模式"
+
+msgid "Temperature, CPU and traffic modes show the primary colour while their data is missing or still being sampled."
+msgstr "温度、CPU 与流量模式在数据缺失或仍在采样时显示主颜色。"
+
+msgid "Static"
+msgstr "静态"
+
+msgid "Breathe"
+msgstr "呼吸"
+
+msgid "Two-colour fade"
+msgstr "双色渐变"
+
+msgid "Rainbow"
+msgstr "彩虹"
+
+msgid "Temperature (NSS sensor)"
+msgstr "温度（NSS 传感器）"
+
+msgid "CPU load"
+msgstr "CPU 负载"
+
+msgid "Network traffic"
+msgstr "网络流量"
+
+msgid "Primary colour"
+msgstr "主颜色"
+
+msgid "Second colour"
+msgstr "第二颜色"
+
+msgid "Use the #RRGGBB format"
+msgstr "请使用 #RRGGBB 格式"
+
+msgid "Brightness"
+msgstr "亮度"
+
+msgid "0 (off) to 255."
+msgstr "0（关闭）至 255。"
+
+msgid "Minimum brightness"
+msgstr "最低亮度"
+
+msgid "Lowest level of the breathe effect, 0-255."
+msgstr "呼吸效果的最低亮度，0-255。"
+
+msgid "Effect speed"
+msgstr "效果速度"
+
+msgid "1 (slow) to 10 (fast)."
+msgstr "1（慢）至 10（快）。"
+
+msgid "Sensitivity"
+msgstr "灵敏度"
+
+msgid "1 to 10; higher values change colour sooner."
+msgstr "1 至 10；数值越高，颜色变化越早。"
+
+msgid "Traffic interface"
+msgstr "流量接口"
+
+msgid "Network interface (e.g. wan, lan) or device name (e.g. pppoe-wan)."
+msgstr "网络接口（如 wan、lan）或设备名（如 pppoe-wan）。"
+
+msgid "Invalid interface name"
+msgstr "接口名无效"
+
+msgid "Schedule"
+msgstr "定时"
+
+msgid "The on/off schedule wins: outside its on period the bar is off. Inside it the night window can only lower the brightness. Equal start and end times mean the whole day. Uses the router clock and time zone."
+msgstr "定时开关优先：开启时段之外灯条关闭；开启时段内夜间时段只会降低亮度。开始与结束时间相同表示全天。使用路由器时钟与时区。"
+
+msgid "On/off schedule"
+msgstr "定时开关"
+
+msgid "On at"
+msgstr "开启时间"
+
+msgid "Off at"
+msgstr "关闭时间"
+
+msgid "Use the HH:MM format (00:00-23:59)"
+msgstr "请使用 HH:MM 格式（00:00-23:59）"
+
+msgid "Night brightness"
+msgstr "夜间亮度"
+
+msgid "Night starts"
+msgstr "夜间开始"
+
+msgid "Night ends"
+msgstr "夜间结束"
+
+msgid "Night maximum brightness"
+msgstr "夜间最高亮度"

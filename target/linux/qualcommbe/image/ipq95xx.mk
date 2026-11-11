@@ -125,7 +125,7 @@ define Device/xiaomi_be10000
 	DEVICE_DTS_CONFIG_ALIASES := config@al02-c6
 	IMAGE_SIZE := $(RC01_ROOTFS_SIZE_KIB)k
 	NAND_SIZE := 256m
-	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000 rc01-platform
+	DEVICE_PACKAGES += ipq-wifi-xiaomi_be10000 rc01-platform rc01-rgb
 endef
 TARGET_DEVICES += xiaomi_be10000
 
