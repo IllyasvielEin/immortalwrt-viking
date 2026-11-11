@@ -5,8 +5,17 @@
 # nonzero floor, verifies tachometer/sensor readings, and latches full speed
 # on faults. emc2305 treats a hwmon PWM write as a floor for thermal control.
 RC01_SYSFS="${RC01_SYSFS:-/sys}"
+RC01_PROC="${RC01_PROC:-/proc}"
+RC01_FAN_STATE="${RC01_FAN_STATE:-/var/run/rc01-fan-guard.json}"
 RC01_MIN_PWM=77
 RC01_FAN_HWMON=
+# Diagnostic export only; see rc01_fan_report. These never decide protection.
+RC01_FAN_REASON=not-sampled
+RC01_FAN_EVENT=startup
+RC01_FAN_LATCH=
+RC01_FAN_SAMPLED=
+RC01_FAN_SAMPLE_PENDING=0
+RC01_FAN_PUBLISHER=
 
 rc01_fan_find() {
 	local node name device found=
@@ -40,55 +49,121 @@ rc01_fan_sample() {
 		read -r type < "$node/type"
 		case "$type" in nss-top-thermal|nss_top_thermal) ;; *) continue ;; esac
 		temp="$(cat "$node/temp" 2>/dev/null)"
-		rc01_fan_uint "$temp" && [ "$temp" -ge 1000 ] && [ "$temp" -le 130000 ] || return 1
+		rc01_fan_uint "$temp" && [ "$temp" -ge 1000 ] && [ "$temp" -le 130000 ] ||
+			{ RC01_FAN_REASON=sensor-invalid; return 1; }
 		RC01_FAN_TEMP="$temp"
 		have_sensor=1
 	done
-	[ "$have_sensor" -eq 1 ] || return 1
+	[ "$have_sensor" -eq 1 ] || { RC01_FAN_REASON=sensor-missing; return 1; }
 	rpm="$(cat "$RC01_FAN_HWMON/fan1_input" 2>/dev/null)"
 	pwm="$(cat "$RC01_FAN_HWMON/pwm1" 2>/dev/null)"
-	rc01_fan_uint "$rpm" && rc01_fan_uint "$pwm" || return 1
-	[ "$pwm" -ge "$RC01_MIN_PWM" ] && [ "$pwm" -le 255 ] || return 1
+	rc01_fan_uint "$rpm" || { RC01_FAN_REASON=rpm-invalid; return 1; }
+	rc01_fan_uint "$pwm" || { RC01_FAN_REASON=pwm-invalid; return 1; }
+	[ "$pwm" -ge "$RC01_MIN_PWM" ] && [ "$pwm" -le 255 ] || { RC01_FAN_REASON=pwm-out-of-range; return 1; }
 	if [ -r "$RC01_FAN_HWMON/fan1_fault" ]; then
 		fault="$(cat "$RC01_FAN_HWMON/fan1_fault" 2>/dev/null)"
-		[ "$fault" = 0 ] || return 1
+		[ "$fault" = 0 ] || { RC01_FAN_REASON=fault; return 1; }
 	fi
-	[ "$rpm" -gt 0 ] || return 1
+	[ "$rpm" -gt 0 ] || { RC01_FAN_REASON=rpm-zero; return 1; }
+	RC01_FAN_REASON=ok
 }
 
+# Identity that lets readers tell this guard instance from an old record:
+# boot id plus PID and the kernel start time (field 22 of /proc/PID/stat).
+rc01_fan_identity() {
+	local stat
+	RC01_FAN_BOOT= RC01_FAN_TICKS=
+	read -r RC01_FAN_BOOT 2>/dev/null < "$RC01_PROC/sys/kernel/random/boot_id" || RC01_FAN_BOOT=
+	case "$RC01_FAN_BOOT" in ''|*[!0-9a-f-]*) RC01_FAN_BOOT= ;; esac
+	read -r stat 2>/dev/null < "$RC01_PROC/$$/stat" || return 0
+	set -- ${stat##*) }
+	case "${20}" in ''|*[!0-9]*) ;; *) RC01_FAN_TICKS="${20}" ;; esac
+}
+
+rc01_fan_write() {
+	local tmp="$RC01_FAN_STATE.$$" sampled="${RC01_FAN_SAMPLED:-null}" flag=false reason=null
+	[ "$latched" != 1 ] || flag=true
+	[ -z "$RC01_FAN_LATCH" ] || reason="\"$RC01_FAN_LATCH\""
+	printf '{"schema":1,"boot_id":"%s","pid":%s,"start_ticks":%s,"updated_uptime":%s,"sampled_uptime":%s,"phase":"%s","event":"%s","sample_reason":"%s","failures":%s,"latched":%s,"latch_reason":%s}\n' \
+		"$RC01_FAN_BOOT" "$$" "$RC01_FAN_TICKS" "$2" "$sampled" "$1" "$RC01_FAN_EVENT" \
+		"$RC01_FAN_REASON" "$failures" "$flag" "$reason" > "$tmp" &&
+		mv -f "$tmp" "$RC01_FAN_STATE" || rm -f "$tmp"
+}
+
+# Publish the current decision as a lossy diagnostic snapshot. Called only
+# after the protection action of the step. The file is written by at most one
+# background child at a time: if the previous one is still running this
+# snapshot is dropped, never queued or waited for. The child does not sample
+# or touch PWM and runs without the protection traps. Nothing here changes
+# protection variables or return codes.
+rc01_fan_report() {
+	local up rest sampled="${2:-$RC01_FAN_SAMPLE_PENDING}"
+	RC01_FAN_SAMPLE_PENDING=0
+	# Consume a completed sample after its protection action, including an
+	# EXIT caused by a failed PWM write. A failed clock read must not pair
+	# that new result with the preceding sample's timestamp.
+	[ "$sampled" != 1 ] || RC01_FAN_SAMPLED=
+	[ -n "$RC01_FAN_BOOT" ] && [ -n "$RC01_FAN_TICKS" ] || return 0
+	read -r up rest 2>/dev/null < "$RC01_PROC/uptime" || return 0
+	case "$up" in ''|*[!0-9.]*) return 0 ;; esac
+	[ "$sampled" != 1 ] || RC01_FAN_SAMPLED="$up"
+	if [ -n "$RC01_FAN_PUBLISHER" ]; then
+		kill -0 "$RC01_FAN_PUBLISHER" 2>/dev/null && return 0
+		# Already reaped, so this returns at once. Without it a
+		# non-interactive ash keeps every finished job in its job table.
+		wait "$RC01_FAN_PUBLISHER" 2>/dev/null
+	fi
+	( trap - INT TERM EXIT; rc01_fan_write "$1" "$up" ) </dev/null >/dev/null 2>&1 &
+	RC01_FAN_PUBLISHER=$!
+}
+
+# failures/latched are shell globals (not local) so the EXIT trap can still
+# report them after rc01_fan_main has returned.
 rc01_fan_main() {
-	local failures=0 latched=0
+	failures=0 latched=0
+	rc01_fan_identity
 	rc01_fan_find || {
 		logger -p daemon.err -t rc01-fan 'EMC2301 hwmon device unavailable or ambiguous'
+		RC01_FAN_EVENT=controller-unavailable-or-ambiguous
+		rc01_fan_report exited
 		return 1
 	}
-	trap 'rc01_fan_pwm 255 || :; exit 0' INT TERM
-	trap 'rc01_fan_pwm 255 || :' EXIT
-	rc01_fan_pwm 255 || return 1
+	trap 'rc01_fan_pwm 255 || :; RC01_FAN_EVENT=signal-stop; exit 0' INT TERM
+	trap 'rc01_fan_pwm 255 || :; rc01_fan_report exited' EXIT
+	rc01_fan_pwm 255 || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
+	rc01_fan_report starting
 	sleep 3
 	if rc01_fan_sample; then
-		rc01_fan_pwm "$RC01_MIN_PWM" || return 1
+		RC01_FAN_SAMPLE_PENDING=1
+		rc01_fan_pwm "$RC01_MIN_PWM" || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 	else
-		latched=1
+		RC01_FAN_SAMPLE_PENDING=1
+		latched=1 RC01_FAN_LATCH="startup:$RC01_FAN_REASON"
 		logger -p daemon.err -t rc01-fan 'Startup health check failed; full-speed floor latched'
 	fi
+	rc01_fan_report monitoring 1
+	RC01_FAN_EVENT=sample
 	while sleep 2; do
 		if rc01_fan_sample; then
+			RC01_FAN_SAMPLE_PENDING=1
 			failures=0
 			if [ "$RC01_FAN_TEMP" -ge 75000 ] && [ "$latched" -eq 0 ]; then
-				latched=1
-				rc01_fan_pwm 255 || return 1
+				latched=1 RC01_FAN_LATCH=over-temperature
+				rc01_fan_pwm 255 || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 				logger -p daemon.err -t rc01-fan 'Temperature exceeds 75 C; full-speed floor latched'
 			fi
 		else
+			RC01_FAN_SAMPLE_PENDING=1
 			failures=$((failures + 1))
 			if [ "$failures" -ge 3 ] && [ "$latched" -eq 0 ]; then
-				latched=1
-				rc01_fan_pwm 255 || return 1
+				latched=1 RC01_FAN_LATCH="consecutive-failures:$RC01_FAN_REASON"
+				rc01_fan_pwm 255 || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 				logger -p daemon.err -t rc01-fan 'Fan or thermal readings failed; full-speed floor latched'
 			fi
 		fi
+		rc01_fan_report monitoring 1
 	done
+	RC01_FAN_EVENT=loop-ended
 }
 
 [ "${RC01_FAN_LIBRARY:-0}" = 1 ] || rc01_fan_main "$@"

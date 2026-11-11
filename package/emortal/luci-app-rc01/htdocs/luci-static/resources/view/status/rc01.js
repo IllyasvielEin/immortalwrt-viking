@@ -60,6 +60,71 @@ const SENSOR_STATUS = {
 	'out-of-range': () => _('Outside the 1-130 C guard range')
 };
 
+// The fan guard's own record; see fan_protection() in platform.uc.
+const GUARD_STATUS = {
+	current: () => _('Current record from the running guard'),
+	stale: () => _('Last record only; current guard state unknown'),
+	exited: () => _('Guard reported that it exited; last record only'),
+	unknown: () => _('Unknown')
+};
+
+const GUARD_DETAIL = {
+	missing: () => _('no record'),
+	unreadable: () => _('record unreadable'),
+	truncated: () => _('record too large'),
+	malformed: () => _('record invalid'),
+	'identity-unavailable': () => _('guard identity cannot be checked'),
+	'previous-boot': () => _('from a previous boot'),
+	'no-guard-process': () => _('no guard process'),
+	'multiple-guard-processes': () => _('more than one guard process'),
+	'other-instance': () => _('from another guard instance'),
+	'age-unknown': () => _('record age unknown'),
+	expired: () => _('not updated within 10 s')
+};
+
+const GUARD_REASON = {
+	'not-sampled': () => _('Not sampled yet'),
+	ok: () => _('Guard checks passed'),
+	'sensor-missing': () => _('NSS sensor missing'),
+	'sensor-invalid': () => _('NSS temperature unreadable or outside 1-130 C'),
+	'rpm-invalid': () => _('RPM unreadable'),
+	'pwm-invalid': () => _('PWM unreadable'),
+	'pwm-out-of-range': () => _('PWM outside the 77-255 guard range'),
+	fault: () => _('Fault flag not 0 or unreadable'),
+	'rpm-zero': () => _('Stopped (0 RPM)')
+};
+
+const GUARD_EVENT = {
+	startup: () => _('Startup check'),
+	sample: () => _('Periodic check'),
+	'controller-unavailable-or-ambiguous': () => _('Stopped: fan controller missing or ambiguous'),
+	'pwm-write-failed': () => _('Stopped: PWM write failed'),
+	'signal-stop': () => _('Stopped by signal'),
+	'loop-ended': () => _('Monitoring loop ended')
+};
+
+function latchReason(value) {
+	const [ kind, reason ] = String(value).split(':');
+	if (value === 'over-temperature') return _('NSS temperature reached 75 C');
+	if (kind === 'startup') return `${_('Startup check failed')}: ${described(GUARD_REASON, reason)}`;
+	if (kind === 'consecutive-failures') return `${_('Three consecutive failed checks')}: ${described(GUARD_REASON, reason)}`;
+	return String(value);
+}
+
+function guardRows(p) {
+	p = p || { status: 'unknown' };
+	const unknown = p.status === 'unknown';
+	const last = v => unknown ? _('Unknown') : p.status === 'current' ? v : `${_('Last record')}: ${v}`;
+	return [
+		[ _('Fan guard record'), described(GUARD_STATUS, p.status) + (p.detail ? ` (${described(GUARD_DETAIL, p.detail)})` : '') ],
+		[ _('Guard sample age'), unknown ? _('Unknown') : p.sample_age == null ? _('No guard sample in this record') : last(seconds(p.sample_age)) ],
+		[ _('Guard event'), last(described(GUARD_EVENT, p.event)) ],
+		[ _('Guard sample result'), last(described(GUARD_REASON, p.sample_reason)) ],
+		[ _('Consecutive failed checks'), last(display(p.failures)) ],
+		[ _('Software full-speed latch'), last(p.latched == null ? _('Unknown') : p.latched ? `${_('Set')}; ${_('first reason')}: ${latchReason(p.latch_reason)}` : _('Not set')) ]
+	];
+}
+
 function described(table, key) {
 	return key == null ? _('Unknown') : table[key] ? table[key]() : String(key);
 }
@@ -89,13 +154,15 @@ function fanSection(state) {
 			[ _('Fan controller'), fan.controller === 'found' ? _('One EMC2301 at 0x2f') : fan.controller === 'ambiguous' ? _('More than one candidate') : _('Not found') ],
 			[ _('NSS temperature'), described(SENSOR_STATUS, fan.temperature?.status) ],
 			[ _('Fan guard process'), fan.guard_process === 'running' ? _('Process present') : fan.guard_process === 'multiple' ? _('More than one process') : _('Not running') ],
+			...guardRows(fan.protection),
 			[ `${_('Temperature trend')} (C)`, sparkline(samples, 'celsius') ],
 			[ _('RPM trend'), sparkline(samples, 'rpm') ],
 			[ _('PWM trend'), sparkline(samples, 'pwm') ]
 		]),
 		E('p', {}, `${_('Trend samples are taken only while this page polls, at most every')} ${seconds(trend.interval)}, ` +
 			`${_('keeping')} ${samples.length}/${display(trend.capacity)} ${_('samples over')} ${seconds(trend.window)}. ` +
-			_('Gaps mark periods without samples. The sample time is when this page read the hardware, not a heartbeat from the fan guard, and a running guard process does not prove that fan protection is working. This page does not change the kernel thermal curve, the 77 PWM floor or the full-speed fault latch.'))
+			_('Gaps mark periods without samples. The sample time is when this page read the hardware, not a heartbeat from the fan guard, and a running guard process does not prove that fan protection is working. This page does not change the kernel thermal curve, the 77 PWM floor or the full-speed fault latch.')),
+		E('p', {}, _('The guard record is written by the fan guard itself after each protection step. Publishing is best effort and can lag or be skipped, so it is shown as current only for the one running guard instance and only within 10 s; otherwise it is the last record and the current guard state is unknown. The sample age is when the guard last checked the sensors. A set latch is the guard\'s software decision to hold full speed until it restarts; it does not prove that the PWM write succeeded or that the fan is running at full speed, and passing checks do not replace hardware acceptance.'))
 	];
 	return nodes;
 }
