@@ -189,3 +189,150 @@ msgstr "dae/daed 需要运行内核提供 BTF"
 
 msgid "Read-only preflight does not test DNS, routing, TCP/UDP, IPv6 or leak protection"
 msgstr "只读预检未测试 DNS、路由、TCP/UDP、IPv6 或防泄漏"
+
+msgid "Unavailable"
+msgstr "不可用"
+
+msgid "Available"
+msgstr "可用"
+
+msgid "Not exported by this kernel"
+msgstr "当前内核未导出"
+
+msgid "Present but unreadable"
+msgstr "存在但无法读取"
+
+msgid "Unrecognized format; values withheld"
+msgstr "格式无法识别，不显示数值"
+
+msgid "Output exceeded the read bound; values withheld"
+msgstr "输出超出读取上限，不显示数值"
+
+msgid "Acceleration diagnostics"
+msgstr "加速诊断"
+
+msgid "PPE module"
+msgstr "PPE 模块"
+
+msgid "Loaded"
+msgstr "已加载"
+
+msgid "Not loaded"
+msgstr "未加载"
+
+msgid "Kernel debug interface"
+msgstr "内核调试接口"
+
+msgid "Mounted"
+msgstr "已挂载"
+
+msgid "Not mounted"
+msgstr "未挂载"
+
+msgid "Active hardware flows source"
+msgstr "硬件活动流来源"
+
+msgid "Active hardware flows (IPv4 / IPv6 / total / capacity)"
+msgstr "硬件活动流（IPv4 / IPv6 / 合计 / 容量）"
+
+msgid "Resource table source"
+msgstr "资源表来源"
+
+msgid "Host entries (active / capacity)"
+msgstr "Host 表项（活动 / 容量）"
+
+msgid "Next hops (active / capacity)"
+msgstr "下一跳（活动 / 容量）"
+
+msgid "Resource failures"
+msgstr "资源失败"
+
+msgid "last errno"
+msgstr "最近错误码"
+
+msgid "Direct-switch source"
+msgstr "Direct-switch 来源"
+
+msgid "Direct-switch node"
+msgstr "Direct-switch 节点"
+
+msgid "Not registered"
+msgstr "未注册"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Stopped"
+msgstr "已停止"
+
+msgid "Faulted"
+msgstr "故障"
+
+msgid "No fault flag"
+msgstr "无故障标志"
+
+msgid "refill failures"
+msgstr "补充失败"
+
+msgid "Flow events and reject stages are sampled at most every"
+msgstr "流事件与拒绝阶段的最小采样间隔为"
+
+msgid "sample age"
+msgstr "样本时长"
+
+msgid "stale"
+msgstr "已过时"
+
+msgid "Flow event source"
+msgstr "流事件来源"
+
+msgid "Event"
+msgstr "事件"
+
+msgid "Rejected at"
+msgstr "拒绝阶段"
+
+msgid "Topology"
+msgstr "拓扑"
+
+msgid "Flow rule"
+msgstr "流规则"
+
+msgid "CPU/drop reason source"
+msgstr "CPU/丢弃原因来源"
+
+msgid "Rows with unreadable hardware counters"
+msgstr "硬件计数读取失败的行数"
+
+msgid "CPU code"
+msgstr "CPU 代码"
+
+msgid "Drop code"
+msgstr "丢弃代码"
+
+msgid "port"
+msgstr "端口"
+
+msgid "packets"
+msgstr "包"
+
+msgid "bytes"
+msgstr "字节"
+
+msgid "Counter"
+msgstr "计数项"
+
+msgid "Cumulative value"
+msgstr "累计值"
+
+msgid "Counts are read from the kernel and are cumulative since the driver loaded. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput."
+msgstr "计数直接读自内核，为驱动加载以来的累计值。模块已加载、设置已开启或读取成功均不表示流量已被加速；流数不是吞吐量。"
+
+msgid "uptime at sample"
+msgstr "采样时运行时间"
+
+msgid "sample time did not advance; values may be stale"
+msgstr "采样时间未前进，数值可能已过时"
+
+msgid "Storage"
+msgstr "存储"

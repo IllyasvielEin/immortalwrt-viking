@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Read-only status, with an alternate filesystem root for offline fixtures.
 // Do not read bootloader contents, proxy profiles, command lines or logs.
-import { readfile, glob, realpath, stat, statvfs } from 'fs';
+import { readfile, glob, realpath, stat, statvfs, open, lsdir } from 'fs';
 
 function text(path) {
 	let value = readfile(path);
@@ -33,6 +33,225 @@ function ppe_counts(value) {
 		result.capacity = capacity;
 	}
 	return result;
+}
+
+// Monotonic seconds since boot, used for sample ages. Wall-clock time can
+// step (NTP) and therefore never decides freshness.
+function uptime(root) {
+	let fields = split(text(root + '/proc/uptime') || '', /\s+/);
+	return match(fields[0] || '', /^[0-9]+(\.[0-9]+)?$/) ? +fields[0] : null;
+}
+
+// Read at most `limit` bytes. Distinguishes absent sources from sources that
+// exist but cannot be read, and flags output longer than the bound.
+function bounded(path, limit) {
+	if (stat(path) == null)
+		return { status: 'missing' };
+	let handle = open(path, 'r');
+	if (!handle)
+		return { status: 'unreadable' };
+	let data = handle.read(limit + 1);
+	handle.close();
+	if (data == null)
+		return { status: 'unreadable' };
+	if (length(data) > limit)
+		return { status: 'truncated', data: substr(data, 0, limit) };
+	return { status: 'ok', data };
+}
+
+// Kernel counters are kept as decimal strings: 64-bit values exceed the
+// exact integer range of JSON consumers, and conversion must not round.
+const COUNTER = /^-?(0|[1-9][0-9]*)$/;
+
+// Parse "group key:value key:value group key:value" lines. A bare word opens
+// a group; values must be decimal counters, ratios or simple identifiers.
+function token_groups(line) {
+	let groups = [], current = null;
+	for (let token in split(trim(line), /\s+/)) {
+		let pair = match(token, /^([a-z0-9_]+):(.+)$/);
+		if (pair) {
+			if (current == null || exists(current.values, pair[1])) return null;
+			let value = pair[2];
+			if (!match(value, COUNTER) && !match(value, /^[0-9]+\/[0-9]+$/) && !match(value, /^[a-z][a-z0-9_]*$/))
+				return null;
+			current.values[pair[1]] = value;
+		}
+		else if (match(token, /^[a-z][a-z0-9_]*$/)) {
+			current = { name: token, values: {} };
+			push(groups, current);
+		}
+		else return null;
+	}
+	return length(groups) ? groups : null;
+}
+
+// Every value must be a counter, except the named identifier or ratio keys.
+function counters_only(values, identifiers, ratios) {
+	for (let key, value in values) {
+		if (index(identifiers || [], key) >= 0 ? !match(value, /^[a-z][a-z0-9_]*$/) :
+			index(ratios || [], key) >= 0 ? !match(value, /^[0-9]+\/[0-9]+$/) : !match(value, COUNTER))
+			return false;
+	}
+	return true;
+}
+
+function source_record(source, read) {
+	return { source, status: read.status };
+}
+
+function ppe_resources(path) {
+	let read = bounded(path, 8192), result = source_record('debugfs:ppe/resource_stats', read);
+	if (read.status != 'ok') return result;
+	let failures = {}, groups = {}, ignored = 0;
+	for (let line in split(read.data, '\n')) {
+		if (!length(trim(line))) continue;
+		let parsed = token_groups(line);
+		if (parsed == null) { result.status = 'malformed'; return result; }
+		for (let group in parsed) {
+			if (!counters_only(group.values, group.name == 'failure' ? [ 'stage' ] : [], group.name == 'flow' ? [ 'active' ] : [])) {
+				result.status = 'malformed';
+				return result;
+			}
+			if (group.name == 'failure') {
+				let stage = group.values.stage;
+				if (stage == null || exists(failures, stage)) { result.status = 'malformed'; return result; }
+				delete group.values.stage;
+				failures[stage] = group.values;
+			}
+			else if (index([ 'host', 'flow', 'nexthop' ], group.name) >= 0 && !exists(groups, group.name))
+				groups[group.name] = group.values;
+			else
+				ignored++;
+		}
+	}
+	if (!length(groups)) { result.status = 'malformed'; return result; }
+	let flow = groups.flow;
+	if (flow?.active != null) {
+		let pair = split(flow.active, '/');
+		if (length(pair) != 2) { result.status = 'malformed'; return result; }
+		flow.ipv4_active = pair[0];
+		flow.ipv6_active = pair[1];
+		delete flow.active;
+	}
+	return { ...result, host: groups.host, flow, nexthop: groups.nexthop, failures, ignored_groups: ignored };
+}
+
+function ppe_direct_switch(path) {
+	let read = bounded(path, 8192), result = source_record('debugfs:ppe/direct_switch', read);
+	if (read.status != 'ok') return result;
+	let nodes = [];
+	for (let line in split(read.data, '\n')) {
+		if (!length(trim(line))) continue;
+		let unregistered = match(line, /^node:([0-9]+) unregistered$/);
+		if (unregistered) { push(nodes, { node: int(unregistered[1]), registered: false }); continue; }
+		let parsed = token_groups('node ' + line);
+		let values = length(parsed) == 1 ? parsed[0].values : null;
+		if (values == null || !counters_only(values) || !match(values.node || '', /^[0-9]+$/) ||
+			!match(values.running || '', /^[01]$/) || !match(values.faulted || '', /^[01]$/)) {
+			result.status = 'malformed';
+			return result;
+		}
+		let node = { node: int(values.node), registered: true,
+			running: values.running == '1', faulted: values.faulted == '1', counters: {} };
+		for (let key, value in values)
+			if (index([ 'node', 'running', 'faulted' ], key) < 0) node.counters[key] = value;
+		push(nodes, node);
+	}
+	if (!length(nodes)) result.status = 'malformed';
+	else result.nodes = nodes;
+	return result;
+}
+
+// The flows view prints named header lines (counters, topology, reject
+// stages, rule refreshes) followed by one line per installed flow, which
+// starts with an address. Only the header is parsed; the bound caps cost.
+const PPE_FLOW_HEADER_GROUPS = [ 'topology', 'reject', 'rule' ];
+
+function ppe_flow_events(path) {
+	let read = bounded(path, 4096), result = source_record('debugfs:ppe/flows', read);
+	if (read.status != 'ok' && read.status != 'truncated') return result;
+	let lines = split(read.data, '\n'), groups = {}, ended = false;
+	// A truncated read ends in a partial line, which is never trusted.
+	if (read.status == 'truncated') pop(lines);
+	else if (lines[-1] == '') pop(lines);
+	if (!length(lines)) { result.status = read.status == 'truncated' ? 'truncated' : 'malformed'; return result; }
+	let events = token_groups('events ' + lines[0]);
+	if (length(events) != 1 || events[0].values.bound == null || !counters_only(events[0].values)) {
+		result.status = 'malformed';
+		return result;
+	}
+	for (let i = 1; i < length(lines); i++) {
+		if (!match(lines[i], /^[a-z]/)) { ended = true; break; }
+		let parsed = token_groups(lines[i]);
+		if (length(parsed) != 1 || exists(groups, parsed[0].name) || !counters_only(parsed[0].values)) {
+			result.status = 'malformed';
+			return result;
+		}
+		groups[parsed[0].name] = parsed[0].values;
+	}
+	if (!ended && read.status == 'truncated') { result.status = 'truncated'; return result; }
+	if (groups.reject == null) { result.status = 'malformed'; return result; }
+	result.status = 'ok';
+	result.events = events[0].values;
+	result.rejects = groups.reject;
+	result.topology = groups.topology;
+	result.rule = groups.rule;
+	result.ignored_groups = length(filter(keys(groups), k => index(PPE_FLOW_HEADER_GROUPS, k) < 0));
+	return result;
+}
+
+function ppe_reasons(path) {
+	let read = bounded(path, 131072), result = source_record('debugfs:ppe/reason_counters', read);
+	if (read.status != 'ok') return result;
+	let rows = [], failed = 0, total = 0;
+	for (let line in split(read.data, '\n')) {
+		if (!length(trim(line))) continue;
+		let row = match(line, /^(cpu|drop) code:([0-9]+)( port:(-?[0-9]+) index:([0-9]+))? read:(-?[0-9]+) packets:([0-9]+) bytes:([0-9]+) name:(.{1,64})$/);
+		if (!row || (row[1] == 'drop') != (row[3] != null)) { result.status = 'malformed'; return result; }
+		total++;
+		if (row[6] != '0') { failed++; continue; }
+		if (row[7] == '0') continue;
+		push(rows, { kind: row[1], code: int(row[2]), port: row[4] == null ? null : int(row[4]),
+			packets: row[7], bytes: row[8], name: row[9] });
+	}
+	// Keep the most active rows; compare decimal strings without rounding.
+	sort(rows, (a, b) => length(b.packets) - length(a.packets) || (b.packets > a.packets) - (b.packets < a.packets));
+	result.rows = slice(rows, 0, 32);
+	result.nonzero_rows = length(rows);
+	result.listed_rows = total;
+	result.read_failures = failed;
+	return result;
+}
+
+// Flows and reason counters walk the flow table or hardware counter rows,
+// so they are sampled at most once per interval and returned with their age.
+const PPE_DETAIL_INTERVAL = 60;
+
+function ppe_state(root, now, cache) {
+	let base = root + '/sys/kernel/debug/ppe';
+	let present = stat(root + '/sys/module/qcom_ppe') != null;
+	let debugfs = length(lsdir(root + '/sys/kernel/debug') || []) > 0;
+	let flows = bounded(base + '/active_flows', 256);
+	let state = {
+		present,
+		debugfs_mounted: debugfs,
+		sampled_at: now,
+		active_flows: flows.status == 'ok' ? ppe_counts(trim(flows.data)) : null,
+		active_flows_source: { source: 'debugfs:ppe/active_flows',
+			status: flows.status != 'ok' ? flows.status : ppe_counts(trim(flows.data)) == null ? 'malformed' : 'ok' },
+		resources: ppe_resources(base + '/resource_stats'),
+		direct_switch: ppe_direct_switch(base + '/direct_switch'),
+		direct_switch_status_available: stat(base + '/direct_switch') != null
+	};
+	let detail = cache?.ppe_detail;
+	if (detail == null || now == null || detail.sampled_at == null || now - detail.sampled_at >= PPE_DETAIL_INTERVAL ||
+		now < detail.sampled_at) {
+		detail = { sampled_at: now, flows: ppe_flow_events(base + '/flows'), reasons: ppe_reasons(base + '/reason_counters') };
+		if (cache != null && now != null) cache.ppe_detail = detail;
+	}
+	state.detail = { ...detail, interval: PPE_DETAIL_INTERVAL,
+		age: now == null || detail.sampled_at == null ? null : now - detail.sampled_at };
+	return state;
 }
 
 function enabled(value) {
@@ -92,8 +311,9 @@ function layout_matches(root, contract) {
 	return true;
 }
 
-export function collect(root, uci) {
+export function collect(root, uci, cache) {
 	root = root || '';
+	let now = uptime(root);
 	let read = (c, s, k) => uci?.get(c, s, k);
 	let board = text(root + '/tmp/sysinfo/board_name');
 	let temperatures = [], fans = [], ports = [], processes = [], radios = [];
@@ -133,11 +353,11 @@ export function collect(root, uci) {
 	let bdata = partition(root, 'bdata');
 	let contract = layout_contract(root);
 	let ubi = root + '/sys/class/ubi/ubi0';
-	let ppe_flows = ppe_counts(text(root + '/sys/kernel/debug/ppe/active_flows'));
 	let overlay = statvfs(root + '/overlay');
 	return {
 		schema: 1, board, supported: board == 'xiaomi,be10000',
 		kernel: text(root + '/proc/sys/kernel/osrelease'),
+		sampled_at: { uptime: now, unix: time() },
 		physical_acceptance: false,
 		temperatures, fans, ports, processes, radios,
 		storage: { rootfs, environment: env, license, bdata,
@@ -148,8 +368,7 @@ export function collect(root, uci) {
 			ubi_root_matches: rootfs != null && '/dev/mtd' + numeric(ubi + '/mtd_num') == rootfs.device,
 			volumes: map([ 0, 1, 2 ], id => text(root + '/sys/class/ubi/ubi0_' + id + '/name')),
 			overlay_available_bytes: overlay ? overlay.bavail * overlay.frsize : null },
-		ppe: { present: stat(root + '/sys/module/qcom_ppe') != null, active_flows: ppe_flows,
-			direct_switch_status_available: stat(root + '/sys/kernel/debug/ppe/direct_switch') != null },
+		ppe: ppe_state(root, now, cache),
 		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,
 			nikki_installed: executable(root + '/usr/libexec/mihomo'),
 			daed_installed: executable(root + '/usr/bin/daed'),
@@ -206,8 +425,8 @@ export function assess(state, target) {
 	return { target, passed: !length(filter(checks, c => c.level == 'error')), checks };
 }
 
-export function snapshot(uci) {
-	let state = collect('', uci);
+export function snapshot(uci, cache) {
+	let state = collect('', uci, cache);
 	state.preflight = map([ 'hardware', 'nikki', 'dae', 'daed' ], target => assess(state, target));
 	return state;
 }

@@ -91,5 +91,56 @@ refresh().then(() => {
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_large_counters_render_exactly_and_repeated_samples_are_stale(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r'''
+const fs = require('fs');
+const assert = require('assert');
+let refresh, responses = [];
+const rpc = { declare: () => () => Promise.resolve(responses.shift()) };
+const poll = { add: fn => { refresh = fn; } };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const dom = { content: (node, children) => { node.children = children; } };
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
+const base = {
+  schema: 1, board: 'xiaomi,be10000', kernel: '6.18.60', sampled_at: { uptime: 100 },
+  temperatures: [], fans: [], ports: [], processes: [], radios: [],
+  storage: { rootfs: { size: 241434624 }, environment_map_valid: true }, proxy: { btf: false },
+  ppe: { present: true, debugfs_mounted: true, active_flows: null,
+    active_flows_source: { source: 'debugfs:ppe/active_flows', status: 'missing' },
+    resources: { source: 'debugfs:ppe/resource_stats', status: 'ok', failures: {
+      core_role: { enospc: '18446744073709551615', enoent: '0', last_errno: '-28' } } },
+    direct_switch: { source: 'debugfs:ppe/direct_switch', status: 'malformed' },
+    detail: { interval: 60, age: 0, flows: { source: 'debugfs:ppe/flows', status: 'ok',
+      events: { bound: '1' }, rejects: { resource: '9007199254740993' } },
+      reasons: { source: 'debugfs:ppe/reason_counters', status: 'truncated' } } },
+  preflight: [{ target: 'hardware', checks: [] }]
+};
+const node = api.render(base);
+const text = JSON.stringify(node);
+assert(text.includes('18,446,744,073,709,551,615'), 'u64 counter rounded');
+assert(text.includes('9,007,199,254,740,993'), '2^53+1 counter rounded');
+assert(text.includes('Not exported by this kernel (debugfs:ppe/active_flows)'));
+assert(text.includes('Unrecognized format; values withheld (debugfs:ppe/direct_switch)'));
+assert(text.includes('Output exceeded the read bound; values withheld'));
+assert(!text.includes('did not advance'));
+responses.push(JSON.parse(JSON.stringify(base)));
+const old = JSON.parse(JSON.stringify(base)); old.sampled_at.uptime = 250; old.ppe.detail.age = 121;
+responses.push(old);
+refresh().then(() => {
+  assert(JSON.stringify(node).includes('sample time did not advance'));
+  return refresh();
+}).then(() => {
+  const now = JSON.stringify(node);
+  assert(!now.includes('did not advance'));
+  assert(now.includes('stale'), 'old detail sample must be marked stale');
+}).catch(e => { console.error(e); process.exitCode = 1; });
+'''
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
