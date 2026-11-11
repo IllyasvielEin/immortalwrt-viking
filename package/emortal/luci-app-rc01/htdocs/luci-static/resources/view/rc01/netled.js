@@ -107,11 +107,19 @@ function statusNodes(state) {
 function targetsValidator(family, unicast) {
 	return function(section_id, value) {
 		const values = [].concat(this.formvalue(section_id) || []).filter(v => v !== '');
+		if (values.length === 0)
+			return _('At least one %s target is required').format(family);
 		if (values.length > MAX_TARGETS)
 			return _('At most %d targets').format(MAX_TARGETS);
 		if (value == null || value === '') return true;
 		return unicast(value) || _('Use a unicast %s address (not loopback, link-local or multicast)').format(family);
 	};
+}
+
+function validateFamilies(section_id) {
+	const checked = key => this.map.lookupOption(key, section_id)[0].formvalue(section_id) === '1';
+	return !checked('enabled') || checked('ipv4') || checked('ipv6') ||
+		_('Enable IPv4 or IPv6 before enabling the service');
 }
 
 // Same rules as rc01-netled's own check, so the page never saves a value
@@ -160,6 +168,7 @@ return view.extend({
 		let o = s.option(form.Flag, 'enabled', _('Enable'),
 			_('Off by default. While enabled the service drives the white:network and amber:network LEDs unless a System → LED Configuration entry names them. Stopping turns both off again (board default).'));
 		o.rmempty = false;
+		o.validate = validateFamilies;
 
 		for (const [ family, unicast, datatype ] of [ [ 'IPv4', unicast4, 'ip4addr("nomask")' ], [ 'IPv6', unicast6, 'ip6addr("nomask")' ] ]) {
 			const key = family.toLowerCase();
@@ -167,12 +176,15 @@ return view.extend({
 				_('With both families enabled, one reachable family shows as partial (white blinking).'));
 			o.default = '1';
 			o.rmempty = false;
+			o.validate = validateFamilies;
 
 			o = s.option(form.DynamicList, key + '_target', _('%s targets').format(family),
 				_('1 to %d addresses. The family counts as reachable when any of them answers; one failing target alone does not mark the egress down. Defaults are public anycast DNS resolvers (AliDNS, DNSPod) and can be replaced.').format(MAX_TARGETS));
 			o.datatype = datatype;
 			o.validate = targetsValidator(family, unicast);
-			o.depends(key, '1');
+			o.rmempty = false;
+			o.retain = true;
+			o.depends({ enabled: '1', [key]: '1' });
 
 			o = s.option(form.Value, key + '_interface', _('%s egress').format(family),
 				_('"auto" follows the kernel route to each target (works with the LAN DHCP bypass, where the default route is on lan). A named interface pins the probe to its device; if that interface is missing or down the family shows "interface unavailable", and without a route through it "no applicable route".'));
