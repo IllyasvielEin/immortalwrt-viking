@@ -314,8 +314,8 @@ export function frame(ctx, cfg, minute, elapsed_ms) {
 	case 'cpu':
 		sample = read_cpu(ctx);
 		if (sample != null) {
-			sample = clamp(sample * (50 + cfg.sensitivity * 10) / 100, 0, 1000);
-			rgb = load_colour(sample);
+			// Sensitivity affects the colour, not the reported CPU busy share.
+			rgb = load_colour(clamp(sample * (50 + cfg.sensitivity * 10) / 100, 0, 1000));
 			result.detail = sprintf('%d%%', sample / 10);
 		}
 		break;

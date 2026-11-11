@@ -1,6 +1,6 @@
 # 模块 05：独立 RGB 灯条 — 开发交接
 
-状态：开发完成，离线验证通过；**未构建镜像、未实机验证**。待 Astra 验收。
+状态：初版 `4e508c4` 已经 Astra 初审，R1/R2 已由主线程局部修复，待独立复验（修复提交见本分支 git log 与外层交接索引）。**未构建镜像、未实机验证**。原始开发验证保留在下文，修复验证另列。
 
 - 基线：`0aefaee18551938f58e44e8627d3cdcb2e1a42f9`（模块 01—04 已验收；0aefaee 仅更正 SFP 测试夹具）
 - 分支：`dev/module-05-rgb`
@@ -61,6 +61,8 @@
 
 未设或空值取包默认值；非法值逐项回退默认并记入状态 `ignored_options` 和 syslog，不会整体拒绝启动。LuCI 端同样校验格式与范围。
 
+亮度、最低/夜间亮度、速度、灵敏度的页面校验同时要求非负整数与对应范围，范围内小数也会在页面拒绝。
+
 ### 日程 / 夜间优先级
 
 1. `enabled=0` 或 `system.@system[-1].leds_off=1`：不启动实例；灯条保持关闭（DTS 默认 off，停止时清零）。
@@ -74,7 +76,7 @@
 
 - static：主色 × 亮度。breathe：主色在 `minimum_brightness`（不超过当前上限）与上限间三角波，speed 5 为 10 s 周期。duotone：主色↔第二色。rainbow：六段色轮。动画相位按单调时钟计算。
 - temperature：读取与 RC01 状态页/风扇曲线相同的 `nss-top-thermal` 区域，有效范围 1—130 °C，配色沿用参考（≤35 绿 → 55 橙 → ≥75 红，sensitivity 偏移 ±2 °C/级）。
-- cpu：`/proc/stat` 总行差分（需两次采样）。traffic：`network.<接口>.device` 解析出的设备（无则把值当设备名，如 `pppoe-wan`），rx+tx 字节差分，满量程 12.5 MB/s ÷ sensitivity。
+- cpu：`/proc/stat` 总行差分（需两次采样）；状态百分比保留实际 busy 占比，灵敏度只影响颜色。traffic：`network.<接口>.device` 解析出的设备（无则把值当设备名，如 `pppoe-wan`），rx+tx 字节差分，满量程 12.5 MB/s ÷ sensitivity。
 - 数据缺失、非法、首个采样或计数回绕：显示**主颜色**（按当前亮度），状态 `fallback: true`、`detail` 为 `source unavailable` 或 `sampling`。不显示为 0 或伪造数值。
 
 ### 资源与频率
@@ -107,6 +109,14 @@
 7. `make -C package/emortal/rc01-rgb TOPDIR="$PWD" -n compile`：配方可解析（本树无 host 工具/工具链/.config，仅解析，未产出包）。
 
 曾尝试在 `scripts/prepare-rc01.sh` 增加 rc01-rgb 配方解析，但 `test_go_bootstrap` 固定了 prepare 的调用序列，已撤回，不改该流程。
+
+## 初审 R1/R2 修复验证（主线程）
+
+- CPU 使用独立的颜色缩放表达式，原始采样用于状态。50% 实际 busy 在 sensitivity=1/5/10 时均报告 50%，三种颜色仍不同。
+- 五个数值表单使用 `and(uinteger,range(...))`。使用 locked LuCI `df794c7f69361641195a4b336634d1b1c918099c` 公开 `validation.js` 执行实际页面 datatype；逐字段覆盖整数端点、中间值、小数和越界，并让合法值进入真实 ucode，确认不会出现在忽略列表。测试默认从 feeds/luci 读取校验模块，也可用 `RC01_LUCI_VALIDATION_SOURCE` 提供本次公开来源。
+- 实际运行 RGB 软件部分（Logic/Service/Init/Package/Luci/Dts，37 项）与既有状态 UI、SFP LED（28 项），合计 **65 通过、0 跳过**。命令使用公开 host ucode 和本次新下载 LuCI 校验源码，经 `uv run --offline --no-project python -B -m unittest` 执行上述类；`git diff --check` 通过。
+- 两组新增回归在仅导出的 `4e508c4` 旧 module/view 上分别产生 3、5 个失败断言，均无执行错误或跳过；修复后通过。服务测试有既有的 stderr 文件句柄 ResourceWarning，未造成测试失败，未在此扩大修复。
+- 本轮未改 DTS/DTB、init、依赖或 ACL，未重复无关完整构建与 DTB 检查。两处软件包 release 由 1 增为 2。等待新的 Astra 独立复验；本段不是自行验收。
 
 ## 未验证 / 待验
 
