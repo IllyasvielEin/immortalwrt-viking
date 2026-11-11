@@ -254,6 +254,53 @@ function ppe_state(root, now, cache) {
 	return state;
 }
 
+// Fan readings follow the guard's own validity rules: a valid NSS sensor
+// between 1 and 130 C, PWM at or above the 77 floor, nonzero tachometer and
+// a zero fault flag when exported. Anything else is reported, never "ok".
+const FAN_MIN_PWM = 77;
+
+function fan_health(fan) {
+	if (fan.rpm == null || fan.pwm == null) return 'unreadable';
+	if (fan.fault_available && fan.fault == null) return 'unreadable';
+	if (fan.fault_available && fan.fault != 0) return 'fault';
+	if (fan.rpm == 0) return 'stopped';
+	if (fan.pwm < FAN_MIN_PWM || fan.pwm > 255) return 'pwm-out-of-range';
+	return fan.fault_available ? 'ok' : 'ok-no-fault-flag';
+}
+
+function nss_temperature(temperatures) {
+	let sensors = filter(temperatures, s => index([ 'nss-top-thermal', 'nss_top_thermal' ], s.name) >= 0);
+	if (length(sensors) != 1) return { status: length(sensors) ? 'ambiguous' : 'missing', celsius: null };
+	let value = sensors[0].celsius;
+	return { status: value == null ? 'invalid' : value < 1 || value > 130 ? 'out-of-range' : 'ok', celsius: value };
+}
+
+// A short trend kept in the rpcd plugin cache. It samples only while the
+// status call is polled, at most once per interval, keeps a bounded window
+// and marks gaps instead of drawing through missing time.
+const FAN_TREND_INTERVAL = 10;
+const FAN_TREND_SAMPLES = 90;
+
+function fan_trend(cache, now, sample) {
+	let trend = cache?.fan_trend;
+	if (trend == null || now == null || (length(trend) && now < trend[-1].t))
+		trend = [];
+	if (now != null && (!length(trend) || now - trend[-1].t >= FAN_TREND_INTERVAL))
+		push(trend, { t: now, ...sample });
+	let horizon = FAN_TREND_INTERVAL * FAN_TREND_SAMPLES;
+	trend = filter(trend, x => now - x.t < horizon);
+	if (length(trend) > FAN_TREND_SAMPLES)
+		trend = slice(trend, length(trend) - FAN_TREND_SAMPLES);
+	if (cache != null && now != null) cache.fan_trend = trend;
+	let samples = [], previous = null;
+	for (let x in trend) {
+		push(samples, { ...x, age: now - x.t, gap_before: previous != null && x.t - previous > 2 * FAN_TREND_INTERVAL });
+		previous = x.t;
+	}
+	return { interval: FAN_TREND_INTERVAL, capacity: FAN_TREND_SAMPLES, window: horizon,
+		source: 'rpcd status polling', samples };
+}
+
 function enabled(value) {
 	return value == '1' || value == 'true' || value == 'yes' || value == 'on';
 }
@@ -354,12 +401,23 @@ export function collect(root, uci, cache) {
 	let contract = layout_contract(root);
 	let ubi = root + '/sys/class/ubi/ubi0';
 	let overlay = statvfs(root + '/overlay');
+	for (let fan in fans) fan.health = fan_health(fan);
+	let nss = nss_temperature(temperatures);
+	let fan = length(fans) == 1 ? fans[0] : null;
+	let guard = filter(processes, p => p.name == 'rc01-fan-guard');
+	let fan_state = {
+		controller: length(fans) == 1 ? 'found' : length(fans) ? 'ambiguous' : 'missing',
+		temperature: nss,
+		// Process presence only: it does not show that protection is working.
+		guard_process: length(guard) == 1 ? 'running' : length(guard) ? 'multiple' : 'absent',
+		trend: fan_trend(cache, now, { celsius: nss.celsius, rpm: fan?.rpm, pwm: fan?.pwm, health: fan?.health })
+	};
 	return {
 		schema: 1, board, supported: board == 'xiaomi,be10000',
 		kernel: text(root + '/proc/sys/kernel/osrelease'),
 		sampled_at: { uptime: now, unix: time() },
 		physical_acceptance: false,
-		temperatures, fans, ports, processes, radios,
+		temperatures, fans, fan: fan_state, ports, processes, radios,
 		storage: { rootfs, environment: env, license, bdata,
 			layout_id: contract?.layout_id, layout_matches: layout_matches(root, contract),
 			bad_block_reserve: contract?.nand?.bad_block_reserve_pebs,

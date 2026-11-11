@@ -336,3 +336,99 @@ msgstr "采样时间未前进，数值可能已过时"
 
 msgid "Storage"
 msgstr "存储"
+
+msgid "Normal"
+msgstr "正常"
+
+msgid "Turning; fault flag not exported"
+msgstr "正在转动；未导出故障标志"
+
+msgid "Stopped (0 RPM)"
+msgstr "已停转（0 RPM）"
+
+msgid "Fault flag set"
+msgstr "故障标志已置位"
+
+msgid "Reading unavailable"
+msgstr "读数不可用"
+
+msgid "PWM outside the 77-255 guard range"
+msgstr "PWM 超出 77-255 保护范围"
+
+msgid "Valid"
+msgstr "有效"
+
+msgid "NSS sensor missing"
+msgstr "缺少 NSS 传感器"
+
+msgid "More than one NSS sensor"
+msgstr "存在多个 NSS 传感器"
+
+msgid "Invalid reading"
+msgstr "读数无效"
+
+msgid "Outside the 1-130 C guard range"
+msgstr "超出 1-130 C 保护范围"
+
+msgid "min"
+msgstr "最小"
+
+msgid "max"
+msgstr "最大"
+
+msgid "latest"
+msgstr "最新"
+
+msgid "Assessment"
+msgstr "判断"
+
+msgid "Not exported"
+msgstr "未导出"
+
+msgid "Fan controller"
+msgstr "风扇控制器"
+
+msgid "One EMC2301 at 0x2f"
+msgstr "0x2f 处唯一 EMC2301"
+
+msgid "More than one candidate"
+msgstr "存在多个候选"
+
+msgid "Not found"
+msgstr "未找到"
+
+msgid "NSS temperature"
+msgstr "NSS 温度"
+
+msgid "Fan guard process"
+msgstr "风扇保护进程"
+
+msgid "Process present"
+msgstr "进程存在"
+
+msgid "More than one process"
+msgstr "存在多个进程"
+
+msgid "Not running"
+msgstr "未运行"
+
+msgid "Temperature trend"
+msgstr "温度趋势"
+
+msgid "RPM trend"
+msgstr "转速趋势"
+
+msgid "PWM trend"
+msgstr "PWM 趋势"
+
+msgid "Trend samples are taken only while this page polls, at most every"
+msgstr "趋势仅在本页轮询时采样，最小间隔"
+
+msgid "keeping"
+msgstr "保留"
+
+msgid "samples over"
+msgstr "个样本，时间范围"
+
+msgid "Gaps mark periods without samples. A running guard process does not prove that fan protection is working; the kernel thermal curve, 77 PWM floor and full-speed fault latch remain in control."
+msgstr "空白表示该时段没有样本。保护进程存在不代表风扇保护有效；内核温控曲线、77 PWM 下限和故障满速锁定仍负责控制。"

@@ -361,5 +361,75 @@ class AccelerationDiagnostics(Status):
         self.assertEqual(result, ["ok", "ok", 30.0, "malformed", 0.0, 10.0])
 
 
+@unittest.skipUnless(UCODE, "ucode is required for the real status collector")
+class FanStatus(Status):
+    def fan(self):
+        return self.run_status()["state"]
+
+    def test_readings_that_the_guard_rejects_are_never_healthy(self):
+        hw = "sys/class/hwmon/hwmon8/"
+        cases = [({"fan1_input": 0}, "stopped"), ({"fan1_fault": 1}, "fault"),
+                 ({"fan1_fault": "invalid"}, "unreadable"), ({"fan1_input": "x"}, "unreadable"),
+                 ({"pwm1": 50}, "pwm-out-of-range")]
+        for values, expected in cases:
+            with self.subTest(values=values):
+                self.setUp()
+                for name, value in values.items():
+                    self.write(hw + name, value)
+                self.assertEqual(self.fan()["fans"][0]["health"], expected)
+        self.setUp()
+        (self.root / hw / "fan1_fault").unlink()
+        self.assertEqual(self.fan()["fans"][0]["health"], "ok-no-fault-flag")
+        self.setUp()
+        self.assertEqual(self.fan()["fans"][0]["health"], "ok")
+
+    def test_temperature_and_controller_unavailability_are_distinct(self):
+        self.assertEqual(self.fan()["fan"]["temperature"], {"status": "ok", "celsius": 45.0})
+        self.write("sys/class/thermal/thermal_zone7/temp", 200000)
+        self.assertEqual(self.fan()["fan"]["temperature"]["status"], "invalid")
+        self.write("sys/class/thermal/thermal_zone7/temp", 0)
+        self.assertEqual(self.fan()["fan"]["temperature"]["status"], "out-of-range")
+        self.write("sys/class/thermal/thermal_zone3/type", "nss_top_thermal")
+        self.assertEqual(self.fan()["fan"]["temperature"]["status"], "ambiguous")
+        shutil.rmtree(self.root / "sys/class/thermal")
+        self.assertEqual(self.fan()["fan"]["temperature"]["status"], "missing")
+        shutil.rmtree(self.root / "sys/class/hwmon")
+        state = self.fan()
+        self.assertEqual(state["fan"]["controller"], "missing")
+        self.assertIsNone(state["fan"]["trend"]["samples"][0]["rpm"])
+
+    def test_guard_process_presence_is_reported_alone(self):
+        self.assertEqual(self.fan()["fan"]["guard_process"], "absent")
+        self.write("proc/77/comm", "rc01-fan-guard")
+        self.assertEqual(self.fan()["fan"]["guard_process"], "running")
+        self.write("proc/78/comm", "rc01-fan-guard")
+        self.assertEqual(self.fan()["fan"]["guard_process"], "multiple")
+
+    def test_trend_is_bounded_rate_limited_and_marks_gaps(self):
+        script = r"""import { writefile } from 'fs';
+        let cache = {}, out = [];
+        function at(t) { writefile(root + '/proc/uptime', t + '.00 0\n'); return collect(root, uci, cache).fan.trend; }
+        at(100); at(105);
+        let a = at(110);
+        push(out, map(a.samples, s => s.t));
+        writefile(root + '/sys/class/hwmon/hwmon8/fan1_input', '0\n');
+        let b = at(200);
+        push(out, map(b.samples, s => [ s.t, s.gap_before, s.health ]));
+        for (let t = 210; t <= 2000; t += 10) at(t);
+        let c = at(2010);
+        push(out, [ length(c.samples), c.samples[0].t, c.samples[-1].age, c.window ]);
+        let d = at(50);
+        push(out, map(d.samples, s => s.t));
+        print(sprintf('%J', out));
+        """
+        result = self.run_script(script)
+        self.assertEqual(result[0], [100, 110])
+        self.assertEqual(result[1], [[100, False, "ok"], [110, False, "ok"], [200, True, "stopped"]])
+        # 90 samples, oldest inside the 900 s window, newest age zero.
+        self.assertEqual(result[2], [90, 1120, 0, 900])
+        # Uptime moving backwards (reboot or clock reset) discards history.
+        self.assertEqual(result[3], [50])
+
+
 if __name__ == "__main__":
     unittest.main()

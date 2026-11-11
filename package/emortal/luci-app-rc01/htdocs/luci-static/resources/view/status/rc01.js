@@ -42,6 +42,63 @@ function table(headers, rows) {
 	]);
 }
 
+const FAN_HEALTH = {
+	ok: () => _('Normal'),
+	'ok-no-fault-flag': () => _('Turning; fault flag not exported'),
+	stopped: () => _('Stopped (0 RPM)'),
+	fault: () => _('Fault flag set'),
+	unreadable: () => _('Reading unavailable'),
+	'pwm-out-of-range': () => _('PWM outside the 77-255 guard range')
+};
+
+const SENSOR_STATUS = {
+	ok: () => _('Valid'),
+	missing: () => _('NSS sensor missing'),
+	ambiguous: () => _('More than one NSS sensor'),
+	invalid: () => _('Invalid reading'),
+	'out-of-range': () => _('Outside the 1-130 C guard range')
+};
+
+function described(table, key) {
+	return key == null ? _('Unknown') : table[key] ? table[key]() : String(key);
+}
+
+// One character per sample; a gap in sampling is drawn as a space so a
+// missing period never looks like a continuous reading.
+function sparkline(samples, key) {
+	const values = samples.map(s => s[key]).filter(v => typeof v === 'number');
+	if (!values.length) return null;
+	const low = Math.min(...values), high = Math.max(...values);
+	const bars = '▁▂▃▄▅▆▇█';
+	const line = samples.map(s => (s.gap_before ? ' ' : '') + (typeof s[key] !== 'number' ? '·' :
+		bars[high === low ? 0 : Math.round((s[key] - low) / (high - low) * 7)])).join('');
+	return `${line}  ${_('min')} ${low} / ${_('max')} ${high} / ${_('latest')} ${display(samples[samples.length - 1][key])}`;
+}
+
+function fanSection(state) {
+	const fan = state.fan || {};
+	const trend = fan.trend || { samples: [] };
+	const samples = trend.samples || [];
+	const nodes = [
+		E('h3', {}, _('Temperature and fan')),
+		table([ _('Sensor'), _('Temperature (C)') ], state.temperatures.map(t => [ t.name, t.celsius ])),
+		table([ _('Fan'), _('RPM'), _('PWM (0-255)'), _('Fault'), _('Assessment') ], state.fans.map(f =>
+			[ f.hwmon, f.rpm, f.pwm, f.fault_available ? f.fault : _('Not exported'), described(FAN_HEALTH, f.health) ])),
+		table([ _('Item'), _('Value') ], [
+			[ _('Fan controller'), fan.controller === 'found' ? _('One EMC2301 at 0x2f') : fan.controller === 'ambiguous' ? _('More than one candidate') : _('Not found') ],
+			[ _('NSS temperature'), described(SENSOR_STATUS, fan.temperature?.status) ],
+			[ _('Fan guard process'), fan.guard_process === 'running' ? _('Process present') : fan.guard_process === 'multiple' ? _('More than one process') : _('Not running') ],
+			[ `${_('Temperature trend')} (C)`, sparkline(samples, 'celsius') ],
+			[ _('RPM trend'), sparkline(samples, 'rpm') ],
+			[ _('PWM trend'), sparkline(samples, 'pwm') ]
+		]),
+		E('p', {}, `${_('Trend samples are taken only while this page polls, at most every')} ${seconds(trend.interval)}, ` +
+			`${_('keeping')} ${samples.length}/${display(trend.capacity)} ${_('samples over')} ${seconds(trend.window)}. ` +
+			_('Gaps mark periods without samples. A running guard process does not prove that fan protection is working; the kernel thermal curve, 77 PWM floor and full-speed fault latch remain in control.'))
+	];
+	return nodes;
+}
+
 function ppeSection(ppe, stale) {
 	if (!ppe) return [];
 	const nodes = [ E('h3', {}, _('Acceleration diagnostics')) ];
@@ -111,9 +168,7 @@ function contents(state, previous) {
 		E('p', {}, _('Read-only status. No service, network or fan settings are changed. Preflight does not replace traffic or hardware acceptance.')),
 		E('p', {}, `${display(state.board)} · Linux ${display(state.kernel)} · ${_('uptime at sample')} ${seconds(now)}` +
 			(stale ? ` — ${_('sample time did not advance; values may be stale')}` : '')),
-		E('h3', {}, _('Temperature and fan')),
-		table([ _('Sensor'), _('Temperature (C)') ], state.temperatures.map(t => [ t.name, t.celsius ])),
-		table([ _('Fan'), _('RPM'), _('PWM (0-255)'), _('Fault') ], state.fans.map(f => [ f.hwmon, f.rpm, f.pwm, f.fault ])),
+		...fanSection(state),
 		E('h3', {}, _('Ethernet ports')),
 		table([ _('Port'), _('Device'), _('Link'), _('Speed (Mbps)'), _('Duplex') ], state.ports.map(p =>
 			[ p.name, p.present ? _('Present') : _('Missing'), p.carrier == null ? null : p.carrier ? _('Up') : _('Down'), p.speed_mbps, p.duplex ])),

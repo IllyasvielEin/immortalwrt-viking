@@ -141,6 +141,37 @@ refresh().then(() => {
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_fan_health_and_trend_gaps_are_rendered_honestly(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r'''
+const fs = require('fs');
+const assert = require('assert');
+const rpc = { declare: () => () => Promise.resolve({}) };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, { add: () => {} }, {}, E, v => v);
+const samples = [
+  { t: 100, celsius: 40, rpm: 900, pwm: 77, gap_before: false },
+  { t: 110, celsius: 50, rpm: 1800, pwm: 120, gap_before: false },
+  { t: 300, celsius: null, rpm: 0, pwm: 255, gap_before: true }
+];
+const text = JSON.stringify(api.render({
+  schema: 1, sampled_at: { uptime: 300 }, temperatures: [], ports: [], processes: [], radios: [],
+  fans: [{ hwmon: 'hwmon8', rpm: 0, pwm: 255, fault: 0, fault_available: true, health: 'stopped' }],
+  fan: { controller: 'found', temperature: { status: 'missing', celsius: null }, guard_process: 'running',
+    trend: { interval: 10, capacity: 90, window: 900, samples } },
+  storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }]
+}));
+assert(text.includes('Stopped (0 RPM)'), 'stopped fan must not look healthy');
+assert(text.includes('NSS sensor missing'));
+assert(text.includes('Process present'));
+assert(text.includes('▁█ ·'), 'gap and missing temperature must stay visible: ' + text.match(/[▁-█· ]{3,}/));
+assert(text.includes('does not prove that fan protection is working'));
+'''
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
