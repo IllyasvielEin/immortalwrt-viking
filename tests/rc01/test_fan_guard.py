@@ -239,6 +239,17 @@ class FanGuardTrace(unittest.TestCase):
             time.sleep(0.02)
         return json.loads(path.read_text()) if path.exists() else None
 
+    def collect_record(self, snapshot, uptime):
+        target = self.work / "var/run/rc01-fan-guard.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(snapshot, target)
+        self.write(self.work / "proc/uptime", f"{uptime:.2f} 0")
+        script = (f"import {{ collect }} from {json.dumps(str(PLATFORM))};\n"
+                  f"print(sprintf('%J', collect({json.dumps(str(self.work))}, null).fan.protection));\n")
+        result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
     # --- protection behaviour -------------------------------------------------
 
     def test_normal_startup_then_loop_with_sample_order(self):
@@ -358,6 +369,55 @@ class FanGuardTrace(unittest.TestCase):
         self.assertEqual((code, self.actions(events)), (0, [("pwm", "255"), ("sleep", "3"), ("pwm", "255"), ("pwm", "255")]))
         self.assertEqual((self.record()["event"], self.record()["sampled_uptime"]), ("signal-stop", None))
 
+    @unittest.skipUnless(UCODE, "ucode is required for the real status collector")
+    def test_pwm_failure_sample_time_matches_the_new_result_and_consumer(self):
+        cases = [
+            ("initial-write", SCENARIOS["initial-pwm-write-fails"], None, "not-sampled", 0, False),
+            ("startup-floor", SCENARIOS["startup-floor-write-fails"], 103.0, "ok", 0, False),
+            ("three-failures", SCENARIOS["latch-write-fails"], 109.0, "rpm-zero", 3, True),
+            ("hot-write", dict(ticks={2: temp(75000) + "; " + READ_ONLY_PWM}, last=3), 105.0, "ok", 0, True),
+        ]
+        for name, scenario, sampled, reason, failures, latched in cases:
+            with self.subTest(case=name):
+                code, events = self.run_guard_fresh(scenario)
+                self.assertEqual(code, 1)
+                self.assertEqual(self.actions(events)[-1], ("pwm-write-failed", None))
+                final = self.record()
+                self.assertEqual((final["phase"], final["event"], final["sampled_uptime"],
+                                  final["sample_reason"], final["failures"], final["latched"]),
+                                 ("exited", "pwm-write-failed", sampled, reason, failures, latched))
+                now = final["updated_uptime"] + 5
+                state = self.collect_record(self.state, now)
+                self.assertEqual((state["status"], state["sample_age"], state["sample_reason"],
+                                  state["failures"], state["latched"]),
+                                 ("exited", None if sampled is None else now - sampled, reason, failures, latched))
+
+    @unittest.skipUnless(UCODE, "ucode is required for the real status collector")
+    def test_failed_sample_clock_does_not_reuse_or_invent_a_time(self):
+        script = r'''
+        . "$1"
+        failures=3 latched=1
+        RC01_FAN_BOOT="$2" RC01_FAN_TICKS=4242
+        RC01_FAN_SAMPLED=107 RC01_FAN_SAMPLE_PENDING=1
+        RC01_FAN_REASON=rpm-zero RC01_FAN_LATCH=consecutive-failures:rpm-zero
+        echo broken > "$RC01_PROC/uptime"
+        rc01_fan_report monitoring 1
+        [ -z "$RC01_FAN_SAMPLED" ] || exit 42
+        [ "$RC01_FAN_SAMPLE_PENDING" = 0 ] || exit 43
+        echo '111.00 0' > "$RC01_PROC/uptime"
+        RC01_FAN_EVENT=pwm-write-failed
+        rc01_fan_report exited
+        wait "$RC01_FAN_PUBLISHER"
+        '''
+        result = subprocess.run([BUSYBOX, "sh", "-c", script, "x", str(GUARD), BOOT_ID],
+                                env=self.env | {"RC01_FAN_LIBRARY": "1"}, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        final = self.record()
+        self.assertIsNone(final["sampled_uptime"])
+        self.assertEqual((final["updated_uptime"], final["sample_reason"], final["failures"]), (111, "rpm-zero", 3))
+        state = self.collect_record(self.state, 115)
+        self.assertEqual((state["status"], state["sample_age"], state["sample_reason"]), ("exited", None, "rpm-zero"))
+
     def test_protection_trace_matches_baseline_guard(self):
         baseline = subprocess.run(["git", "-C", str(ROOT), "show", f"{BASELINE}:{GUARD_PATH}"], capture_output=True)
         if baseline.returncode:
@@ -380,25 +440,14 @@ class FanGuardTrace(unittest.TestCase):
         pid = str(self.guard_pid)
         self.write(self.work / f"proc/{pid}/comm", "rc01-fan-guard")
         self.write(self.work / f"proc/{pid}/status", "Name:\trc01-fan-guard\nPPid:\t1\n")
-        target = self.work / "var/run/rc01-fan-guard.json"
-        target.parent.mkdir(parents=True)
-
-        def collect(snapshot, uptime):
-            shutil.copy(snapshot, target)
-            self.write(self.work / "proc/uptime", f"{uptime:.2f} 0")
-            script = (f"import {{ collect }} from {json.dumps(str(PLATFORM))};\n"
-                      f"print(sprintf('%J', collect({json.dumps(str(self.work))}, null).fan.protection));\n")
-            result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True, timeout=10)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            return json.loads(result.stdout)
 
         snapshot = self.ticks / "snap.5"
         updated = json.loads(snapshot.read_text())["updated_uptime"]
-        current = collect(snapshot, updated + 2)
+        current = self.collect_record(snapshot, updated + 2)
         self.assertEqual((current["status"], current["sample_age"], current["failures"], current["latched"],
                           current["latch_reason"]), ("current", 2, 3, True, "consecutive-failures:rpm-zero"))
-        self.assertEqual(collect(snapshot, updated + 11)["detail"], "expired")
-        final = collect(self.state, updated + 20)
+        self.assertEqual(self.collect_record(snapshot, updated + 11)["detail"], "expired")
+        final = self.collect_record(self.state, updated + 20)
         self.assertEqual((final["status"], final["event"], final["failures"]), ("exited", "loop-ended", 0))
 
     # --- export isolation -----------------------------------------------------

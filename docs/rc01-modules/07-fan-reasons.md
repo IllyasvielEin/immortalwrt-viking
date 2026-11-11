@@ -2,6 +2,8 @@
 
 状态：开发完成，等待 Astra 独立验收。**没有构建镜像，没有实机验证。** 离线测试不能替代目标 procd、BusyBox 和真实 EMC2301 上的验证。
 
+初版 `35509ac` 已独立初审，保护轨迹未发现回归；采样时间R1已由主线程局部修复，待新Astra复验。当前修复提交见git log与外层交接索引，初版开发记录保留。
+
 - 基线：`a9ac7c6e3841b795e0b292232b308d72dea98929`（模块 01—05 已集成）
 - 分支：`dev/module-07-fan-reasons`（宿主绑定的独立 worktree）
 - 提交：本文和实现在同一次本地提交中提交。文件无法写入自己所在提交的 SHA，SHA 见交接报告和 `git log`。
@@ -107,6 +109,16 @@ UCODE=/tmp/rc01-acceleration-astra/ucode BUSYBOX=$BB \
 10 个跳过都缺少构建输入（`RC01_KERNEL_SOURCE`/`RC01_WIRELESS_SOURCE` 预备树，以及 RGB 页面校验需要的 LuCI 源码），不属于本模块。没有设置 `BUSYBOX`，或者主机上找不到 busybox 和 cc 时，`FanGuardTrace` 会整体跳过。验收时请提供 BusyBox。其余项：`busybox sh -n` 与 `dash -n` 语法通过。shellcheck 只有 SC2100（把 `x=a-b` 误判为算术），以及有意为之的 SC1007、SC2015、SC2086、SC3043；基线 guard 本来也有 SC3043。没有 msgfmt，po 只用脚本核对：新增 41 条，无重复 msgid，页面所用字符串全部有翻译。没有运行全量 discover：已知无线首启 disabled 基线失败和缺少构建输入的跳过不属于本模块。
 
 ## 未验证项
+
+## 初审采样时间R1修复（主线程）
+
+- 每次采样完成只设置一个待记录标记，不在保护PWM之前增加时间读取或文件发布。下一次报告（包括PWM写失败后的EXIT报告）在保护动作之后消费标记，以新时间配对新结果。
+- 消费标记时先清空旧采样时间；本次时间读取失败就保持未知，并清除标记。后续没有新采样的退出不能用退出时间冒充采样。初始255失败、发现失败、正常和信号退出均保留“是否已有新采样”的真实语义。
+- 新测试运行真实guard，再将其导出交给真实ucode消费者：初始PWM失败没有采样；启动77失败、过温255失败及三连失败255失败使用新采样时间；受控坏uptime不保留旧时间或在后续退出时伪造新时间。原双trap、保护I/O和值序列不变。
+- 主线程执行 `test_fan_guard`、`test_status`、`test_status_ui`：**167项通过、0跳过**。仅执行此前Astra由固定公开BusyBox1.38.0及本树补丁构建的可执行工具，未读取旧探针/日志/夹具；测试夹具均新建。旧guard导出反证分别产生3、1个失败断言，无执行错误/跳过。dash/BusyBox语法、git diff检查通过。
+- rc01-platform release8→9。未改消费者、页面、init或保护策略；此记录不代替新Astra复验，构建和实机缺口继续保留。
+
+## 未验证项（保留）
 
 - 目标 BusyBox（OpenWrt 构建产物）和 procd 下的实际行为：procd stop／respawn 时信号只发给主进程，发布子进程的生命周期，`/var/run` 在 START=11 时已可写。
 - 真实 `/proc/<pid>/stat`、`boot_id` 和 rpcd 环境中的读取与新鲜度判断。
