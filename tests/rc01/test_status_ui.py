@@ -177,6 +177,55 @@ assert(text.includes('not a heartbeat from the fan guard'), 'page sample time mu
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_channel_hints_render_and_failed_capabilities_drop_old_results(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r"""
+const fs = require('fs');
+const assert = require('assert');
+let refresh, responses = [];
+const rpc = { declare: () => () => Promise.resolve(responses.shift()) };
+const poll = { add: fn => { refresh = fn; } };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const dom = { content: (node, children) => { node.children = children; } };
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
+const radios = [ { name: 'radio0', disabled: true }, { name: 'radio1', disabled: false }, { name: 'radio2', disabled: true } ];
+const base = (uptime, wireless) => ({ schema: 1, sampled_at: { uptime }, temperatures: [], fans: [], ports: [], processes: [],
+  radios, storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }], wireless });
+const node = api.render(base(100, { source: 'nl80211 GET_WIPHY', status: 'ok',
+  phys: [ { name: 'phy0', bands: [ '2g' ] }, { name: 'phy1', bands: [ '5g' ] } ],
+  hints: [
+    { radio: 'radio0', band: '2g', channel: '6', frequency: 2437, phy: 'phy0', status: 'ok', flags: [] },
+    { radio: 'radio1', band: '6g', channel: '1', frequency: 5955, phy: 'phy1', status: 'band-unsupported', supported_bands: [ '5g' ], flags: [] },
+    { radio: 'radio2', band: '5g', channel: 'auto', frequency: null, phy: null, status: 'not-ready', flags: [] } ] }));
+let text = JSON.stringify(node);
+assert(text.includes('6 (2437 MHz)'));
+assert(text.includes('Matches: primary channel is in the radio frequency list'));
+assert(text.includes('Mismatch: radio does not support this band (supported: 5g)'));
+assert(text.includes('Cannot determine: radio not detected yet'));
+assert(text.includes('phy1 (5g)'));
+assert(text.includes('DFS/CAC'), 'scope of the check must be stated');
+assert.strictEqual(api.handleSave, null);
+responses.push(base(105, { source: 'nl80211 GET_WIPHY', status: 'unavailable', phys: null, hints: [
+  { radio: 'radio0', band: '2g', channel: '6', frequency: 2437, phy: null, status: 'capability-unavailable', flags: [] } ] }));
+responses.push(base(110, undefined));
+refresh().then(() => {
+  text = JSON.stringify(node);
+  assert(!text.includes('Matches'), 'old match must not survive a failed query');
+  assert(!text.includes('phy1 (5g)'));
+  assert(text.includes('Cannot determine: radio capabilities unavailable'));
+  assert(text.includes('Query failed or wireless driver not loaded'));
+  return refresh();
+}).then(() => {
+  text = JSON.stringify(node);
+  assert(!text.includes('Mismatch:') && !text.includes('Matches:') && !text.includes('Cannot determine'));
+  assert(text.includes('radio1'), 'radios still listed without hint data');
+}).catch(e => { console.error(e); process.exitCode = 1; });
+"""
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

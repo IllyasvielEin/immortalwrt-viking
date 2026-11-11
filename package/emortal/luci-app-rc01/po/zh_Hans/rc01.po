@@ -136,8 +136,6 @@ msgstr "已禁用"
 msgid "Enabled"
 msgstr "已启用"
 
-msgid "Configured state does not confirm whether a radio is transmitting."
-msgstr "配置状态不能证明射频实际是否正在发射。"
 
 msgid "Not included in this build"
 msgstr "本次构建未选入"
@@ -384,3 +382,78 @@ msgstr "未采集，以避免扫描完整硬件表"
 
 msgid "Active counts and resource use are current state; software event counters accumulate until reset. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput."
 msgstr "活动数量和资源占用是当前状态，软件事件计数在重置前累计。模块已加载、设置已开启或读取成功均不表示流量已被加速；流数不是吞吐量。"
+
+msgid "Matches: primary channel is in the radio frequency list"
+msgstr "匹配：主信道在该无线的频率列表中"
+
+msgid "Automatic channel; band supported by the radio"
+msgstr "自动信道；该无线支持此频段"
+
+msgid "Cannot determine: radio not detected yet"
+msgstr "无法判定：尚未检测到对应无线"
+
+msgid "Cannot determine: radio capabilities unavailable"
+msgstr "无法判定：无线能力不可用"
+
+msgid "Cannot determine: band not configured"
+msgstr "无法判定：未配置频段"
+
+msgid "Mismatch: unknown band value"
+msgstr "不匹配：频段值无法识别"
+
+msgid "Mismatch: channel number does not exist in this band"
+msgstr "不匹配：该频段不存在此信道编号"
+
+msgid "Mismatch: radio does not support this band"
+msgstr "不匹配：该无线不支持此频段"
+
+msgid "Mismatch: all channels of this band are disabled"
+msgstr "不匹配：此频段的信道均被禁用"
+
+msgid "Mismatch: radio does not list this channel"
+msgstr "不匹配：该无线未提供此信道"
+
+msgid "Mismatch: channel disabled by the kernel"
+msgstr "不匹配：内核已禁用此信道"
+
+msgid "Query failed or wireless driver not loaded"
+msgstr "查询失败或无线驱动未加载"
+
+msgid "ucode nl80211 module not installed"
+msgstr "未安装 ucode nl80211 模块"
+
+msgid "radar detection required"
+msgstr "需雷达检测"
+
+msgid "no initiating radiation"
+msgstr "禁止主动发射"
+
+msgid "supported"
+msgstr "支持"
+
+msgid "kernel flags"
+msgstr "内核标记"
+
+msgid "Band"
+msgstr "频段"
+
+msgid "Primary channel"
+msgstr "主信道"
+
+msgid "Phy"
+msgstr "PHY"
+
+msgid "Band/primary channel check"
+msgstr "频段/主信道检查"
+
+msgid "Radio capability source"
+msgstr "无线能力来源"
+
+msgid "Detected phys"
+msgstr "检测到的 PHY"
+
+msgid "None"
+msgstr "无"
+
+msgid "Advisory only: compares the configured band and primary channel with the frequency list the driver reports for the matching phy. Channel width, country, DFS/CAC and transmit legality are not checked, nothing is changed, and radio startup is not blocked. Configured state does not confirm whether a radio is transmitting."
+msgstr "仅作提示：将配置的频段和主信道与驱动为对应 PHY 报告的频率列表比较。不检查信道带宽、国家/地区、DFS/CAC 或发射合法性，不修改任何配置，也不阻止无线启动。配置状态不能确认无线正在发射。"

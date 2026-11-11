@@ -140,6 +140,51 @@ function ppeSection(ppe) {
 	return nodes;
 }
 
+const CHANNEL_HINT = {
+	ok: () => _('Matches: primary channel is in the radio frequency list'),
+	auto: () => _('Automatic channel; band supported by the radio'),
+	'not-ready': () => _('Cannot determine: radio not detected yet'),
+	'capability-unavailable': () => _('Cannot determine: radio capabilities unavailable'),
+	'band-missing': () => _('Cannot determine: band not configured'),
+	'band-invalid': () => _('Mismatch: unknown band value'),
+	'channel-invalid': () => _('Mismatch: channel number does not exist in this band'),
+	'band-unsupported': () => _('Mismatch: radio does not support this band'),
+	'band-disabled': () => _('Mismatch: all channels of this band are disabled'),
+	'channel-unsupported': () => _('Mismatch: radio does not list this channel'),
+	'channel-disabled': () => _('Mismatch: channel disabled by the kernel')
+};
+
+const WIPHY_STATUS = {
+	ok: () => _('Available'),
+	unavailable: () => _('Query failed or wireless driver not loaded'),
+	'module-missing': () => _('ucode nl80211 module not installed')
+};
+
+const CHANNEL_FLAGS = { radar: () => _('radar detection required'), no_ir: () => _('no initiating radiation') };
+
+function wirelessSection(state) {
+	const wireless = state.wireless || {};
+	const hints = Object.fromEntries((wireless.hints || []).map(h => [ h.radio, h ]));
+	const rows = (state.radios || []).map(r => {
+		const h = hints[r.name] || {};
+		const flags = (h.flags || []).map(f => CHANNEL_FLAGS[f] ? CHANNEL_FLAGS[f]() : f);
+		return [ r.name, r.disabled ? _('Disabled') : _('Enabled'), h.band,
+			h.channel == null ? null : h.frequency == null ? h.channel : `${h.channel} (${h.frequency} MHz)`, h.phy,
+			described(CHANNEL_HINT, h.status) + (h.supported_bands ? ` (${_('supported')}: ${h.supported_bands.join(', ') || '-'})` : '') +
+				(flags.length ? ` — ${_('kernel flags')}: ${flags.join(', ')}` : '') ];
+	});
+	return [
+		E('h3', {}, _('Wireless configuration')),
+		table([ _('Radio'), _('Configured state'), _('Band'), _('Primary channel'), _('Phy'), _('Band/primary channel check') ], rows),
+		table([ _('Item'), _('Value') ], [
+			[ _('Radio capability source'), `${described(WIPHY_STATUS, wireless.status)} (${wireless.source || 'nl80211'})` ],
+			[ _('Detected phys'), wireless.phys == null ? _('Unavailable') :
+				wireless.phys.map(p => `${p.name} (${p.bands.join(', ') || '-'})`).join('; ') || _('None') ]
+		]),
+		E('p', {}, _('Advisory only: compares the configured band and primary channel with the frequency list the driver reports for the matching phy. Channel width, country, DFS/CAC and transmit legality are not checked, nothing is changed, and radio startup is not blocked. Configured state does not confirm whether a radio is transmitting.'))
+	];
+}
+
 function contents(state, previous) {
 	if (state.schema !== 1 || !Array.isArray(state.preflight))
 		throw new Error(_('Invalid RC01 status response'));
@@ -166,10 +211,7 @@ function contents(state, previous) {
 		]),
 		E('p', {}, _('Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures.')),
 		...ppeSection(state.ppe),
-		E('h3', {}, _('Wireless configuration')),
-		table([ _('Radio'), _('Configured state') ], (state.radios || []).map(r =>
-			[ r.name, r.disabled ? _('Disabled') : _('Enabled') ])),
-		E('p', {}, _('Configured state does not confirm whether a radio is transmitting.')),
+		...wirelessSection(state),
 		E('h3', {}, _('Proxy processes')),
 		table([ _('Process'), _('PID'), _('RSS (KiB)') ], state.processes.map(p => [ p.name, p.pid, p.rss_kib ]))
 	];

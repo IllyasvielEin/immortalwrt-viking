@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=rc01-platform
 PKG_VERSION:=1
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=GPL-2.0-only
 
 include $(INCLUDE_DIR)/package.mk
@@ -12,7 +12,7 @@ define Package/rc01-platform
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=RC01 fan supervision, status and upgrade preflight
-  DEPENDS:=@TARGET_qualcommbe_ipq95xx +kmod-hwmon-emc2305 +kmod-thermal +uboot-envtools +fdt-utils +ucode +ucode-mod-fs +ucode-mod-uci
+  DEPENDS:=@TARGET_qualcommbe_ipq95xx +kmod-hwmon-emc2305 +kmod-thermal +uboot-envtools +fdt-utils +ucode +ucode-mod-fs +ucode-mod-nl80211 +ucode-mod-uci
   PKGARCH:=all
 endef
 

@@ -393,5 +393,157 @@ class FanStatus(Status):
         self.assertEqual(result[3], [50])
 
 
+def band(*freqs):
+    """One nl80211 band: freqs given as MHz or (MHz, flags) as the ucode module returns them."""
+    entries = []
+    for f in freqs:
+        freq, flags = (f, ()) if isinstance(f, int) else f
+        entries.append({"freq": freq, **{flag: True for flag in flags}})
+    return {"freqs": entries}
+
+
+# Three independent phys as on RC01, shaped like an nl80211 GET_WIPHY dump
+# (wiphy_bands is indexed by band type, so absent bands are null).
+WIPHY_DUMP = [
+    {"wiphy": 0, "wiphy_name": "phy0", "wiphy_bands": [band(2412, 2437, 2462, (2467, ["disabled"]), (2472, ["disabled"]))]},
+    {"wiphy": 1, "wiphy_name": "phy1", "wiphy_bands": [None, band(5180, (5260, ["radar", "no_ir"]), 5745, (5865, ["disabled"]))]},
+    {"wiphy": 2, "wiphy_name": "phy2", "wiphy_bands": [None, None, None, band(5955, 5975, 6115)]},
+]
+
+
+@unittest.skipUnless(UCODE, "ucode is required for the real status collector")
+class ChannelHints(Status):
+    def setUp(self):
+        super().setUp()
+        self.paths = {"phy0": "platform/soc@0/pcie-a/0000:01:00.0", "phy1": "platform/soc@0/pcie-b/0000:02:00.0",
+                      "phy2": "platform/soc@0/pcie-c/0000:03:00.0"}
+        for idx, (phy, path) in enumerate(self.paths.items()):
+            device = self.root / "sys/devices" / path
+            device.mkdir(parents=True)
+            self.write(f"sys/class/ieee80211/{phy}/index", idx)
+            self.write(f"sys/class/ieee80211/{phy}/macaddress", f"02:00:00:00:00:0{idx}")
+            (self.root / f"sys/class/ieee80211/{phy}/device").symlink_to(device)
+        self.config["wireless"] = {}
+        self.radio("radio0", "2g", "6", path=self.paths["phy0"])
+        self.radio("radio1", "5g", "36", path=self.paths["phy1"])
+        self.radio("radio2", "6g", "1", path=self.paths["phy2"])
+
+    def radio(self, name, band_name, channel, **options):
+        section = {".type": "wifi-device", ".name": name, "disabled": "1", "type": "mac80211", **options}
+        if band_name is not None:
+            section["band"] = band_name
+        if channel is not None:
+            section["channel"] = channel
+        self.config["wireless"][name] = section
+
+    def hints(self, dump=WIPHY_DUMP, query=True):
+        call = f"collect(root, uci, null, () => {json.dumps(dump)})" if query else "collect(root, uci, null)"
+        state = self.run_script(f"print(sprintf('%J', {call}.wireless));")
+        return state, {h["radio"]: h for h in state["hints"]}
+
+    def test_valid_fixed_channels_match_their_own_phy(self):
+        state, hints = self.hints()
+        self.assertEqual(state["status"], "ok")
+        self.assertEqual([p["name"] for p in state["phys"]], ["phy0", "phy1", "phy2"])
+        self.assertEqual({r: (h["phy"], h["frequency"], h["status"]) for r, h in hints.items()},
+                         {"radio0": ("phy0", 2437, "ok"), "radio1": ("phy1", 5180, "ok"), "radio2": ("phy2", 5955, "ok")})
+
+    def test_same_channel_number_is_judged_by_band_frequency(self):
+        # Channel 1 is 2412 MHz in 2.4 GHz and 5955 MHz in 6 GHz.
+        self.radio("radio0", "2g", "1", path=self.paths["phy0"])
+        _, hints = self.hints([{**WIPHY_DUMP[0], "wiphy_bands": [band(2412)]}, *WIPHY_DUMP[1:]])
+        self.assertEqual((hints["radio0"]["frequency"], hints["radio0"]["status"]), (2412, "ok"))
+        self.assertEqual((hints["radio2"]["frequency"], hints["radio2"]["status"]), (5955, "ok"))
+        # A 6 GHz number on the 2.4 GHz phy is not "valid because 1 exists somewhere".
+        self.radio("radio2", "6g", "1", path=self.paths["phy0"])
+        _, hints = self.hints()
+        self.assertEqual(hints["radio2"]["status"], "band-unsupported")
+        self.assertEqual(hints["radio2"]["supported_bands"], ["2g"])
+
+    def test_clear_mismatches(self):
+        self.radio("radio0", "2g", "36", path=self.paths["phy0"])     # no such 2.4 GHz channel
+        self.radio("radio1", "5g", "165", path=self.paths["phy1"])    # 5825 MHz not listed
+        self.radio("radio2", "6g", "1", path=self.paths["phy1"])      # 6 GHz configured on the 5 GHz phy
+        self.radio("radio3", "2g", "13", path=self.paths["phy0"])     # listed but disabled
+        self.radio("radio4", "5g", "173", path=self.paths["phy1"])    # 5865 MHz disabled
+        self.radio("radio5", "7g", "1", path=self.paths["phy0"])
+        _, hints = self.hints()
+        self.assertEqual({r: h["status"] for r, h in hints.items()}, {
+            "radio0": "channel-invalid", "radio1": "channel-unsupported", "radio2": "band-unsupported",
+            "radio3": "channel-disabled", "radio4": "channel-disabled", "radio5": "band-invalid"})
+
+    def test_kernel_flags_are_reported_without_judging_legality(self):
+        self.radio("radio1", "5g", "52", path=self.paths["phy1"])
+        _, hints = self.hints()
+        self.assertEqual((hints["radio1"]["status"], hints["radio1"]["flags"]), ("ok", ["radar", "no_ir"]))
+
+    def test_automatic_channel_checks_only_band(self):
+        self.radio("radio0", "2g", "auto", path=self.paths["phy0"])
+        self.radio("radio1", "5g", None, path=self.paths["phy1"])
+        self.radio("radio2", "6g", "auto", path=self.paths["phy0"])
+        _, hints = self.hints()
+        self.assertEqual({r: (h["status"], h["frequency"]) for r, h in hints.items()},
+                         {"radio0": ("auto", None), "radio1": ("auto", None), "radio2": ("band-unsupported", None)})
+        _, hints = self.hints([{**WIPHY_DUMP[0], "wiphy_bands": [band((2412, ["disabled"]))]}])
+        self.assertEqual(hints["radio0"]["status"], "band-disabled")
+
+    def test_missing_phy_or_capabilities_is_undetermined(self):
+        # Driver loaded only one phy: the others are not ready, not wrong.
+        _, hints = self.hints(WIPHY_DUMP[:1])
+        self.assertEqual({r: h["status"] for r, h in hints.items()},
+                         {"radio0": "ok", "radio1": "not-ready", "radio2": "not-ready"})
+        # Query failure: nothing is asserted, and no phy list is shown.
+        state, hints = self.hints(None)
+        self.assertEqual((state["status"], state["phys"]), ("unavailable", None))
+        self.assertEqual({h["status"] for h in hints.values()}, {"capability-unavailable"})
+        # Band missing in configuration is undetermined as well.
+        self.radio("radio0", None, "6", path=self.paths["phy0"])
+        _, hints = self.hints()
+        self.assertEqual(hints["radio0"]["status"], "band-missing")
+
+    def test_without_nl80211_module_status_is_module_missing(self):
+        # The host ucode has no nl80211 plugin, exercising the real require() path.
+        state, hints = self.hints(query=False)
+        self.assertEqual(state["status"], "module-missing")
+        self.assertEqual({h["status"] for h in hints.values()}, {"capability-unavailable"})
+
+    def test_phy_lookup_follows_wifi_scripts_order(self):
+        # Two phys below one device: "+1" selects the second by phy index.
+        shared = self.paths["phy1"]
+        (self.root / "sys/class/ieee80211/phy2/device").unlink()
+        (self.root / "sys/class/ieee80211/phy2/device").symlink_to(self.root / "sys/devices" / shared)
+        self.radio("radio1", "5g", "36", path=shared)
+        self.radio("radio2", "6g", "1", path=shared + "+1")
+        # MAC address, then plain phy name, when there is no path.
+        self.radio("radio0", "2g", "6", macaddr="02:00:00:00:00:00")
+        self.radio("radio3", "2g", "1", phy="phy0")
+        self.radio("radio4", "2g", "1", path="platform/missing", phy="phy9")
+        _, hints = self.hints()
+        self.assertEqual({r: h["phy"] for r, h in hints.items()},
+                         {"radio0": "phy0", "radio1": "phy1", "radio2": "phy2", "radio3": "phy0", "radio4": None})
+        self.assertEqual(hints["radio4"]["status"], "not-ready")
+
+    def test_failed_query_after_success_keeps_no_old_capabilities(self):
+        script = f"""let cache = {{}}, dumps = [ {json.dumps(WIPHY_DUMP)}, null ];
+        let a = collect(root, uci, cache, () => dumps[0]).wireless;
+        let b = collect(root, uci, cache, () => dumps[1]).wireless;
+        print(sprintf('%J', [ a.hints[0].status, b.status, b.phys, map(b.hints, h => [ h.status, h.phy ]) ]));"""
+        result = self.run_script(script)
+        self.assertEqual(result[0], "ok")
+        self.assertEqual(result[1:3], ["unavailable", None])
+        self.assertEqual(result[3], [["capability-unavailable", None]] * 3)
+
+    def test_hints_do_not_write_configuration_or_files(self):
+        def fingerprint():
+            return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in self.root.rglob("*") if p.is_file()}
+        before, config = fingerprint(), json.dumps(self.config, sort_keys=True)
+        # The UCI stub has only get/foreach; any write would raise.
+        self.radio("radio1", "5g", "165", path=self.paths["phy1"])
+        config = json.dumps(self.config, sort_keys=True)
+        self.hints()
+        self.assertEqual(before, fingerprint())
+        self.assertEqual(config, json.dumps(self.config, sort_keys=True))
+
+
 if __name__ == "__main__":
     unittest.main()
