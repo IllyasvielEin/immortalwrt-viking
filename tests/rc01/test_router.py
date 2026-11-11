@@ -140,7 +140,8 @@ print('manual-preset-check:ok\n');
         source = ROOT / "package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
         with tempfile.TemporaryDirectory(prefix="rc01-wireless-test-") as temporary:
             path = Path(temporary)
-            (path / "fs.uc").write_text('export function readfile(path) { return path == "/tmp/sysinfo/board_name" ? "xiaomi,be10000\\n" : "02:00:00:00:00:01\\n"; }\n')
+            (path / "fs.uc").write_text('export const rc01_fixture = true;\n'
+                                        'export function readfile(path) { return path == "/tmp/sysinfo/board_name" ? "xiaomi,be10000\\n" : "02:00:00:00:00:01\\n"; }\n')
             (path / "uci.uc").write_text('export function cursor() { return { get_all: () => ({}) }; }\n')
             board = '''export function board_wlan() {
               return { phy0: { path: 'platform/test', info: { radios: [],
@@ -148,6 +149,13 @@ print('manual-preset-check:ok\n');
             }'''
             (path / "wifi").mkdir()
             (path / "wifi/utils.uc").write_text(board)
+            # The board-name stub must win over the native fs module; a UCODE
+            # wrapper that prepends its own -L would otherwise read the host.
+            probe = subprocess.run([UCODE, "-L", str(path / "*.uc"), "-"], capture_output=True, text=True,
+                                   input='import { rc01_fixture } from "fs"; print(rc01_fixture ? "fixture" : "native");')
+            self.assertEqual(probe.stdout, "fixture",
+                             "UCODE resolves the native fs module before test stubs; use an installed "
+                             "host ucode such as staging_dir/hostpkg/bin/ucode\n" + probe.stderr)
             result = subprocess.run([UCODE, "-L", str(path / "*.uc"), str(source)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("set wireless.radio0.disabled='1'", result.stdout)
