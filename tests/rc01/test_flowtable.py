@@ -284,6 +284,113 @@ int main(void) {
 '''
         self.run_c(code)
 
+    def test_block_drain_retires_outside_rcu_and_keeps_other_blocks(self):
+        # Actual 0683 count/forget/destroy/drain/release code. Hardware
+        # retirement may sleep: it must see ft->lock held and no RCU reader
+        # (the former rhashtable walk). This is not a lockdep/concurrency run.
+        with tempfile.TemporaryDirectory(prefix="rc01-ppe-source-") as temporary:
+            source = ppe_source(Path(temporary))
+        funcs = "\n".join(function(source, name) for name in
+                          ("ppe_ft_flow_count_inc", "ppe_ft_flow_count_dec",
+                           "ppe_ft_flow_forget", "ppe_ft_flow_destroy_locked",
+                           "ppe_ft_flow_drain", "ppe_ft_block_release"))
+        code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stddef.h>
+#define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
+struct list_head { struct list_head *next, *prev; };
+static void INIT_LIST_HEAD(struct list_head *l) { l->next=l->prev=l; }
+static bool list_empty(const struct list_head *l) { return l->next==l; }
+static void list_add_tail(struct list_head *n, struct list_head *h) {
+    n->prev=h->prev; n->next=h; h->prev->next=n; h->prev=n; }
+static void list_del_init(struct list_head *n) {
+    n->prev->next=n->next; n->next->prev=n->prev; INIT_LIST_HEAD(n); }
+#define list_entry(p,t,m) container_of(p,t,m)
+#define list_for_each_entry_safe(pos,n,head,m) \
+    for (pos=list_entry((head)->next,__typeof__(*pos),m), \
+         n=list_entry(pos->m.next,__typeof__(*pos),m); &pos->m!=(head); \
+         pos=n, n=list_entry(n->m.next,__typeof__(*n),m))
+struct mutex { int held; };
+static int rcu_depth;
+static void unlock_guard(struct mutex **m) { assert((*m)->held); (*m)->held=0; }
+static struct mutex *lock_guard(struct mutex *m) { assert(!m->held && !rcu_depth); m->held=1; return m; }
+#define guard(type) struct mutex *__g __attribute__((cleanup(unlock_guard))) = lock_guard
+#define lockdep_assert_held(m) assert((m)->held)
+#define atomic_inc(v) ((*(v))++)
+#define atomic_dec(v) ((*(v))--)
+#define atomic_long_inc(v) ((*(v))++)
+struct flow_block { int id; };
+struct rhash_head { bool hashed; };
+struct ppe_flow_entry { bool is_ipv6; };
+struct ppe_ft_flow {
+    struct rhash_head node; struct list_head active_node, zombie_node;
+    struct flow_block *block; struct ppe_flow_entry entry; int ivp, vp_flow;
+    bool hw_del_fails, retired, released, freed;
+};
+struct ppe_flowtable {
+    struct mutex lock; int flows, ivp_unused;
+    struct list_head active_flows, zombies;
+    int ipv4_flows, ipv6_flows; long destroy_calls; void *ppe_dev;
+};
+struct ppe_ft_block { struct ppe_flowtable *ft; struct flow_block *block; };
+static const int ppe_ft_params;
+static int kfree_calls;
+static void rhashtable_remove_fast(int *t, struct rhash_head *n, int p) { assert(n->hashed); n->hashed=false; }
+static void ppe_vp_flow_del(void *d, int ivp, int *vp_flow) { }
+static void ppe_ft_flow_owner_clear(struct ppe_flowtable *ft, struct ppe_ft_flow *f) { }
+static void ppe_ft_flow_deps_put(struct ppe_flowtable *ft, struct ppe_ft_flow *f) { assert(!f->released); f->released=true; }
+static bool ppe_ft_flow_hw_del(struct ppe_flowtable *ft, struct ppe_ft_flow *f) {
+    /* Readback/delete can sleep: never under an RCU reader. */
+    assert(ft->lock.held && !rcu_depth && !f->retired && !f->freed);
+    f->retired=true; return !f->hw_del_fails; }
+static void ppe_ft_flow_quarantine(struct ppe_flowtable *ft, struct ppe_ft_flow *f) {
+    list_add_tail(&f->zombie_node,&ft->zombies); }
+#define kfree_rcu(f,m) do { if (f) { assert(!(f)->freed); (f)->freed=true; } } while (0)
+static void kfree(void *p) { kfree_calls++; }
+'''
+        code += funcs
+        code += r'''
+static void publish(struct ppe_flowtable *ft, struct ppe_ft_flow *f, struct flow_block *b, bool v6) {
+    INIT_LIST_HEAD(&f->active_node); INIT_LIST_HEAD(&f->zombie_node);
+    f->block=b; f->entry.is_ipv6=v6; f->node.hashed=true;
+    ft->lock.held=1; ppe_ft_flow_count_inc(ft,f); ft->lock.held=0;
+}
+int main(void) {
+    struct ppe_flowtable ft={0};
+    struct flow_block b1={1}, b2={2};
+    struct ppe_ft_flow a={0}, stuck={0}, gone={0}, other={0};
+    INIT_LIST_HEAD(&ft.active_flows); INIT_LIST_HEAD(&ft.zombies);
+    publish(&ft,&a,&b1,false); publish(&ft,&stuck,&b1,true);
+    publish(&ft,&gone,&b1,false); publish(&ft,&other,&b2,false);
+    stuck.hw_del_fails=true;
+    assert(ft.ipv4_flows==3 && ft.ipv6_flows==1);
+    /* A flow forgotten earlier (stale/replaced owner) is no longer visited. */
+    ft.lock.held=1; ppe_ft_flow_forget(&ft,&gone); ft.lock.held=0;
+    assert(gone.freed && !gone.retired && ft.ipv4_flows==2);
+
+    struct ppe_ft_block *fb=&(struct ppe_ft_block){&ft,&b1};
+    ppe_ft_block_release(fb);
+    assert(kfree_calls==1 && !ft.lock.held && ft.destroy_calls==2);
+    assert(a.retired && a.released && a.freed && !a.node.hashed);
+    /* Failed hardware delete: leaves active list/counts, kept as zombie. */
+    assert(stuck.retired && !stuck.released && !stuck.freed && !stuck.node.hashed);
+    assert(ft.zombies.next==&stuck.zombie_node && ft.zombies.prev==&stuck.zombie_node);
+    /* The other block's rule survives untouched. */
+    assert(!other.retired && other.node.hashed);
+    assert(ft.active_flows.next==&other.active_node && ft.active_flows.prev==&other.active_node);
+    assert(ft.ipv4_flows==1 && ft.ipv6_flows==0);
+
+    /* Final teardown drains everything left, without block accounting. */
+    ppe_ft_flow_drain(&ft,NULL);
+    assert(other.retired && other.freed && list_empty(&ft.active_flows));
+    assert(ft.ipv4_flows==0 && ft.ipv6_flows==0 && ft.destroy_calls==2);
+    assert(!stuck.freed && !list_empty(&ft.zombies) && !ft.lock.held);
+    return 0;
+}
+'''
+        self.run_c(code)
+
     def test_netifd_refresh_reaches_attached_ap_only(self):
         # Compile the actual helper and mock its existing setter boundary.
         # Source preparation/build verifies the other backend and caller hunks.
@@ -347,7 +454,7 @@ int main(void) {
         self.assertLess(destroy.index("unregister_switchdev_notifier(&ft->fdb_nb)"), cancel)
         self.assertNotIn("rtnl_lock(", destroy[:cancel])
         self.assertNotIn("mutex_lock(", destroy[:cancel])
-        self.assertGreater(destroy.index("ppe_ft_flow_drain(ft)"), cancel)
+        self.assertGreater(destroy.index("ppe_ft_flow_drain(ft, NULL)"), cancel)
 
     @unittest.skipUnless(KERNEL, "set RC01_KERNEL_SOURCE to the prepared kernel")
     def test_flow_cleanup_preserves_namespace_and_matches_both_upper_paths(self):
