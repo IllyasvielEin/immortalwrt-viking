@@ -1,5 +1,10 @@
 # Anonymous development integration
 
+> Historical snapshot of the local integration on 2026-11-12. The PR and remote
+> statements below describe that inspection only. PR #1 subsequently became
+> MERGED and remote rc01/custom advanced to 6ab2fe55f4; see the
+> [current progress](../rc01-progress.md) for delivery and CI status.
+
 2026-11-12. Local integration branch: `rc01/anonymous-rebase-20261112`.
 Source integration result: `a7fc1b49238f392bfdd074749e0b1680098b256c`.
 

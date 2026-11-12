@@ -1,5 +1,8 @@
 # RC01 构建指南
 
+当前提交、CI 状态与待办见 [统一进度](rc01-progress.md)，固定 Viking 来源差异和未实施候选见
+[上游追踪](rc01-upstream-status.md)。本页说明构建方法与验收契约，不表示最新运行已通过。
+
 适用于小米万兆 RC01 / BE10000 / IPQ9570。平台基于 VIKINGYFY/immortalwrt `owrt`，
 审核来源及摘取范围以 `scripts/rc01-platform-sources.json` 为准；保留上游作者与许可。
 无线固件包含二进制组件。内核为 6.18.60，mac80211 使用 backports 7.2 本地选集，
