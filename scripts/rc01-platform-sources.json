@@ -37,7 +37,8 @@
     "516da1de900c3ae45daa09cbfbfec985e0179661",
     "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
     "99977bd751741658172c6d0f1df21af662a375e8",
-    "85ebb0d08e6845c54b50370482ed0dd92cf39958"
+    "85ebb0d08e6845c54b50370482ed0dd92cf39958",
+    "67bb668abe0b17a98278829ee38312d480ebed5e"
   ],
   "excluded_commits": [
     "6061a61a",
@@ -75,7 +76,9 @@
     "PPE FDB worker verifies bridge master before reading bridge private VLAN data",
     "Router Tool waits for a requested child capability list before applying defaults",
     "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
-    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated"
+    "firewall4 004 call adapted to old resolve_lower_devices(devstatus, devname); upstream use_prefix/WDS prefix resolution not carried",
+    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated",
+    "UP02 R1: nf_conntrack_bridge.ko is owned only by kmod-nf-conntrack-bridge; kmod-nft-bridge depends on that package and only owns its meta/reject modules"
   ],
   "followup_selection": [
     {
@@ -149,6 +152,10 @@
     {
       "commit": "85ebb0d08e6845c54b50370482ed0dd92cf39958",
       "scope": "partial, after reviewed_head: only 0683 PPE active-list block drain (blob fcd69f0c13e602e076ac0cede5678d0148eb8573, kept byte-identical; fuzz 0, line offsets only); excludes 0682 tunnel trylock and 0684 slot diagnostics; equivalent to the PPE-B part of endpoint dd8de87169f1c1d091a81eb237341b2de09bd5bf 0651-03 without its regrouping or RTL837x changes"
+    },
+    {
+      "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
+      "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 004 bridge offload allow/exclude/ibrname/last-priority rule and +kmod-nft-bridge only, onto old firewall4 e6f600c; keeps old two-argument resolve_lower_devices without WDS prefix; excludes 005/006 and the 3722ead source upgrade"
     }
   ],
   "deferred": {
