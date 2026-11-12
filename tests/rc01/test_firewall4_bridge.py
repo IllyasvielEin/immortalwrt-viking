@@ -92,11 +92,12 @@ class BridgeScope(unittest.TestCase):
             source = copy
         cls.source = source
 
-    def render(self, defaults, ports=PORTS):
+    def render(self, defaults, ports=PORTS, files=(), env=None, whole=False):
         fixture = Path(tempfile.mkdtemp(dir=self.temporary.name))
         config = json.loads((self.source / "tests/mocks/uci/firewall.json").read_text())
         config["defaults"].update(defaults)
         files = {
+            **dict(files),
             "uci/firewall.json": config,
             "fs/opendir~_sys_class_net.json": ["eth0", "eth1", "br-lan", *ports],
             "fs/opendir~_sys_class_net_lan1_20.json": ["lower_lan1"],
@@ -115,7 +116,7 @@ class BridgeScope(unittest.TestCase):
         script = ("{%\nlet fs = require('fs'), links = " + json.dumps(links) + ";\n"
                   "fs.readlink = (path) => links[path];\n"
                   "include('./root/usr/share/firewall4/main.uc', {\n"
-                  "\tgetenv: (name) => (name == 'ACTION') ? 'print' : null\n});\n%}\n")
+                  "\tgetenv: (name) => (" + json.dumps({"ACTION": "print", **(env or {})}) + ")[name]\n});\n%}\n")
         result = subprocess.run(
             [UCODE, "-S", "-T,", "-L", "./tests/lib", "-L", "./root/usr/share/ucode",
              "-D", "MOCK_SEARCH_PATH=" + json.dumps([str(fixture), "./tests/mocks"]),
@@ -123,6 +124,8 @@ class BridgeScope(unittest.TestCase):
             input=script, cwd=self.source, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("[E]", result.stderr)
+        if whole:
+            return result.stdout
         start = result.stdout.index("table bridge fw4\nflush table bridge fw4\n")
         return result.stdout[start:]
 

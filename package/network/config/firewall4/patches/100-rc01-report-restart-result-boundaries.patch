@@ -1,0 +1,101 @@
+From: RC01 Development <development@example.invalid>
+Date: Thu, 12 Nov 2026 19:00:00 +0800
+Subject: [PATCH] firewall4: report restart result boundaries honestly
+
+Local follow-up to 005 on the old e6f600c base. The single nft batch is the
+only atomic part of a restart; the state file and script includes are not.
+
+- Report which stage failed (render, check or apply). Only then was the nft
+  transaction not committed, so the previous owned tables stay in place.
+- After such a failure the previous state file is copied back, or the newly
+  rendered one removed. Report when that copy or removal fails instead of
+  staying silent.
+- Return the script include status. run_includes() now exits 1 when any
+  script include fails (start/reload also return it), and restart reports
+  that the new ruleset is already active while includes failed. The CLI no
+  longer claims that the previous ruleset was kept on every failure.
+
+--- a/root/sbin/fw4
++++ b/root/sbin/fw4
+@@ -62,7 +62,7 @@
+ 	{
+ 		flock -x 1000
+ 
+-		local batch saved had_state=0 result
++		local batch saved had_state=0 result stage
+ 		batch=$(mktemp /tmp/fw4-restart.XXXXXX) || return 1
+ 		saved=$(mktemp /tmp/fw4-state.XXXXXX) || { rm -f "$batch"; return 1; }
+ 		if [ -f "$STATE" ]; then
+@@ -75,18 +75,31 @@
+ 			FW4_RESTART=1 ACTION=start utpl -S $MAIN
+ 		} > "$batch"
+ 		result=$?
++		stage=render
+ 		if [ "$result" -eq 0 ]; then
+-			nft $VERBOSE -c -f "$batch" && nft $VERBOSE -f "$batch"
++			stage=check
++			nft $VERBOSE -c -f "$batch"
++			result=$?
++		fi
++		if [ "$result" -eq 0 ]; then
++			stage=apply
++			nft $VERBOSE -f "$batch"
+ 			result=$?
+ 		fi
+ 		if [ "$result" -ne 0 ]; then
++			echo "Firewall restart: ruleset $stage failed; owned nft tables were not replaced." >&2
+ 			if [ "$had_state" -eq 1 ]; then
+-				cp -p "$saved" "$STATE"
++				cp -p "$saved" "$STATE" ||
++					echo "Firewall restart: unable to restore previous state file $STATE." >&2
+ 			else
+-				rm -f "$STATE"
++				rm -f "$STATE" ||
++					echo "Firewall restart: unable to remove new state file $STATE." >&2
+ 			fi
+ 		else
+-			ACTION=includes utpl -S $MAIN
++			ACTION=includes utpl -S $MAIN || {
++				result=$?
++				echo "Firewall restart: new ruleset is active, but firewall includes failed." >&2
++			}
+ 		fi
+ 		rm -f "$batch" "$saved"
+ 		return "$result"
+@@ -143,7 +156,7 @@
+ 		flush
+ 	;;
+ 	restart)
+-		restart || die "Firewall restart failed; the previous ruleset was kept."
++		restart || die "Firewall restart failed."
+ 	;;
+ 	check)
+ 		if [ -n "$QUIET" ]; then
+--- a/root/usr/share/firewall4/main.uc
++++ b/root/usr/share/firewall4/main.uc
+@@ -117,7 +117,8 @@
+ 
+ function run_includes() {
+ 	let state = read_state(),
+-	    paths = [];
++	    paths = [],
++	    failed = false;
+ 
+ 	for (let inc in state.includes) {
+ 		if (inc.type != 'script')
+@@ -129,9 +130,14 @@
+ 			`exec 1000>&-; config() { echo "You cannot use UCI in firewall includes!" >&2; exit 1; }; . '${path}'`
+ 		], 30000);
+ 
+-		if (rc != 0)
++		if (rc != 0) {
+ 			warn(`Include '${inc.path}' failed with exit code ${rc}\n`);
++			failed = true;
++		}
+ 	}
++
++	if (failed)
++		exit(1);
+ }
+ 
+ 
