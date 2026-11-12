@@ -734,16 +734,21 @@ class Dtb(unittest.TestCase):
     def test_checker_rejects_wrong_wiring(self):
         pwm = re.search(r"pwm@1941010 \{.*?\n\t\t\};", self.source, re.S).group(0)
         red = re.search(r"pwms = <(0x[0-9a-f]+) 0x03 0xc738 0x00>;", self.source).group(0)
+        # dtc 1.7.0 joins string lists with \\0; newer versions emit separate strings.
+        duplicate_pin, count = re.subn(
+            r'\bpins\s*=\s*"gpio46(?:\\0|",\s*")gpio64";',
+            'pins = "gpio46", "gpio64", "gpio32";', self.source)
+        self.assertEqual(count, 1, "expected one GPIO46/64 pin group for fault injection")
         cases = {
             "pwm disabled": self.source.replace(pwm, pwm.replace('status = "okay"', 'status = "disabled"')),
             "red on ch1": self.source.replace(red, red.replace(" 0x03 ", " 0x01 ")),
             "lit at boot": re.sub(r'(function = "ambient";[^}]*default-state = )"off"', r'\1"keep"', self.source, count=1),
-            "pin muxed twice": self.source.replace('pins = "gpio46", "gpio64";', 'pins = "gpio46", "gpio64", "gpio32";'),
+            "pin muxed twice": duplicate_pin,
             "pin used as GPIO": re.sub(r"(gpios = <0x[0-9a-f]+) 0x2a ", r"\1 0x1f ", self.source, count=1),
         }
         for name, source in cases.items():
             with self.subTest(name):
-                self.assertNotEqual(source, self.source)
+                self.assertTrue(source != self.source, f"fault injection did not change DTB source: {name}")
                 with self.assertRaisesRegex(images.VerificationError, r"(?i)pwm|RGB|gpio31-33"):
                     images.verify_platform_dtb(self.recompile(source))
 
