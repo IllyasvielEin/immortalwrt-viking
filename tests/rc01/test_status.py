@@ -437,6 +437,25 @@ class FanStatus(Status):
         self.assertEqual(state["fan"]["controller"], "missing")
         self.assertIsNone(state["fan"]["trend"]["samples"][0]["rpm"])
 
+    def test_preflight_temperature_thresholds_for_every_target(self):
+        def levels():
+            return self.run_script('''let state = collect(root, uci);
+print(sprintf('%J', map([ 'hardware', 'nikki', 'dae', 'daed' ], t =>
+  filter(assess(state, t).checks, c => c.code == 'temperature')[0].level)));''')
+        cases = [(None, "error"), (0, "error"), (999, "error"), (1000, "ok"), (59999, "ok"),
+                 (60000, "warn"), (74999, "warn"), (75000, "error"), (130000, "error"),
+                 (130001, "error"), (150000, "error"), (150001, "error")]
+        for milli, expected in cases:
+            with self.subTest(milli=milli):
+                self.write("sys/class/thermal/thermal_zone7/temp", "invalid" if milli is None else milli)
+                self.assertEqual(levels(), [expected] * 4)
+        self.write("sys/class/thermal/thermal_zone7/temp", 45000)
+        self.write("sys/class/thermal/thermal_zone3/type", "nss_top_thermal")
+        self.write("sys/class/thermal/thermal_zone3/temp", 45000)
+        self.assertEqual(levels(), ["error"] * 4)
+        shutil.rmtree(self.root / "sys/class/thermal")
+        self.assertEqual(levels(), ["error"] * 4)
+
     def test_guard_process_presence_is_reported_alone(self):
         self.assertEqual(self.fan()["fan"]["guard_process"], "absent")
         self.write("proc/77/comm", "rc01-fan-guard")
