@@ -93,7 +93,7 @@ class PackageRecipeTests(unittest.TestCase):
                                  "https://codeload.github.com/tailscale/tailscale/tar.gz/v$(PKG_VERSION)?")
             else:
                 self.assertEqual(variable(text, "PKG_SOURCE_VERSION"), item["source_commit"])
-                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v1.19.33")
+                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v1.19.34")
                 self.assertIn(NEW_TIME, text)
             # The complete recipe must differ only in these reviewed fields.
             old = dict(line.split(":=", 1) for line in self.originals[item["feed"]].replace(OLD_TIME, NEW_TIME).splitlines() if ":=" in line)
@@ -128,7 +128,7 @@ class PackageRecipeTests(unittest.TestCase):
     def test_partial_update_and_postimage_drift_refuse_without_other_writes(self):
         path = self.recipes()["nikki"]
         original = path.read_text()
-        path.write_text(original.replace("PKG_VERSION:=1.19.32", "PKG_VERSION:=1.19.33"))
+        path.write_text(original.replace("PKG_VERSION:=1.19.32", "PKG_VERSION:=1.19.34"))
         self.assert_refused_unchanged("Unexpected recipe baseline")
         path.write_text(original)
         self.assertEqual(self.apply().returncode, 0)
@@ -175,7 +175,7 @@ class PackageRecipeTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(NEW_TIME, path.read_text())
-            self.assertEqual(variable(path.read_text(), "PKG_VERSION"), "1.19.33")
+            self.assertEqual(variable(path.read_text(), "PKG_VERSION"), "1.19.34")
         path.write_text(path.read_text().replace(NEW_TIME, "PKG_BUILD_TIME:=unknown"))
         before = self.snapshot()
         result = subprocess.run(["sh", "-eu", "-c", section], cwd=project,
@@ -204,10 +204,10 @@ class IntegrationContractTests(unittest.TestCase):
         for item in MANIFEST:
             self.assertIn("^" + item["feed_revision"] + "\n", pins)
         by_feed = {item["feed"]: item for item in MANIFEST}
-        self.assertEqual(by_feed["packages"]["source_commit"], "73a48057aaf5f60e4f770b398e9b7af576b01dbe")
-        self.assertEqual(by_feed["packages"]["source_sha256"], "0704fa4ce8624463ce421f45f0d20ae8d710b9ee7354eaa1f4a772e9a3cd4ded")
-        self.assertEqual(by_feed["nikki"]["source_commit"], "3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8")
-        self.assertEqual(by_feed["nikki"]["source_sha256"], "8adee049a9c1f653b9c52fbf20fec74da56288961f857289d540193f38c0fa44")
+        self.assertEqual(by_feed["packages"]["source_commit"], "c54807352ae196919497b3f8fddc3cedf88368b9")
+        self.assertEqual(by_feed["packages"]["source_sha256"], "a6ea0771776ab9d3b93147cc221ad02f1b75073ce34380bb29d58b7df9863f44")
+        self.assertEqual(by_feed["nikki"]["source_commit"], "0455d0d28c4526937380505153e65a843d8612e8")
+        self.assertEqual(by_feed["nikki"]["source_sha256"], "5ef52ba261e872e99658422165d0c0a9fbebcf3366c9544ac8da813933e3d245")
         # These exact flags/call sites also preserve the existing source build.
         self.assertNotIn("GOSUMDB", SCRIPT.read_text())
 

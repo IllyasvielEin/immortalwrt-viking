@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # RC01 source recipe update; preserve upstream attribution and license.
 # Prerequisite: prepare-rc01.sh SOURCE_DATE_EPOCH timestamp guard.
-# Mirror hash: OpenWrt rawgit tar/gzip -n, umask 022, epoch 1792597918;
+# Mirror hash: OpenWrt rawgit tar/gzip -n, umask 022, epoch 1794376419;
 # independently verified by scripts/dl_github_archive.py.
 --- a/mihomo-meta/Makefile
 +++ b/mihomo-meta/Makefile
@@ -10,7 +10,7 @@
  
  PKG_NAME:=mihomo-meta
 -PKG_VERSION:=1.19.32
-+PKG_VERSION:=1.19.33
++PKG_VERSION:=1.19.34
  
  PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
  PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
@@ -18,8 +18,8 @@
  PKG_SOURCE_URL:=https://github.com/MetaCubeX/mihomo.git
 -PKG_SOURCE_VERSION:=v1.19.32
 -PKG_MIRROR_HASH:=adeda246f528b8b91c64ef1202157140d6f3bb5e855bccde30000188f367a0c3
-+PKG_SOURCE_VERSION:=3f27ef39f8c96bbfbc8b0b9bb10f5c9ef60149d8
-+PKG_MIRROR_HASH:=8adee049a9c1f653b9c52fbf20fec74da56288961f857289d540193f38c0fa44
++PKG_SOURCE_VERSION:=0455d0d28c4526937380505153e65a843d8612e8
++PKG_MIRROR_HASH:=5ef52ba261e872e99658422165d0c0a9fbebcf3366c9544ac8da813933e3d245
  
  PKG_LICENSE:=GPL3.0+
  PKG_MAINTAINER:=Joseph Mory <morytyann@gmail.com>
@@ -28,7 +28,7 @@
  PKG_BUILD_FLAGS:=no-mips16
  
 -PKG_BUILD_VERSION:=v1.19.32
-+PKG_BUILD_VERSION:=v1.19.33
++PKG_BUILD_VERSION:=v1.19.34
  PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
  PKG_BUILD_TIME:=$(shell date -u -d "@$(SOURCE_DATE_EPOCH)" -Iseconds)
  
