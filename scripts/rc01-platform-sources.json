@@ -76,7 +76,8 @@
     "Router Tool waits for a requested child capability list before applying defaults",
     "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
     "firewall4 004 call adapted to old resolve_lower_devices(devstatus, devname); upstream use_prefix/WDS prefix resolution not carried",
-    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated"
+    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated",
+    "UP02 R1: nf_conntrack_bridge.ko is owned only by kmod-nf-conntrack-bridge; kmod-nft-bridge depends on that package and only owns its meta/reject modules"
   ],
   "followup_selection": [
     {

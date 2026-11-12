@@ -66,7 +66,7 @@
   包检查：`+kmod-nft-bridge` 存在、源版本仍为 e6f600c、NFT_BRIDGE_META 归入 kmod-nft-bridge，以及 004 里是两参数调用。
 - 反证：去掉 004 后 8 个子用例报错、1 个失败；包检查也会失败。
 - 回归（uv，`--offline --no-project`）：test_firewall4_bridge、test_ci_build、test_flowtable、test_router、test_status、
-  test_network_defaults、test_software_sources、test_firmware_pairing、test_platform、test_package_updates，共 256 项 OK。
+  test_network_defaults、test_software_sources、test_firmware_pairing、test_platform、test_package_updates，共运行 256 个方法（含跳过，不能称 256 个实际执行成功）。
   有 10 个跳过，都是已有的环境条件（需要已准备的 kernel/wireless 树，或 pinned feed 对象），与本项无关。
   按要求没有跑全部 597 项。
 - 语法：用固定 BusyBox 1.38.0 的 `sh -n` 检查 `root/sbin/fw4` 和 `50-fw4-bridge-reload`，均通过；`git diff --check` 通过。
@@ -74,7 +74,19 @@
 ## 未验证 / 待验
 
 - 没有构建 firewall4 或 kmod 包，也没有生成 `.config`/manifest。`kmod-nft-bridge` 是否真的被选入，要看生成配置和镜像 manifest。
-- 包冲突风险：当前树中 `kmod-nf-conntrack-bridge` 和 `kmod-nft-bridge`（后者的 KCONFIG 包含 `CONFIG_NF_CONNTRACK_BRIDGE`）
-  都列出了 `nf_conntrack_bridge.ko`。dd8de871 的两份 netfilter.mk 定义与本地相同，上游 firewall4 也同时依赖这两个包，所以这不是本地新引入的差异，
-  但 rootfs/apk 安装时是否会发生文件归属冲突，必须由目标构建确认。
+- 初审已确认原候选的重复包归属：两包定义虽原已存在，本次增加的强依赖使它们共同选择，因此撤回“不是本地新引入差异”的笼统说法。主线程按 R1 修为专用包单一归属，详见下节。尚未构建或安装真实 APK，不声称复现安装器报错；同批实际包清单仍待目标构建确认。
 - 没有用 nft 检查规则（`meta ibrname`、flowtable 挂载、priority 取值），没有运行 ubus/ip/netns，没有测试流量、PPE 硬件卸载或实机。
+
+
+## Astra R1 的主线程最小修复
+
+初审报告：外层 `docs/reviews/upstream-02-bridge-scope-astra.md`。修复基线 `247aad5956edab82e5c0db76cec0898008664ac1`，等待独立复验，未自行标记通过。
+
+- 删除 `include/netfilter.mk` 中把 `nf_conntrack_bridge` 再加入 `NFT_BRIDGE` 的 `nf_add`；专用 `nf-conntrack-bridge` 继续提供该模块、KCONFIG 与 autoload。
+- `KernelPackage/nft-bridge` 显式依赖 `+kmod-nf-conntrack-bridge`，保留 meta/reject 模块，不引入 replaces、强制覆盖或新包框架。
+- 本模块 `local_adjustments` 记录本地归属适配；`local_patchset()` 纳入修改的两份 netfilter.mk，以来源摘要覆盖实际输入。
+- 新增一个 GNU make 展开回归，读取真实生产定义与 `nf_add`，使用三个 `m` 配置确认专用包唯一拥有文件、nft 包依赖它且保留 `nft_meta_bridge`。该测试在原 `247aad5` 两份定义上得到一个预期失败、零执行错误，在修复定义上通过。
+- 根线程运行 `test_firewall4_bridge.py` 的5项及 `test_ci_build.py` 的7项，合计12项通过、0失败/错误/跳过；输入为固定 host ucode 与原始旧源复制后应用当前包补丁。第一次 source 路径误指外层 pristine 目录，缺 `root/` 报错，改为其真实子目录后上述检查通过；没有修改源码输入来规避失败。
+- `local_patchset()` 实际结果含两份归属定义；JSON与 `git diff --check` 通过。相关 CI 测试中的 ENOSPC 是预设夹具，不是本轮实际磁盘错误。
+
+本次未执行目标 Kbuild/包打包/APK 安装、nft 或实机，构建与硬件边界保持。桥范围补丁本身、firewall4源/date/mirrorhash/release14、helper行为均未再次改动。

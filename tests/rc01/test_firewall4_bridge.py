@@ -27,6 +27,38 @@ PORTS = {"lan1": "br-lan", "lan2": "br-lan", "sfp": "br-lan",
 
 
 class PackageDependency(unittest.TestCase):
+    def test_bridge_conntrack_has_one_package_owner(self):
+        # Expand the production package definitions with module configs, as
+        # used by normal kmod builds; no kernel or package installer is run.
+        script = f"""INCLUDE_DIR := {ROOT}/include
+LINUX_DIR := /fixture/linux
+CONFIG_NF_CONNTRACK_BRIDGE := m
+CONFIG_NFT_BRIDGE_META := m
+CONFIG_NFT_BRIDGE_REJECT := m
+include {ROOT}/package/kernel/linux/modules/netfilter.mk
+$(eval $(KernelPackage/nf-conntrack-bridge))
+$(info CT_FILES=$(FILES))
+$(info CT_KCONFIG=$(KCONFIG))
+$(eval $(KernelPackage/nft-bridge))
+$(info NFT_FILES=$(FILES))
+$(info NFT_KCONFIG=$(KCONFIG))
+$(info NFT_DEPENDS=$(DEPENDS))
+all:;@:
+"""
+        result = subprocess.run(["make", "--no-print-directory", "-rR", "-f", "-"],
+                                input=script, cwd=ROOT, capture_output=True, text=True,
+                                check=True, timeout=30)
+        values = dict(line.split("=", 1) for line in result.stdout.splitlines()
+                      if "=" in line)
+        owner = "/fixture/linux/net/bridge/netfilter/nf_conntrack_bridge.ko"
+        self.assertEqual(values["CT_FILES"].split(), [owner])
+        self.assertNotIn(owner, values["NFT_FILES"].split())
+        self.assertIn("/fixture/linux/net/bridge/netfilter/nft_meta_bridge.ko",
+                      values["NFT_FILES"].split())
+        self.assertIn("+kmod-nf-conntrack-bridge", values["NFT_DEPENDS"].split())
+        self.assertIn("CONFIG_NF_CONNTRACK_BRIDGE", values["CT_KCONFIG"].split())
+        self.assertNotIn("CONFIG_NF_CONNTRACK_BRIDGE", values["NFT_KCONFIG"].split())
+
     def test_ibrname_meta_is_packaged(self):
         makefile = (PACKAGE / "Makefile").read_text()
         self.assertIn("+kmod-nft-bridge", makefile)
