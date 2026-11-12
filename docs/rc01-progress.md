@@ -47,7 +47,7 @@ Ubuntu BusyBox 1.36.1 的 `ASH_SLEEP` 内建绕过 PATH 中的 sleep 桩，导�
 | 同批 packages | 13968517701 | 2026-11-26T17:43:13Z |
 | 来源 lock | 13964018693 | 2027-02-10T16:42:18Z |
 
-本地主线程已下载正式镜像包至生成目录 `build_dir/rc01-ci-success-23/verified-images.zip`，展开于其 `images/`，逐项核对 `rc01-images.sha256`，并重新运行镜像与无线产物检查，均成功。factory 为 60,162,048 字节，sysupgrade 为 57,815,320 字节；本地校验结果保存在同生成目录的 `local-image-validation.json` 和 `local-wireless-validation.json`。
+本地主线程已下载正式镜像包至工作区交付目录 `artifacts/rc01/ci-43261551327/verified-images.zip`，展开于其 `images/`，逐项核对 `rc01-images.sha256`，并重新运行镜像与无线产物检查，均成功。factory 为 60,162,048 字节，sysupgrade 为 57,815,320 字节；本地校验结果保存在同生成目录的 `local-image-validation.json` 和 `local-wireless-validation.json`。
 
 镜像检查记录：layout `rc01-identity-preserved-r1`；factory 60,162,048 字节；rootfs 51,698,688 字节；最小估计 data LEB 空间 170,274,816 字节（162.39 MiB），超过既定 32 MiB 门槛。该估计是静态容量预算，不代表实机可写空间测量。
 
@@ -66,6 +66,12 @@ Ubuntu BusyBox 1.36.1 的 `ASH_SLEEP` 内建绕过 PATH 中的 sleep 桩，导�
 ## 待办与完成标准
 
 1. 完整 CI 验收已由 43261551327 完成；后续源码或输入变化须重新对应具体验收记录，不能继承本次成功结论。
-2. 使用本轮已验收镜像与同批 APK，保留校验和、manifest、配置和来源锁；本轮本地镜像已核对校验和并复跑检查；配套 APK 按需从本轮 artifact 获取，不将上一轮未验收镜像混入本次交付。
+2. 使用本轮已验收镜像与同批 APK，保留校验和、manifest、配置和来源锁；本轮本地镜像已核对校验和并复跑检查；配套 APK 和来源锁已下载到同一交付目录并校验ZIP CRC，不将上一轮未验收镜像混入本次交付。
 3. 按 [上游待办](rc01-upstream-status.md) 核实候选适用性和 Rust metadata 错误关联；本次不自动移植。
 4. 实机验收仍缺启动、布局迁移/恢复、ECC/坏块、ENV、升级/回厂、风扇保护、RGB、SFP、无线及代理共存等结果；按独立授权和既有安全条件推进，不以宿主或 CI 结果代替。
+
+## 工作区整理（2026-11-13）
+
+当前固件工作树通过 `git worktree move` 归位为工作区 `code/rc01/`，保持原分支、提交、未提交内容与共享 Git 关系；原主工作树 `code/immortalwrt-viking/` 的用户改动未动。仓库可独立 clone，不依赖本机上层路径。
+
+本机交付位于工作区 `artifacts/rc01/ci-43261551327/`，不再置于本仓 `build_dir`；这些是本机工作区路径，不是 clone 自带文件。历史诊断和评审见工作区 `archive/README.md`。临时 clean-checkout 已在保存基线/补丁并核验后移除。活跃回归输入和 U-Boot 树未动。
