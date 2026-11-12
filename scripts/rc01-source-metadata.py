@@ -33,7 +33,7 @@ def local_patchset():
     # Hash actual tracked inputs, including local context/ownership fixes.
     paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard",
                                      "package/kernel/mac80211/patches", "target/linux/generic/*-6.18",
-                                     "target/linux/qualcommbe", "package/network/config/netifd",
+                                     "target/linux/qualcommbe", "package/network/config/netifd", "package/network/config/firewall4",
                                      "package/emortal/luci-app-router-tool", "config/rc01/patches/daede",
                                      "scripts/patch-rc01-daede.sh"], cwd=ROOT, text=True).splitlines()
     records = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()

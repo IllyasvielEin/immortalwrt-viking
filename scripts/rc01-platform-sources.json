@@ -36,7 +36,8 @@
     "b4f7857f9c0c21e83d0c3e76917093f4011053db",
     "516da1de900c3ae45daa09cbfbfec985e0179661",
     "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
-    "99977bd751741658172c6d0f1df21af662a375e8"
+    "99977bd751741658172c6d0f1df21af662a375e8",
+    "67bb668abe0b17a98278829ee38312d480ebed5e"
   ],
   "excluded_commits": [
     "6061a61a",
@@ -74,6 +75,7 @@
     "PPE FDB worker verifies bridge master before reading bridge private VLAN data",
     "Router Tool waits for a requested child capability list before applying defaults",
     "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
+    "firewall4 004 call adapted to old resolve_lower_devices(devstatus, devname); upstream use_prefix/WDS prefix resolution not carried",
     "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated"
   ],
   "followup_selection": [
@@ -144,6 +146,10 @@
     {
       "commit": "99977bd751741658172c6d0f1df21af662a375e8",
       "scope": "Router Tool per-child auto-channel defaults"
+    },
+    {
+      "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
+      "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 004 bridge offload allow/exclude/ibrname/last-priority rule and +kmod-nft-bridge only, onto old firewall4 e6f600c; keeps old two-argument resolve_lower_devices without WDS prefix; excludes 005/006 and the 3722ead source upgrade"
     }
   ],
   "deferred": {
