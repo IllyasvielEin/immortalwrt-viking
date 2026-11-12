@@ -320,7 +320,7 @@ function contents(state, previous) {
 		...ppeSection(state.ppe),
 		...wirelessSection(state),
 		...sfpSection(state.sfp),
-		E('h3', {}, _('Proxy processes')),
+		E('h3', {}, _('Related service processes')),
 		table([ _('Process'), _('PID'), _('RSS (KiB)') ], state.processes.map(p => [ p.name, p.pid, p.rss_kib ]))
 	];
 	for (const preflight of state.preflight) {
