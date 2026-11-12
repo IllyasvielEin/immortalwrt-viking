@@ -497,6 +497,250 @@ int main(void) {
 '''
         self.run_c(code)
 
+    @unittest.skipUnless(KERNEL, "set RC01_KERNEL_SOURCE to the prepared kernel")
+    def test_routed_flows_hold_dst_and_revalidate_route_and_neighbour(self):
+        # Actual 769 functions and struct definitions; dst/neighbour/bridge
+        # edges are stubs. GC scheduling, teardown and HW deletion are the
+        # unchanged existing paths and are not run here.
+        root = Path(KERNEL)
+        header = (root / "include/net/netfilter/nf_flow_table.h").read_text()
+        core = (root / "net/netfilter/nf_flow_table_core.c").read_text()
+        path = (root / "net/netfilter/nf_flow_table_path.c").read_text()
+
+        def block(source, start):
+            match = re.search(r"(?ms)^" + re.escape(start) + r" \{.*?^\};\n", source)
+            self.assertIsNotNone(match, start)
+            return match[0]
+        tuple_struct = block(header, "struct flow_offload_tuple")
+        # Lookup keys end at __hash; the cached route must not join them.
+        self.assertLess(tuple_struct.index("__hash;"), tuple_struct.index("*route_cache;"))
+        types = "".join(block(header, name) for name in
+                        ("enum flow_offload_xmit_type", "struct flow_offload_tuple",
+                         "struct nf_flow_route"))
+        types += block(path, "struct nft_forward_info")
+        funcs = "".join(function(core, name) for name in
+                        ("flow_offload_dst_cookie", "nft_route_dst_fetch",
+                         "flow_offload_fill_route", "nft_flow_dst_release",
+                         "flow_offload_route_init", "flow_offload_route_release",
+                         "nf_flow_route_valid", "nf_flow_dst_valid"))
+        funcs += function(path, "nft_dev_forward_path")
+        code = r'''
+#include <assert.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+typedef uint8_t u8; typedef uint16_t u16, __u16, __be16; typedef uint32_t u32;
+#define ETH_ALEN 6
+#define NET_DEVICE_PATH_STACK_MAX 5
+#define NF_FLOW_TABLE_ENCAP_MAX 2
+#define NF_FLOW_TABLE_UPPER_MAX (NET_DEVICE_PATH_STACK_MAX - 1)
+#define BIT(n) (1U << (n))
+#define WARN_ON_ONCE(x) assert(!(x))
+#define ARPHRD_ETHER 1
+#define ARPHRD_PPP 512
+enum { NFPROTO_IPV4 = 2, NFPROTO_IPV6 = 10 };
+enum { NUD_INCOMPLETE=1, NUD_REACHABLE=2, NUD_STALE=4, NUD_DELAY=8, NUD_PROBE=0x10,
+       NUD_FAILED=0x20, NUD_NOARP=0x40, NUD_PERMANENT=0x80,
+       NUD_VALID=NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE|NUD_PROBE|NUD_STALE|NUD_DELAY };
+enum flow_offload_tuple_dir { FLOW_OFFLOAD_DIR_ORIGINAL, FLOW_OFFLOAD_DIR_REPLY, FLOW_OFFLOAD_DIR_MAX };
+enum ip_conntrack_dir { IP_CT_DIR_ORIGINAL, IP_CT_DIR_REPLY };
+enum { NF_FLOW_OFFLOAD_UNSPEC, NF_FLOW_OFFLOAD_ROUTE };
+struct net_device { int ifindex; unsigned short type; };
+struct neighbour { int refcnt, lock; u8 nud_state; u8 ha[ETH_ALEN]; };
+struct dst_entry { int refcnt; bool obsolete; u32 cookie; struct net_device *dev; struct neighbour *neigh; };
+union nf_inet_addr { u32 all[4]; struct in_addr ip; struct in6_addr in6; };
+struct nf_conn { struct { struct { struct { union nf_inet_addr u3; } src; } tuple; } tuplehash[2]; };
+'''
+        code += types + r'''
+struct flow_offload { struct { struct flow_offload_tuple tuple; } tuplehash[2]; struct nf_conn *ct; int type; };
+struct net_device_path_stack { int unused; };
+struct net { int unused; };
+struct nf_flowtable { struct net *net; };
+struct nft_flowtable { struct nf_flowtable data; };
+struct nf_br_utils { bool (*fdb_valid_dst)(struct net_device *, const u8 *, u16); };
+static const struct nf_br_utils *nf_br_utils_hook;
+static struct neighbour *current_neigh;
+static const void *expected_daddr;
+static int lookups, fdb_calls, rcu_depth;
+static struct net_device fdb_dev = {.ifindex = 30, .type = ARPHRD_ETHER};
+static bool fdb_ok;
+static bool is_valid_ether_addr(const u8 *a) {
+    static const u8 zero[ETH_ALEN]; return !(a[0] & 1) && memcmp(a, zero, ETH_ALEN);
+}
+static void ether_addr_copy(u8 *d, const u8 *s) { memcpy(d, s, ETH_ALEN); }
+static bool ether_addr_equal(const u8 *a, const u8 *b) {
+    assert(!current_neigh || b != current_neigh->ha || current_neigh->lock);
+    return !memcmp(a, b, ETH_ALEN);
+}
+static u32 ip_dst_mtu_maybe_forward(struct dst_entry *d, bool f) { return 1500; }
+static u32 ip6_dst_mtu_maybe_forward(struct dst_entry *d, bool f) { return 1500; }
+#define dst_rt6_info(d) (d)
+static u32 rt6_get_cookie(struct dst_entry *d) { return d->cookie; }
+static void dst_release(struct dst_entry *d) { if (d) { assert(d->refcnt > 0); d->refcnt--; } }
+static struct dst_entry *dst_check(struct dst_entry *d, u32 cookie) {
+    return !d->obsolete && d->cookie == cookie ? d : NULL;
+}
+static struct neighbour *dst_neigh_lookup(struct dst_entry *d, const void *daddr) {
+    lookups++; assert(daddr == expected_daddr);
+    if (d->neigh) d->neigh->refcnt++;
+    return current_neigh = d->neigh;
+}
+static void neigh_release(struct neighbour *n) { assert(!n->lock && n->refcnt > 0); n->refcnt--; current_neigh = NULL; }
+#define read_lock_bh(l) (assert(!*(l)), *(l) = 1)
+#define read_unlock_bh(l) (assert(*(l)), *(l) = 0)
+#define read_pnet(p) (*(p))
+#define rcu_dereference(p) (p)
+static void rcu_read_lock(void) { rcu_depth++; }
+static void rcu_read_unlock(void) { rcu_depth--; }
+static struct net_device *dev_get_by_index_rcu(struct net *net, u32 idx) { assert(rcu_depth); return idx == 30 ? &fdb_dev : NULL; }
+static struct net_device *__vlan_find_dev_deep_rcu(struct net_device *d, __be16 p, u16 id) { return d; }
+static bool fdb_valid_dst(struct net_device *d, const u8 *mac, u16 vid) { fdb_calls++; return fdb_ok; }
+static const struct nf_br_utils br_utils = {.fdb_valid_dst = fdb_valid_dst};
+/* Path discovery edges: neighbour MAC first, then PPPoE rewrites h_dest. */
+static u8 disc_ha[ETH_ALEN], disc_h_dest[ETH_ALEN];
+static enum flow_offload_xmit_type disc_xmit;
+static struct net_device disc_dev = {.ifindex = 7, .type = ARPHRD_ETHER};
+static int nft_dev_fill_forward_path(const struct nf_flow_route *r, const struct dst_entry *d,
+        const struct nf_conn *ct, enum ip_conntrack_dir dir, u8 *ha, struct net_device_path_stack *s) {
+    memcpy(ha, disc_ha, ETH_ALEN); return 0;
+}
+static int nft_dev_path_info(const struct net_device_path_stack *s, struct nft_forward_info *info,
+        unsigned char *ha, struct nf_flowtable *ft) {
+    memcpy(info->h_dest, disc_h_dest, ETH_ALEN);
+    info->indev = info->outdev = info->hw_outdev = &disc_dev;
+    info->xmit_type = disc_xmit; return 0;
+}
+static bool nft_flowtable_find_dev(const struct net_device *d, struct nft_flowtable *ft) { return true; }
+'''
+        code += funcs + r'''
+static const u8 GW[ETH_ALEN] = {2,0,0,0,0,1}, GW2[ETH_ALEN] = {2,0,0,0,0,2},
+                PEER[ETH_ALEN] = {2,0,0,0,0,9}, HOST[ETH_ALEN] = {2,0,0,0,0,5};
+static bool valid(struct flow_offload *f, int dir) {
+    struct nf_flowtable table = {0};
+    bool v = nf_flow_dst_valid(&table, f, dir);
+    assert(!current_neigh && !rcu_depth);
+    return v;
+}
+int main(void) {
+    struct net_device eth = {.ifindex = 3, .type = ARPHRD_ETHER}, ppp = {.ifindex = 4, .type = ARPHRD_PPP};
+    struct neighbour n0 = {.nud_state = NUD_REACHABLE}, n1 = {.nud_state = NUD_STALE};
+    memcpy(n0.ha, GW, ETH_ALEN); memcpy(n1.ha, HOST, ETH_ALEN);
+    nf_br_utils_hook = &br_utils;
+
+    /* Discovery: h_neigh keeps the neighbour MAC; PPPoE h_dest stays separate. */
+    struct nf_flow_route route = {0};
+    struct nft_flowtable ft = {0};
+    memcpy(disc_ha, GW, ETH_ALEN); memcpy(disc_h_dest, PEER, ETH_ALEN); disc_xmit = FLOW_OFFLOAD_XMIT_DIRECT;
+    assert(nft_dev_forward_path(&route, NULL, IP_CT_DIR_ORIGINAL, &ft) == 0);
+    assert(!memcmp(route.tuple[0].out.h_neigh, GW, ETH_ALEN) && !memcmp(route.tuple[0].out.h_dest, PEER, ETH_ALEN));
+    disc_xmit = FLOW_OFFLOAD_XMIT_NEIGH;
+    assert(nft_dev_forward_path(&route, NULL, IP_CT_DIR_REPLY, &ft) == 0);
+    assert(!is_valid_ether_addr(route.tuple[1].out.h_neigh));
+
+    /* IPv4 DIRECT both ways (NAT: reply source differs from original dst).
+     * The routed reference moves to the flow; no extra hold. */
+    struct nf_conn ct = {0};
+    ct.tuplehash[1].tuple.src.u3.ip.s_addr = 0x0a000002;  /* post-NAT original-dir next hop */
+    ct.tuplehash[0].tuple.src.u3.ip.s_addr = 0xc0a80105;
+    struct dst_entry d0 = {.refcnt = 1, .dev = &eth, .neigh = &n0}, d1 = {.refcnt = 1, .dev = &eth, .neigh = &n1};
+    struct flow_offload f = {.ct = &ct};
+    f.tuplehash[0].tuple.l3proto = f.tuplehash[1].tuple.l3proto = NFPROTO_IPV4;
+    memset(&route, 0, sizeof(route));
+    route.tuple[0].dst = &d0; route.tuple[1].dst = &d1;
+    route.tuple[0].xmit_type = route.tuple[1].xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
+    memcpy(route.tuple[0].out.h_neigh, GW, ETH_ALEN); memcpy(route.tuple[0].out.h_dest, PEER, ETH_ALEN);
+    memcpy(route.tuple[1].out.h_dest, HOST, ETH_ALEN);  /* legacy xt: no h_neigh */
+    flow_offload_route_init(&f, &route);
+    assert(f.type == NF_FLOW_OFFLOAD_ROUTE && !route.tuple[0].dst && !route.tuple[1].dst);
+    assert(f.tuplehash[0].tuple.route_cache == &d0 && f.tuplehash[1].tuple.route_cache == &d1);
+    assert(d0.refcnt == 1 && d1.refcnt == 1);
+    assert(f.tuplehash[0].tuple.neigh_valid && !memcmp(f.tuplehash[0].tuple.neigh_ha, GW, ETH_ALEN));
+    assert(!memcmp(f.tuplehash[1].tuple.neigh_ha, HOST, ETH_ALEN));
+
+    expected_daddr = &ct.tuplehash[1].tuple.src.u3;
+    assert(valid(&f, 0));
+    u8 states[] = {NUD_STALE, NUD_DELAY, NUD_PROBE, NUD_PERMANENT};
+    for (unsigned i = 0; i < sizeof(states); i++) { n0.nud_state = states[i]; assert(valid(&f, 0)); }
+    n0.nud_state = NUD_FAILED; assert(!valid(&f, 0));
+    n0.nud_state = NUD_INCOMPLETE; assert(!valid(&f, 0));
+    n0.nud_state = NUD_REACHABLE; memcpy(n0.ha, GW2, ETH_ALEN); assert(!valid(&f, 0));
+    memcpy(n0.ha, GW, ETH_ALEN); d0.neigh = NULL; assert(!valid(&f, 0));
+    d0.neigh = &n0; d0.obsolete = true; lookups = 0; assert(!valid(&f, 0) && !lookups);
+    d0.obsolete = false;
+    expected_daddr = &ct.tuplehash[0].tuple.src.u3;
+    assert(valid(&f, 1));
+    assert(n0.refcnt == 0 && n1.refcnt == 0 && !n0.lock && !n1.lock);
+    flow_offload_route_release(&f);
+    assert(d0.refcnt == 0 && d1.refcnt == 0);
+
+    /* IPv6 DIRECT: the cookie recorded at fill time invalidates on change. */
+    struct dst_entry d6 = {.refcnt = 1, .cookie = 77, .dev = &eth, .neigh = &n0};
+    struct dst_entry d6r = {.refcnt = 1, .cookie = 5, .dev = &eth, .neigh = &n1};
+    struct flow_offload f6 = {.ct = &ct};
+    f6.tuplehash[0].tuple.l3proto = f6.tuplehash[1].tuple.l3proto = NFPROTO_IPV6;
+    memset(&route, 0, sizeof(route));
+    route.tuple[0].dst = &d6; route.tuple[1].dst = &d6r;
+    route.tuple[0].xmit_type = route.tuple[1].xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
+    memcpy(route.tuple[0].out.h_neigh, GW, ETH_ALEN); memcpy(route.tuple[1].out.h_neigh, HOST, ETH_ALEN);
+    flow_offload_route_init(&f6, &route);
+    assert(f6.tuplehash[0].tuple.route_cookie == 77);
+    expected_daddr = &ct.tuplehash[1].tuple.src.u3;
+    assert(valid(&f6, 0));
+    d6.cookie = 78; assert(!valid(&f6, 0));
+    flow_offload_route_release(&f6);
+    assert(d6.refcnt == 0 && d6r.refcnt == 0);
+
+    /* PPPoE (non-Ethernet dst dev): route kept, no invented neighbour. */
+    struct dst_entry dp = {.refcnt = 1, .dev = &ppp}, dpr = {.refcnt = 1, .dev = &eth, .neigh = &n1};
+    struct flow_offload fp = {.ct = &ct};
+    memset(&route, 0, sizeof(route));
+    route.tuple[0].dst = &dp; route.tuple[1].dst = &dpr;
+    route.tuple[0].xmit_type = FLOW_OFFLOAD_XMIT_DIRECT; route.tuple[1].xmit_type = FLOW_OFFLOAD_XMIT_NEIGH;
+    memcpy(route.tuple[0].out.h_dest, PEER, ETH_ALEN);
+    flow_offload_route_init(&fp, &route);
+    assert(!fp.tuplehash[0].tuple.neigh_valid && fp.tuplehash[0].tuple.route_cache == &dp);
+    lookups = 0; assert(valid(&fp, 0) && !lookups);
+    dp.obsolete = true; assert(!valid(&fp, 0)); dp.obsolete = false;
+    /* NEIGH keeps its own dst_cache and cookie check; no route_cache. */
+    assert(!fp.tuplehash[1].tuple.route_cache && fp.tuplehash[1].tuple.dst_cache == &dpr);
+    assert(valid(&fp, 1) && !lookups);
+    dpr.obsolete = true; assert(!valid(&fp, 1));
+    flow_offload_route_release(&fp);
+    assert(dp.refcnt == 0 && dpr.refcnt == 0);
+
+    /* Pure bridge flow (kzalloc'd, no route): only the existing FDB check. */
+    struct flow_offload fb = {.ct = &ct};
+    fb.tuplehash[0].tuple.xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
+    fb.tuplehash[0].tuple.bridge_path = 1;
+    fb.tuplehash[0].tuple.out.hw_ifidx = 30;
+    fdb_ok = true; fdb_calls = 0; lookups = 0;
+    assert(valid(&fb, 0) && fdb_calls == 1 && !lookups);
+    fdb_ok = false; assert(!valid(&fb, 0) && fdb_calls == 2);
+    flow_offload_route_release(&fb);  /* NULL route_cache is safe */
+
+    /* Routed flow out through a bridge: route first, then FDB. */
+    struct dst_entry db = {.refcnt = 1, .dev = &eth, .neigh = &n0}, dbr = {.refcnt = 1, .dev = &eth, .neigh = &n1};
+    struct flow_offload fr = {.ct = &ct};
+    memset(&route, 0, sizeof(route));
+    route.tuple[0].dst = &db; route.tuple[1].dst = &dbr;
+    route.tuple[0].xmit_type = route.tuple[1].xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
+    route.tuple[0].out.bridge_path = 1; route.tuple[0].out.hw_ifindex = 30;
+    memcpy(route.tuple[0].out.h_neigh, GW, ETH_ALEN);
+    flow_offload_route_init(&fr, &route);
+    expected_daddr = &ct.tuplehash[1].tuple.src.u3;
+    fdb_ok = true; fdb_calls = 0;
+    assert(valid(&fr, 0) && fdb_calls == 1);
+    memcpy(n0.ha, GW2, ETH_ALEN); assert(!valid(&fr, 0) && fdb_calls == 1);
+    flow_offload_route_release(&fr);
+    assert(db.refcnt == 0 && dbr.refcnt == 0 && n0.refcnt == 0 && n1.refcnt == 0);
+    return 0;
+}
+'''
+        self.run_c(code)
+
 
 if __name__ == "__main__":
     unittest.main()
