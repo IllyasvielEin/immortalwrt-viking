@@ -164,12 +164,14 @@ rc01_netled_parse() {
 	RC01_NETLED_T6="${RC01_NETLED_T6# }"
 	[ "$RC01_NETLED_V4" = 1 ] || [ "$RC01_NETLED_V6" = 1 ] || rc01_netled_error "enable IPv4 or IPv6"
 	if [ "$RC01_NETLED_V4" = 1 ]; then
-		[ "$RC01_NETLED_N4" -ge 1 ] && [ "$RC01_NETLED_N4" -le "$RC01_NETLED_MAX_TARGETS" ] ||
+		if [ "$RC01_NETLED_N4" -lt 1 ] || [ "$RC01_NETLED_N4" -gt "$RC01_NETLED_MAX_TARGETS" ]; then
 			rc01_netled_error "IPv4 needs 1..$RC01_NETLED_MAX_TARGETS targets"
+		fi
 	fi
 	if [ "$RC01_NETLED_V6" = 1 ]; then
-		[ "$RC01_NETLED_N6" -ge 1 ] && [ "$RC01_NETLED_N6" -le "$RC01_NETLED_MAX_TARGETS" ] ||
+		if [ "$RC01_NETLED_N6" -lt 1 ] || [ "$RC01_NETLED_N6" -gt "$RC01_NETLED_MAX_TARGETS" ]; then
 			rc01_netled_error "IPv6 needs 1..$RC01_NETLED_MAX_TARGETS targets"
+		fi
 	fi
 	[ "$RC01_NETLED_INVALID" = 0 ]
 }

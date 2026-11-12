@@ -86,7 +86,7 @@ jobs:
             build-essential clang llvm flex bison gawk gcc-multilib gettext git \
             libncurses-dev libssl-dev zlib1g-dev python3-dev python3-setuptools \
             python3-pyelftools python3-cryptography rsync swig unzip file wget \
-            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils squashfs-tools shellcheck busybox
+            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils squashfs-tools shellcheck busybox curl bzip2
 
       - name: Look up source downloads
         id: downloads_lookup
@@ -180,6 +180,15 @@ jobs:
             config/rc01/boot/
             config/rc01/layout.json
             rc01-boot-materials.json
+
+      - name: Prepare host BusyBox for regression fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/rc01-verify-inputs.sh --busybox-only "$RUNNER_TEMP/rc01-test-host"
+          . "$RUNNER_TEMP/rc01-test-host/env.sh"
+          test -x "$BUSYBOX"
+          printf 'BUSYBOX=%s\n' "$BUSYBOX" >> "$GITHUB_ENV"
 
       - name: Run offline regression checks
         run: python3 -B -m unittest discover -s tests/rc01 -v
@@ -434,7 +443,8 @@ jobs:
           test -s "$luci_resources/form.js"
           firewall4_dir="$(find build_dir -mindepth 2 -maxdepth 2 -type d -path 'build_dir/target-*/firewall4-*' -print -quit)"
           test -s "$firewall4_dir/root/usr/share/ucode/fw4.uc"
-          UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
+          test -x "$BUSYBOX"
+          BUSYBOX="$BUSYBOX" UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
             RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
             RC01_FIREWALL4_SOURCE="$PWD/$firewall4_dir" \
             LUCI_VALIDATION_JS="$luci_resources/validation.js" LUCI_FORM_JS="$luci_resources/form.js" \
