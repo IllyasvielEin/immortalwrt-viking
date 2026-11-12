@@ -26,7 +26,8 @@ const baseclass = { extend };
 const Validation = new Function('baseclass', fs.readFileSync(process.argv[4], 'utf8'))(baseclass);
 const validation = new Validation();
 const Form = new Function('ui', 'uci', 'rpc', 'dom', 'baseclass', fs.readFileSync(process.argv[3], 'utf8'))(
-    {}, { loadPackage: () => Promise.resolve() }, { declare: () => () => Promise.resolve({}) },
+    { tabs: { updateTabs() {} } },
+    { loadPackage: () => Promise.resolve() }, { declare: () => () => Promise.resolve({}) },
     { elem: () => false }, baseclass);
 const realForm = Object.create(Form.prototype);
 const E = (tag, attrs, children) => ({ tag, attrs, children });
@@ -59,6 +60,7 @@ async function check(test) {
                     getValue: () => values[name] ?? option.default,
                     isChecked: () => values[name] === '1',
                     getValidationError: () => widget.error || '',
+                    setInvalid: message => { widget.error = message; },
                     isValid: () => {
                         const current = option.formvalue('main');
                         const items = Array.isArray(current) ? current : [current];
