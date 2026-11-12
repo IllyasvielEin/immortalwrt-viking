@@ -2,7 +2,7 @@
 
 记录日期：2026-11-13。当前源码基线为 `6ab2fe55f46756bca369c8dcde34351ba1531b98`，本地分支 `rc01/anonymous-rebase-20261112`。远端默认分支 `rc01/custom` 已快进到该提交；[PR #1](https://github.com/IllyasvielEin/immortalwrt-viking/pull/1) 已自动 **MERGED**。
 
-最新 [CI 43261551327](https://github.com/IllyasvielEin/immortalwrt-viking/actions/runs/43261551327) 的 head 为 `6ab2fe55f4`；**截至 2026-11-13T01:45:03+08:00，状态为 in_progress，正在保存编译缓存收尾**。主线程已刷新核对：`Verify native driver artifacts and runtime scripts`、`Verify static boot contracts and image budget` 及 `Upload verified images and build metadata` 均为 success；整轮最终 conclusion 当时仍为空，不将步骤通过写成整轮已完成。无实机验收、无刷机。
+最新 [CI 43261551327](https://github.com/IllyasvielEin/immortalwrt-viking/actions/runs/43261551327) 的 head 为 `6ab2fe55f4`；**截至 2026-11-13T01:51:23+08:00 已确认 completed / success**。构建后的 620 项回归全部通过（71.686 秒），零失败、零错误、零跳过；原生驱动/运行时、静态引导契约、镜像容量及无线产物检查通过，已验收镜像上传成功。此处“已验收”指 CI 静态与产物验收；无实机验收、无刷机。
 
 入口：[构建与验收指南](rc01-build.md)、[上游追踪与候选](rc01-upstream-status.md)、[模块历史](rc01-modules/)、[来源定义](../scripts/rc01-platform-sources.json)。
 
@@ -35,9 +35,21 @@ Ubuntu BusyBox 1.36.1 的 `ASH_SLEEP` 内建绕过 PATH 中的 sleep 桩，导�
 
 `6ab2fe55f4` 仅改 `tests/rc01/netled-form-check.js` 和 `tests/rc01/test_rgb.py`，10 增 3 删，生产代码未改。本地用 CI 实际工具输入回归 **620 项、42.478 秒成功，零跳过**；旧工具定向 3 项成功。这是修复的本地证据，不是新 CI 已通过。
 
-### 最新重跑与产物边界
+### 43261551327：完整 CI 成功与产物边界
 
-43261551327 重放 43240944194 的软件来源锁，参数为 `software_updates=latest`、`include_dae=false`、`go_bootstrap=external`、`cold_cache=false`。状态截止时间见页首。
+43261551327 重放 43240944194 的软件来源锁，参数为 `software_updates=latest`、`include_dae=false`、`go_bootstrap=external`、`cold_cache=false`。最终成功状态见页首。编译步骤从 2026-11-12T16:49:16Z 到 17:42:53Z，耗时 53m37s；下载和编译缓存均恢复自上一轮，ccache 命中率 98.11%。
+
+本轮正式产物（UTC 到期；仍需随使用时间核对是否被删除）：
+
+| artifact | ID | 到期 UTC |
+| --- | --- | --- |
+| 已完成 CI 验收的 Nikki 镜像与元数据 | 13968812707 | 2026-11-26T17:44:38Z |
+| 同批 packages | 13968517701 | 2026-11-26T17:43:13Z |
+| 来源 lock | 13964018693 | 2027-02-10T16:42:18Z |
+
+本地主线程已下载正式镜像包至生成目录 `build_dir/rc01-ci-success-23/verified-images.zip`，展开于其 `images/`，逐项核对 `rc01-images.sha256`，并重新运行镜像与无线产物检查，均成功。factory 为 60,162,048 字节，sysupgrade 为 57,815,320 字节；本地校验结果保存在同生成目录的 `local-image-validation.json` 和 `local-wireless-validation.json`。
+
+镜像检查记录：layout `rc01-identity-preserved-r1`；factory 60,162,048 字节；rootfs 51,698,688 字节；最小估计 data LEB 空间 170,274,816 字节（162.39 MiB），超过既定 32 MiB 门槛。该估计是静态容量预算，不代表实机可写空间测量。
 
 上一轮 43240944194 的保留期限（到期或删除后须重新确认可用性）：
 
@@ -53,7 +65,7 @@ Ubuntu BusyBox 1.36.1 的 `ASH_SLEEP` 内建绕过 PATH 中的 sleep 桩，导�
 
 ## 待办与完成标准
 
-1. 读取最新 CI 的最终结论，更新观察时间、head、步骤和产物身份；只有最终 native 零失败/错误/跳过且全部既有验收步骤通过，才记录完整 CI 成功。若失败，先按实际工具/输入与失败边界诊断。
-2. CI 成功后核对镜像、校验和、manifest、配置、来源锁及同批 APK；沿用构建指南的产物门槛，不把上一轮未验收镜像当成合格交付。
+1. 完整 CI 验收已由 43261551327 完成；后续源码或输入变化须重新对应具体验收记录，不能继承本次成功结论。
+2. 使用本轮已验收镜像与同批 APK，保留校验和、manifest、配置和来源锁；本轮本地镜像已核对校验和并复跑检查；配套 APK 按需从本轮 artifact 获取，不将上一轮未验收镜像混入本次交付。
 3. 按 [上游待办](rc01-upstream-status.md) 核实候选适用性和 Rust metadata 错误关联；本次不自动移植。
 4. 实机验收仍缺启动、布局迁移/恢复、ECC/坏块、ENV、升级/回厂、风扇保护、RGB、SFP、无线及代理共存等结果；按独立授权和既有安全条件推进，不以宿主或 CI 结果代替。
