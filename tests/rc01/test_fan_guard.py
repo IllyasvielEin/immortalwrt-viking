@@ -10,8 +10,10 @@ from pathlib import Path
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 
@@ -138,6 +140,8 @@ class FanGuardTrace(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-fan-guard-test-")
         self.addCleanup(self.temporary.cleanup)
+        self.guard_groups = set()
+        self.addCleanup(self.wait_for_guard_processes, self.guard_groups)
         self.work = Path(self.temporary.name)
         self.bin, self.ticks = self.work / "bin", self.work / "ticks"
         self.bin.mkdir(); self.ticks.mkdir(); (self.work / "run").mkdir()
@@ -189,6 +193,31 @@ class FanGuardTrace(unittest.TestCase):
         result = subprocess.run([BUSYBOX, "sh", "-c", script], env=self.env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def wait_for_guard_processes(self, groups):
+        """Fixture publishers can outlive the guard; finish before rmtree."""
+        deadline = time.monotonic() + 5
+        while groups:
+            live = False
+            for stat in Path('/proc').glob('[0-9]*/stat'):
+                try:
+                    fields = stat.read_text().rsplit(')', 1)[1].split()
+                    if int(fields[2]) in groups and fields[0] != 'Z':
+                        live = True
+                        break
+                except (OSError, ValueError, IndexError):
+                    continue  # Processes may exit while the fixture checks.
+            if not live:
+                groups.clear()
+                return
+            if time.monotonic() >= deadline:
+                for group in groups:
+                    try:
+                        os.killpg(group, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                self.fail('Fixture guard descendants did not finish before cleanup')
+            time.sleep(0.01)
+
     def run_guard(self, scenario, guard=GUARD, settle=True):
         """Run one scenario; return (exit code, ordered events)."""
         if scenario.get("setup"):
@@ -205,7 +234,9 @@ class FanGuardTrace(unittest.TestCase):
                    f'printf "%s (rc01-fan-guard) S 1 {stat_tail}\\n" "$$" > "$RC01_PROC/$$/stat"; . "$1"')
         process = subprocess.Popen([BUSYBOX, "sh", "-c", wrapper, "rc01-fan-guard", str(guard)],
                                    env=self.env | {"LD_PRELOAD": str(self.preload)},
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                   start_new_session=True)
+        self.guard_groups.add(process.pid)
         out, err = process.communicate(timeout=30)
         self.guard_pid, self.stderr = process.pid, err
         events = []
@@ -321,6 +352,7 @@ class FanGuardTrace(unittest.TestCase):
         self.assertEqual((self.record("snap.3")["failures"], self.record("snap.3")["sample_reason"]), (1, "rpm-invalid"))
 
     def run_guard_fresh(self, scenario):
+        self.wait_for_guard_processes(self.guard_groups)
         self.temporary.cleanup()
         self.setUp()
         return self.run_guard(scenario)
@@ -429,8 +461,10 @@ class FanGuardTrace(unittest.TestCase):
                 (f"reason:{script}", dict(ticks={1: script} if script else {}, last=4)) for script, _ in REASONS]
             for name, scenario in cases:
                 with self.subTest(name=name):
+                    self.wait_for_guard_processes(self.guard_groups)
                     self.temporary.cleanup(); self.setUp()
                     expected = self.run_guard(scenario, guard=old, settle=False)
+                    self.wait_for_guard_processes(self.guard_groups)
                     self.temporary.cleanup(); self.setUp()
                     self.assertEqual(self.run_guard(scenario, settle=False), expected)
 
@@ -481,6 +515,35 @@ class FanGuardTrace(unittest.TestCase):
         with open(self.ticks / "gate", "w") as gate:
             gate.write("go\n")
 
+    def test_fixture_cleanup_waits_for_an_inflight_publisher(self):
+        self.mv("slow")
+        self.run_guard(SCENARIOS["normal"], settle=False)
+        started, finished = threading.Event(), threading.Event()
+        errors = []
+
+        def finish():
+            started.set()
+            try:
+                self.wait_for_guard_processes(self.guard_groups)
+            except Exception as error:
+                errors.append(error)
+            finally:
+                finished.set()
+
+        waiter = threading.Thread(target=finish)
+        waiter.start()
+        try:
+            self.assertTrue(started.wait(1))
+            self.assertFalse(finished.wait(0.05))  # Publisher is held at the FIFO.
+        finally:
+            with open(self.ticks / "gate", "w") as gate:
+                gate.write("go\n")
+            waiter.join(6)
+        self.assertFalse(waiter.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(self.guard_groups, set())
+        self.assertTrue(self.state.exists())
+
     def test_failed_or_impossible_export_keeps_protection(self):
         variants = {
             "state-directory-missing": lambda: self.env.update(RC01_FAN_STATE=str(self.work / "missing/state.json")),
@@ -491,6 +554,7 @@ class FanGuardTrace(unittest.TestCase):
         for name, prepare in variants.items():
             for scenario in ("third-failure-latches-and-recovery-keeps-it", "term-after-latch", "latch-write-fails"):
                 with self.subTest(variant=name, scenario=scenario):
+                    self.wait_for_guard_processes(self.guard_groups)
                     self.temporary.cleanup(); self.setUp()
                     prepare()
                     result = self.run_guard(SCENARIOS[scenario], settle=False)
@@ -540,10 +604,14 @@ class FanGuardTrace(unittest.TestCase):
         '''
         wrapper = (f'"$BUSYBOX" mkdir -p "$RC01_PROC/$$" && printf "%s (sh) S 1 {" ".join(["0"] * 17)} 1 0\\n" "$$" '
                    f'> "$RC01_PROC/$$/stat"; ' + script)
-        result = subprocess.run([BUSYBOX, "sh", "-c", wrapper, "sh", str(GUARD)],
-                                env=self.env | {"RC01_FAN_LIBRARY": "1"}, capture_output=True, text=True, timeout=120)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        published, early, late = map(int, result.stdout.split())
+        process = subprocess.Popen([BUSYBOX, "sh", "-c", wrapper, "sh", str(GUARD)],
+                                   env=self.env | {"RC01_FAN_LIBRARY": "1"},
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                   start_new_session=True)
+        self.guard_groups.add(process.pid)
+        out, err = process.communicate(timeout=120)
+        self.assertEqual(process.returncode, 0, err)
+        published, early, late = map(int, out.split())
         self.assertGreater(published, 2000)
         # About 44 bytes per unreleased job would add well over 100 kB here.
         self.assertLess(late - early, 48, (published, early, late))
