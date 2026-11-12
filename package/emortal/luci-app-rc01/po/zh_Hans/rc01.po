@@ -97,8 +97,8 @@ msgstr "内核 BTF"
 msgid "Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures."
 msgstr "此处不读取环境内容或校验 CRC。PPE 活跃流为零可能正常；硬件转发的流量可能不会出现在抓包中。"
 
-msgid "Proxy processes"
-msgstr "代理及相关进程"
+msgid "Related service processes"
+msgstr "相关服务进程"
 
 msgid "Process"
 msgstr "进程"
