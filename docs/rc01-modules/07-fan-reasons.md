@@ -108,8 +108,6 @@ UCODE=/tmp/rc01-acceleration-astra/ucode BUSYBOX=$BB \
 
 10 个跳过都缺少构建输入（`RC01_KERNEL_SOURCE`/`RC01_WIRELESS_SOURCE` 预备树，以及 RGB 页面校验需要的 LuCI 源码），不属于本模块。没有设置 `BUSYBOX`，或者主机上找不到 busybox 和 cc 时，`FanGuardTrace` 会整体跳过。验收时请提供 BusyBox。其余项：`busybox sh -n` 与 `dash -n` 语法通过。shellcheck 只有 SC2100（把 `x=a-b` 误判为算术），以及有意为之的 SC1007、SC2015、SC2086、SC3043；基线 guard 本来也有 SC3043。没有 msgfmt，po 只用脚本核对：新增 41 条，无重复 msgid，页面所用字符串全部有翻译。没有运行全量 discover：已知无线首启 disabled 基线失败和缺少构建输入的跳过不属于本模块。
 
-## 未验证项
-
 ## 初审采样时间R1修复（主线程）
 
 - 每次采样完成只设置一个待记录标记，不在保护PWM之前增加时间读取或文件发布。下一次报告（包括PWM写失败后的EXIT报告）在保护动作之后消费标记，以新时间配对新结果。

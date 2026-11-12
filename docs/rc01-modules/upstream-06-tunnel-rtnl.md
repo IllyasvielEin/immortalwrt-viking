@@ -11,7 +11,7 @@
   非 LWT 的 IPIP6/MAP-E 流在读取 ip6tnl 参数时调用 `rtnl_lock()` + `dev_ip6_tnl_flow_offload()`（修复前位于 C:3545）。
 - 编译条件：`ppe_flowtable.o`、`ppe_tunnel.o` 无条件编入 `qcom-ppe`。`dev_ip6_tnl_flow_offload()` 在 `net/core/dev.c` 中
   无条件定义并导出，带 `ASSERT_RTNL()`。ip6tnl 通过 `ndo_ip6_tnl_flow_offload` 提供实现。IPQ9574 和 IPQ5332 两个变体都是
-  `has_tunnel_engine = true`。只要用户配置了 ip6tnl/MAP-E 且流经 flowtable 卸载，就会进入这个分支。
+  `has_tunnel_engine = true`。仅通过已有匹配键/协议、动作、设备、IPv4 内层及非桥等资格检查，并实际到达参数读取块的 non-LWT IPIP6/MAP-E 流受此修复影响；配置隧道本身不保证进入该分支。
 - 静态触发链：`NETDEV_DOWN` 通知（持 RTNL）→ `nf_flow_table_cleanup()` → `nf_flow_table_offload_flush()` →
   `flush_workqueue(nf_flow_offload_add_wq)`。如果此时 add 队列里正有隧道流在执行 `ppe_ft_flow_replace()` 并阻塞在
   `rtnl_lock()`，两者就会互相等待。桥分支此前已经由 0668 改为 trylock，隧道分支没有。
@@ -52,7 +52,7 @@
   计数 reject，释放 path、rx/tx account、egress_dev，执行 `kfree_rcu`。不会经过要求已持 mutex 的 `err_unlock`/`err_vp`。
 - trylock 失败时 RTNL 并未取得，所以不会 unlock。`bridge_rtnl` 在这里一定为 false：桥流若同时是隧道流，会在更早处被拒绝
   （`goto err_tdev`），因此 `err_free` 末尾的 `rtnl_unlock` 不会被触发。
-- 成功路径不变。争用时只是放弃本次硬件卸载并返回 `-EAGAIN`，流继续走软件路径，之后的请求可以再次尝试。没有加重试框架。
+- 成功路径不变。争用时放弃本次硬件卸载并返回 `-EAGAIN`；按源码推断流量可走软件回退，之后请求可再次尝试，实际回退流量尚未经实机验证。没有加重试框架。
 - 没有改桥 trylock、active-list/drain、资源诊断、769 或其他功能。LWT 隧道不读取 ip6tnl 参数，不受影响。
 
 ## 验证（实际执行）

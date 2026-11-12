@@ -71,7 +71,7 @@
     "PCS interface cache updated only after successful mode setup",
     "6.18.60 duplicate backports removed and affected contexts refreshed",
     "RC01-only Q6 removal and WCSS disable/unbind; retain existing tzapp 0x49b00000/6MiB and memory mode",
-    "Firmware 02903 paired with d7 exact two-field DS guard; unknown FW stays CPU",
+    "Firmware 02903 paired with d7 DS guard: exact fw_version, substring build ID; exact-ID contract remains unresolved; nonmatching FW stays CPU",
     "Keep old 906/317/338/342 and independently adapt dependencies; preserve CMA320 and ring sizes",
     "914 uses per-device MLO borrowers to protect pre-start partners, and releases coherent owner before unknown PCI-type fallback",
     "PPE FDB worker verifies bridge master before reading bridge private VLAN data",
@@ -145,7 +145,7 @@
     },
     {
       "commit": "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
-      "scope": "HW1 02903 exact DS ABI gate"
+      "scope": "HW1 02903 DS ABI gate: exact fw_version and substring build ID, not an exact two-field comparison"
     },
     {
       "commit": "99977bd751741658172c6d0f1df21af662a375e8",
