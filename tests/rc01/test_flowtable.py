@@ -456,6 +456,134 @@ int main(void) {
         self.assertNotIn("mutex_lock(", destroy[:cancel])
         self.assertGreater(destroy.index("ppe_ft_flow_drain(ft, NULL)"), cancel)
 
+    def test_tunnel_parameter_read_does_not_wait_for_rtnl(self):
+        # Actual 0682 tunnel block and the existing pre-publication cleanup
+        # tail of ppe_ft_flow_replace(); RTNL, VP, device and accounting
+        # edges are stubs. This is not a lockdep or workqueue run.
+        with tempfile.TemporaryDirectory(prefix="rc01-ppe-source-") as temporary:
+            source = ppe_source(Path(temporary))
+        replace = function(source, "ppe_ft_flow_replace")
+        start = replace.index("\tif (tunnel_flow && !lwt_tunnel) {")
+        stop = replace.index("\treject_reason = PPE_FT_REJECT_NAT;")
+        tunnel = replace[start:stop]
+        cleanup = replace[replace.index("err_prelock_ivp:"):replace.rindex("}")]
+        # The read follows topology sampling and precedes the publication
+        # lock; a tunnel flow is rejected before it could hold bridge RTNL.
+        self.assertNotIn("rtnl_lock()", replace)
+        self.assertNotIn("ft->lock", tunnel)
+        self.assertLess(replace.index("mutex_unlock(&ft->lock);"), start)
+        self.assertLess(stop, replace.index("mutex_lock(&ft->lock);", stop))
+        self.assertNotIn("mutex_lock(", replace[replace.index("mutex_unlock(&ft->lock);"):start])
+        bridge = replace[replace.index("bridge_rtnl = true;"):]
+        self.assertIn("(tunnel_flow ||", bridge[:bridge.index("goto err_tdev;")])
+        code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#define EAGAIN 11
+#define EOPNOTSUPP 95
+#define PPE_FT_REJECT_MAX 4
+struct in6_addr { uint32_t s6_addr32[4]; };
+struct ip6_tnl_flow_offload_key { uint32_t addr; uint16_t port; };
+struct ip6_tnl_flow_offload_info { struct in6_addr local, remote; };
+struct net_device { int refs; };
+struct account { int refs; };
+struct ppe_flowtable { int ppe_dev; long rejects[PPE_FT_REJECT_MAX]; };
+struct ppe_ft_flow {
+    int vp, ivp, paths; struct net_device *egress_dev;
+    struct account rx_account, tx_account;
+    struct { uint16_t sport, dport; struct { uint32_t ip4; } sip, dip; } entry;
+};
+static int rtnl_held, rtnl_contended, offload_calls, offload_ret, vp_puts[8], frees;
+static uint32_t seen_addr; static uint16_t seen_port;
+static bool rtnl_trylock(void) { if (rtnl_contended) return false; assert(!rtnl_held); rtnl_held = 1; return true; }
+static void rtnl_unlock(void) { assert(rtnl_held); rtnl_held = 0; }
+static int dev_ip6_tnl_flow_offload(struct net_device *dev, const struct ip6_tnl_flow_offload_key *key,
+                                    struct ip6_tnl_flow_offload_info *info)
+{
+    assert(rtnl_held && dev); offload_calls++; seen_addr = key->addr; seen_port = key->port;
+    if (!offload_ret) { info->local.s6_addr32[0] = 1; info->remote.s6_addr32[0] = 2; }
+    return offload_ret;
+}
+static bool ipv6_addr_any(const struct in6_addr *a) { return !a->s6_addr32[0]; }
+static void ppe_vp_put(int dev, int vp) { (void)dev; vp_puts[vp]++; }
+static void dev_put(struct net_device *dev) { dev->refs--; }
+static void ppe_ft_path_put(struct ppe_ft_flow *flow) { flow->paths--; }
+static void ppe_flow_account_put(struct account *account) { account->refs--; }
+static void atomic_long_inc(long *v) { (*v)++; }
+#define kfree_rcu(p, f) (frees += !!(p))
+
+static int replace_tail(struct ppe_flowtable *ft, struct ppe_ft_flow *flow,
+                        struct net_device *tdev, bool tunnel_flow, bool lwt_tunnel,
+                        bool tunnel_encap, int *published)
+{
+    struct ip6_tnl_flow_offload_info tnl_info;
+    int reject_reason = 2, ret = 0;
+    bool bridge_rtnl = false;
+
+    memset(&tnl_info, 0, sizeof(tnl_info));
+    (void)tunnel_flow;
+    /* err_free is entered by earlier, omitted rejects. */
+    if (!flow) {
+        goto err_free;
+    }
+@TUNNEL@
+    *published = 1;
+    return 0;
+@CLEANUP@
+}
+
+static struct net_device tdev, egress;
+static struct ppe_flowtable ft;
+static struct ppe_ft_flow flow;
+static int published;
+
+static int run(bool contended, int result, bool lwt)
+{
+    memset(&ft, 0, sizeof(ft)); memset(vp_puts, 0, sizeof(vp_puts));
+    flow = (struct ppe_ft_flow){ .vp = 3, .ivp = 5, .paths = 1, .egress_dev = &egress,
+                                 .rx_account = { 1 }, .tx_account = { 1 } };
+    flow.entry.sip.ip4 = 0x0a000001; flow.entry.dip.ip4 = 0xc0000201;
+    flow.entry.sport = 1234; flow.entry.dport = 443;
+    tdev.refs = 1; egress.refs = 1; rtnl_held = 0; rtnl_contended = contended;
+    offload_calls = 0; offload_ret = result; frees = 0; published = 0;
+    return replace_tail(&ft, &flow, &tdev, true, lwt, true, &published);
+}
+
+static void assert_cleaned(void)
+{
+    assert(!published && vp_puts[3] == 1 && vp_puts[5] == 1 && tdev.refs == 0);
+    assert(flow.paths == 0 && flow.rx_account.refs == 0 && flow.tx_account.refs == 0);
+    assert(egress.refs == 0 && frees == 1 && ft.rejects[2] == 1);
+}
+
+int main(void)
+{
+    /* Contended RTNL: give up this offload through the existing cleanup. */
+    assert(run(true, 0, false) == -EAGAIN);
+    assert(!rtnl_held && offload_calls == 0);
+    assert_cleaned();
+
+    /* Uncontended: the read runs under RTNL, released before publication. */
+    assert(run(false, 0, false) == 0);
+    assert(published && !rtnl_held && offload_calls == 1);
+    assert(seen_addr == 0xc0000201 && seen_port == 443);
+    assert(tdev.refs == 1 && vp_puts[3] == 0 && vp_puts[5] == 0 && frees == 0);
+
+    /* An existing lookup failure still unlocks and cleans up once. */
+    assert(run(false, -EOPNOTSUPP, false) == -EOPNOTSUPP);
+    assert(!rtnl_held && offload_calls == 1);
+    assert_cleaned();
+
+    /* LWT tunnels do not read ip6tnl parameters. */
+    assert(run(true, 0, true) == 0);
+    assert(published && offload_calls == 0 && !rtnl_held);
+    return 0;
+}
+'''.replace("@TUNNEL@", tunnel).replace("@CLEANUP@", cleanup)
+        self.run_c(code)
+
     @unittest.skipUnless(KERNEL, "set RC01_KERNEL_SOURCE to the prepared kernel")
     def test_flow_cleanup_preserves_namespace_and_matches_both_upper_paths(self):
         source = (Path(KERNEL) / "net/netfilter/nf_flow_table_core.c").read_text()
