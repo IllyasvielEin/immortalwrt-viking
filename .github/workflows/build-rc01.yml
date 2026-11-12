@@ -325,7 +325,7 @@ jobs:
             echo "viking_reviewed_head=7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b"
             echo "viking_integration=selected-commits"
             echo "viking_full_merge=false"
-            echo "viking_selected_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd,f120d87c9200ae1ddad9a1d9996d51cf0fb14709,1e95b974f6e040e24a26800d5aa9dcc9e0f592d8,6149690bf77473633aaf820d6569c97a9f2908ab,490d9e9cb2131a989551a055c0e84f70174e3787,490a5b388762702dd68b81472095f8773265adc9,7e8c4cef998c6789a29d2253b21a2721e3f19044,ec73307670005a1f00cbeb039dc90709fa2a871e,90f54dddcf833c2ddde722dd8b298ec54c59eb98,a7593dae2e669a61c7815e87b7d38d3a91184756,279676f8088d1af739a133879bfbce4e00b9175f,50595e765f42bdb518402f8a0bd1ae1f649f4823,29fc7b2153c5f965024b0c0632a844f9b173813c,e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5,11bdaa6c6fbf570e664a9b670cf54d0feba8b387,30b66b0fba4dfc248d61915b08e92e4cabd2323a,9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc,e44e8cf26aa8e5abc204bdf54f58d27aaac993a7,7a54294609a4a8075eac2302f60e3a4031ef3596,ced6a648901fa6ff7f2a18d854164845d89fa024,6c57d4105add93c3b983ca2dfbb4d6f66f696f92,f9dd19a1a2820891cddd0c3cea538984a5b6c497,b4f7857f9c0c21e83d0c3e76917093f4011053db,516da1de900c3ae45daa09cbfbfec985e0179661,d7cb81d96a4a10ab5a44ce916dc5d9406cd44559,99977bd751741658172c6d0f1df21af662a375e8"
+            echo "viking_selected_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd,f120d87c9200ae1ddad9a1d9996d51cf0fb14709,1e95b974f6e040e24a26800d5aa9dcc9e0f592d8,6149690bf77473633aaf820d6569c97a9f2908ab,490d9e9cb2131a989551a055c0e84f70174e3787,490a5b388762702dd68b81472095f8773265adc9,7e8c4cef998c6789a29d2253b21a2721e3f19044,ec73307670005a1f00cbeb039dc90709fa2a871e,90f54dddcf833c2ddde722dd8b298ec54c59eb98,a7593dae2e669a61c7815e87b7d38d3a91184756,279676f8088d1af739a133879bfbce4e00b9175f,50595e765f42bdb518402f8a0bd1ae1f649f4823,29fc7b2153c5f965024b0c0632a844f9b173813c,e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5,11bdaa6c6fbf570e664a9b670cf54d0feba8b387,30b66b0fba4dfc248d61915b08e92e4cabd2323a,9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc,e44e8cf26aa8e5abc204bdf54f58d27aaac993a7,7a54294609a4a8075eac2302f60e3a4031ef3596,ced6a648901fa6ff7f2a18d854164845d89fa024,6c57d4105add93c3b983ca2dfbb4d6f66f696f92,f9dd19a1a2820891cddd0c3cea538984a5b6c497,b4f7857f9c0c21e83d0c3e76917093f4011053db,516da1de900c3ae45daa09cbfbfec985e0179661,d7cb81d96a4a10ab5a44ce916dc5d9406cd44559,99977bd751741658172c6d0f1df21af662a375e8,67bb668abe0b17a98278829ee38312d480ebed5e"
             echo "viking_followup_commits=4e7173571c64faced3172e51a83fa314d5d5f600,47ce1cd5dfeffb9c7789c8b637f654098898d6a3,d58d0507801a3cab73802e6434314eea0596ba31,5dbfbfe46225e244fe06c42f11b50bc710f731dd"
             echo "ppe_ds_nodes_ipq9574=3"
             echo "source_date_epoch=$SOURCE_DATE_EPOCH"
@@ -432,8 +432,11 @@ jobs:
           luci_resources="$PWD/feeds/luci/modules/luci-base/htdocs/luci-static/resources"
           test -s "$luci_resources/validation.js"
           test -s "$luci_resources/form.js"
+          firewall4_dir="$(find build_dir -mindepth 2 -maxdepth 2 -type d -path 'build_dir/target-*/firewall4-*' -print -quit)"
+          test -s "$firewall4_dir/root/usr/share/ucode/fw4.uc"
           UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
             RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
+            RC01_FIREWALL4_SOURCE="$PWD/$firewall4_dir" \
             LUCI_VALIDATION_JS="$luci_resources/validation.js" LUCI_FORM_JS="$luci_resources/form.js" \
             python3 -B - <<'PYTEST'
           import sys
