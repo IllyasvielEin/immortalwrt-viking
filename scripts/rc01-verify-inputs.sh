@@ -112,6 +112,5 @@ export RC01_WIRELESS_SOURCE=$W/src/backports-$BV
 export BUSYBOX=$W/src/busybox-$BBV/busybox
 export LUCI_VALIDATION_JS=$W/src/luci/modules/luci-base/htdocs/luci-static/resources/validation.js
 export LUCI_FORM_JS=$W/src/luci/modules/luci-base/htdocs/luci-static/resources/form.js
-export RC01_LUCI_VALIDATION_SOURCE=\$LUCI_VALIDATION_JS
 EOF
 echo "prepared: $W/env.sh"

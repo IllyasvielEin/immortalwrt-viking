@@ -47,7 +47,7 @@ SHELL_COMMANDS = {name: command for name, command in (
 SHELLS = list(SHELL_COMMANDS) or ["sh"]
 SHELL_COMMANDS.setdefault("sh", ["sh"])
 KERNEL = os.environ.get("RC01_KERNEL_SOURCE")
-LUCI_VALIDATION = Path(os.environ.get("RC01_LUCI_VALIDATION_SOURCE") or
+LUCI_VALIDATION = Path(os.environ.get("LUCI_VALIDATION_JS") or
                        ROOT / "feeds/luci/modules/luci-base/htdocs/luci-static/resources/validation.js")
 
 RGB = ["red:ambient", "green:ambient", "blue:ambient"]
@@ -248,7 +248,7 @@ class Logic(Fixture):
         self.assertEqual(len({tuple(rgb) for rgb in frames}), 3)
 
     @unittest.skipUnless(shutil.which("node") and LUCI_VALIDATION.is_file(),
-                         "Node and the pinned LuCI validation source (feed or RC01_LUCI_VALIDATION_SOURCE) are required")
+                         "Node and the pinned LuCI validation source (feed or LUCI_VALIDATION_JS) are required")
     def test_page_integer_validation_agrees_with_real_backend(self):
         # Run the actual view's datatypes through the real feed validator;
         # only the form/translation scaffolding is stubbed.
