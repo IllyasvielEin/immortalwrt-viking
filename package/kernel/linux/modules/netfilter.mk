@@ -1329,7 +1329,7 @@ $(eval $(call KernelPackage,nft-arp))
 define KernelPackage/nft-bridge
   SUBMENU:=$(NF_MENU)
   TITLE:=Netfilter nf_tables bridge table support
-  DEPENDS:=+kmod-nft-core
+  DEPENDS:=+kmod-nft-core +kmod-nf-conntrack-bridge
   FILES:=$(foreach mod,$(NFT_BRIDGE-m),$(LINUX_DIR)/net/$(mod).ko)
   AUTOLOAD:=$(call AutoProbe,$(notdir $(NFT_BRIDGE-m)))
   KCONFIG:= \
