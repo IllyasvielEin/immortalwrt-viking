@@ -355,13 +355,28 @@ class Service(Fixture):
         self.config = Path(self.temporary.name) / "config.json"
         self.log = Path(self.temporary.name) / "stderr"
 
+    def leds(self):
+        # These are ordinary files, unlike sysfs attributes. The daemon's
+        # writefile() can be between truncate and write when we poll them.
+        values = [self.read(f"sys/class/leds/{led}/brightness") for led in RGB]
+        if "" in values:
+            return None
+        return [int(value) for value in values]
+
     def start(self, section, network=None):
         self.config.write_text(json.dumps({"main": section, "network": network or {}}))
         env = {"PATH": os.environ["PATH"], "RC01_ROOT": str(self.root), "RC01_RGB_CONFIG": str(self.config),
                "TZ": "UTC"}
         command = [UCODE, "-L", str(self.lib.parent) + "/*.uc", str(DAEMON)]
-        process = subprocess.Popen(command, env=env, stderr=self.log.open("w"), stdout=subprocess.DEVNULL)
-        self.addCleanup(lambda: process.poll() is None and process.kill())
+        with self.log.open("w") as stderr:
+            process = subprocess.Popen(command, env=env, stderr=stderr, stdout=subprocess.DEVNULL)
+
+        def cleanup():
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+
+        self.addCleanup(cleanup)
         return process
 
     def wait_for(self, predicate, timeout=5):
@@ -408,12 +423,32 @@ class Service(Fixture):
     def test_animation_runs_and_stops_cleanly(self):
         process = self.start({"enabled": "1", "mode": "rainbow", "speed": "10", "brightness": "255"})
         seen = set()
-        self.wait_for(lambda: seen.add(tuple(self.leds())) or len(seen) > 5, timeout=3)
+
+        def collect_frame():
+            frame = self.leds()
+            if frame is not None:
+                seen.add(tuple(frame))
+            return len(seen) > 5
+
+        self.assertTrue(self.wait_for(collect_frame, timeout=3))
         self.assertGreater(len(seen), 5)
         self.assertIsNone(self.status()["rgb"])     # frames are not logged to the status file
         self.assertEqual(self.stop(process), 0)
         self.assertEqual(self.leds(), [0, 0, 0])
         self.assert_foreign_untouched()
+
+    def test_empty_fixture_brightness_is_pending_but_bad_values_fail(self):
+        for led in RGB:
+            with self.subTest(led=led):
+                self.write(f"sys/class/leds/{led}/brightness", "")
+                try:
+                    self.assertIsNone(self.leds())
+                finally:
+                    self.write(f"sys/class/leds/{led}/brightness", "23")
+        self.assertEqual(self.leds(), [23, 23, 23])
+        self.write("sys/class/leds/red:ambient/brightness", "broken")
+        with self.assertRaises(ValueError):
+            self.leds()
 
     def test_restart_with_new_settings_and_schedule_off(self):
         process = self.start({"enabled": "1", "color": "#0000ff", "brightness": "200"})
