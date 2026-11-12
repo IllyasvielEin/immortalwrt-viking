@@ -463,21 +463,26 @@ function executable(path) {
 	return file?.type == 'file' && (file.mode & 73) != 0;
 }
 
-function partition(root, wanted) {
-	let found = [];
+// One enumeration per collect: callers reuse these records, nothing is cached across calls.
+function mtd_records(root) {
+	let records = [];
 	for (let path in glob(root + '/sys/class/mtd/mtd[0-9]*') || []) {
 		if (!match(split(path, '/')[-1], /^mtd[0-9]+$/)) continue;
-		if (lc(text(path + '/name') || '') != wanted) continue;
-		push(found, {
+		push(records, { name: lc(text(path + '/name') || ''), info: {
 			device: '/dev/' + split(path, '/')[-1],
 			offset: numeric(path + '/offset'),
 			size: numeric(path + '/size'), erase_size: numeric(path + '/erasesize'),
 			page_size: numeric(path + '/writesize'),
 			bad_blocks: numeric(path + '/bad_blocks'),
 			uncorrectable_ecc: numeric(path + '/ecc_failures')
-		});
+		} });
 	}
-	return length(found) == 1 ? found[0] : null;
+	return records;
+}
+
+function partition(records, wanted) {
+	let found = filter(records, record => record.name == wanted);
+	return length(found) == 1 ? found[0].info : null;
 }
 
 function environment_map(root, env, contract) {
@@ -499,12 +504,11 @@ function layout_contract(root) {
 	} catch (error) { return null; }
 }
 
-function layout_matches(root, contract) {
+function layout_matches(records, contract) {
 	if (type(contract?.partitions) != 'object' || length(keys(contract.partitions)) != 26) return false;
-	let devices = filter(glob(root + '/sys/class/mtd/mtd[0-9]*') || [], path => match(split(path, '/')[-1], /^mtd[0-9]+$/));
-	if (length(devices) != 26) return false;
+	if (length(records) != 26) return false;
 	for (let key, wanted in contract.partitions) {
-		let actual = partition(root, lc(wanted.name));
+		let actual = partition(records, lc(wanted.name));
 		if (actual == null || actual.offset !== wanted.offset || actual.size !== wanted.bytes ||
 			actual.erase_size !== contract.nand?.erase_bytes || actual.page_size !== contract.nand?.page_bytes) return false;
 	}
@@ -610,10 +614,11 @@ export function collect(root, uci, cache, wiphy_query) {
 		push(defaults, { available: true, software: enabled(s.flow_offloading), hardware: enabled(s.flow_offloading_hw) });
 	});
 	let firewall = length(defaults) == 1 ? defaults[0] : { available: false, software: null, hardware: null };
-	let rootfs = partition(root, 'rootfs');
-	let env = partition(root, '0:appsblenv');
-	let license = partition(root, '0:license');
-	let bdata = partition(root, 'bdata');
+	let mtd = mtd_records(root);
+	let rootfs = partition(mtd, 'rootfs');
+	let env = partition(mtd, '0:appsblenv');
+	let license = partition(mtd, '0:license');
+	let bdata = partition(mtd, 'bdata');
 	let contract = layout_contract(root);
 	let ubi = root + '/sys/class/ubi/ubi0';
 	let overlay = statvfs(root + '/overlay');
@@ -636,7 +641,7 @@ export function collect(root, uci, cache, wiphy_query) {
 		physical_acceptance: false,
 		temperatures, fans, fan: fan_state, ports, processes, radios,
 		storage: { rootfs, environment: env, license, bdata,
-			layout_id: contract?.layout_id, layout_matches: layout_matches(root, contract),
+			layout_id: contract?.layout_id, layout_matches: layout_matches(mtd, contract),
 			bad_block_reserve: contract?.nand?.bad_block_reserve_pebs,
 			environment_map_valid: environment_map(root, env, contract),
 			environment_crc_checked: false,
