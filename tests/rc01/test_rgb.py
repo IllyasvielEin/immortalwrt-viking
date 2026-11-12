@@ -3,6 +3,10 @@
 Everything runs against fixture directories; nothing touches the host's
 /sys, LEDs, PWM or syslog. Fan, status, network and SFP LEDs plus the fan
 PWM are present in the fixtures so that writes to them would be caught.
+
+The init script runs under dash and BusyBox ash (BUSYBOX=/path/to/busybox,
+else busybox from PATH); a BUSYBOX that is not an executable file is an
+error. The service itself is ucode, not shell.
 """
 from pathlib import Path
 import importlib.util
@@ -25,7 +29,23 @@ INIT = FILES / "rc01-rgb.init"
 LUCI = ROOT / "package/emortal/luci-app-rc01-rgb"
 VIEW = LUCI / "htdocs/luci-static/resources/view/system/rc01-rgb.js"
 UCODE = os.environ.get("UCODE") or shutil.which("ucode")
-SHELLS = [s for s in ("dash", "busybox") if shutil.which(s)] or ["sh"]
+
+
+def busybox():
+    path = os.environ.get("BUSYBOX")
+    if not path:
+        return shutil.which("busybox")
+    if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+        raise RuntimeError(f"BUSYBOX={path!r} is not an executable file")
+    return os.path.abspath(path)
+
+
+BUSYBOX = busybox()
+# Shell name -> command line that runs it.
+SHELL_COMMANDS = {name: command for name, command in (
+    ("dash", [shutil.which("dash")]), ("busybox", [BUSYBOX, "sh"])) if command[0]}
+SHELLS = list(SHELL_COMMANDS) or ["sh"]
+SHELL_COMMANDS.setdefault("sh", ["sh"])
 KERNEL = os.environ.get("RC01_KERNEL_SOURCE")
 LUCI_VALIDATION = Path(os.environ.get("RC01_LUCI_VALIDATION_SOURCE") or
                        ROOT / "feeds/luci/modules/luci-base/htdocs/luci-static/resources/validation.js")
@@ -459,45 +479,64 @@ procd_add_reload_trigger() { echo "reload $*"; }
 
 
 class Init(Fixture):
+    shell = SHELLS[0]
+
     def run_init(self, action, **values):
         env = {"PATH": os.environ["PATH"], "RC01_SYSFS": str(self.root / "sys"), **values}
         script = f'{INIT_STUBS}\n. "{INIT}"\n{action}'
-        result = subprocess.run(["sh", "-c", script], env={k: v for k, v in env.items() if v is not None},
+        result = subprocess.run(SHELL_COMMANDS[self.shell] + ["-c", script],
+                                env={k: v for k, v in env.items() if v is not None},
                                 capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 0, f"{self.shell}: {result.stderr}")
         return result.stdout.splitlines()
 
+    def use(self, shell):
+        """Fresh fixture for one shell's run of a test body."""
+        self.setUp()
+        self.shell = shell
+
     def test_disabled_by_default_and_with_system_leds_off(self):
-        self.assertNotIn("open", self.run_init("start_service"))
-        self.assertNotIn("open", self.run_init("start_service", CFG_enabled="1", LEDS_OFF="1"))
+        for shell in SHELLS:
+            with self.subTest(shell=shell):
+                self.use(shell)
+                self.assertNotIn("open", self.run_init("start_service"))
+                self.assertNotIn("open", self.run_init("start_service", CFG_enabled="1", LEDS_OFF="1"))
 
     def test_enabled_runs_one_restartable_instance(self):
-        out = self.run_init("start_service\nservice_triggers", CFG_enabled="1")
-        self.assertEqual(out.count("open"), 1)
-        self.assertIn("param command /usr/libexec/rc01-rgb", out)
-        self.assertIn("param file /etc/config/rc01_rgb", out)     # config change restarts it
-        self.assertIn("param respawn 3600 5 5", out)
-        self.assertIn("reload rc01_rgb system", out)
+        for shell in SHELLS:
+            with self.subTest(shell=shell):
+                self.use(shell)
+                out = self.run_init("start_service\nservice_triggers", CFG_enabled="1")
+                self.assertEqual(out.count("open"), 1)
+                self.assertIn("param command /usr/libexec/rc01-rgb", out)
+                self.assertIn("param file /etc/config/rc01_rgb", out)     # config change restarts it
+                self.assertIn("param respawn 3600 5 5", out)
+                self.assertIn("reload rc01_rgb system", out)
 
     def test_missing_led_is_logged_and_not_started(self):
-        shutil.rmtree(self.root / "sys/class/leds/red:ambient")
-        out = self.run_init("start_service", CFG_enabled="1")
-        self.assertNotIn("open", out)
-        self.assertTrue(any("red:ambient not found" in line for line in out))
+        for shell in SHELLS:
+            with self.subTest(shell=shell):
+                self.use(shell)
+                shutil.rmtree(self.root / "sys/class/leds/red:ambient")
+                out = self.run_init("start_service", CFG_enabled="1")
+                self.assertNotIn("open", out)
+                self.assertTrue(any("red:ambient not found" in line for line in out))
 
     def test_stopped_turns_only_the_rgb_bar_off(self):
-        for led in RGB:
-            self.write(f"sys/class/leds/{led}/brightness", "200")
-        self.run_init("service_stopped")
-        self.assertEqual(self.leds(), [0, 0, 0])
-        self.assert_foreign_untouched()
-        shutil.rmtree(self.root / "sys/class/leds/green:ambient")
-        self.run_init("service_stopped")          # a missing LED is not an error
+        for shell in SHELLS:
+            with self.subTest(shell=shell):
+                self.use(shell)
+                for led in RGB:
+                    self.write(f"sys/class/leds/{led}/brightness", "200")
+                self.run_init("service_stopped")
+                self.assertEqual(self.leds(), [0, 0, 0])
+                self.assert_foreign_untouched()
+                shutil.rmtree(self.root / "sys/class/leds/green:ambient")
+                self.run_init("service_stopped")          # a missing LED is not an error
 
     def test_shell_syntax(self):
         for shell in SHELLS:
-            command = [shutil.which(shell)] + (["sh"] if shell == "busybox" else [])
-            result = subprocess.run(command + ["-n", str(INIT)], capture_output=True, text=True)
+            result = subprocess.run(SHELL_COMMANDS[shell] + ["-n", str(INIT)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, f"{shell}: {result.stderr}")
 
 
