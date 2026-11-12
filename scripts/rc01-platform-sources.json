@@ -153,7 +153,7 @@
     },
     {
       "commit": "85ebb0d08e6845c54b50370482ed0dd92cf39958",
-      "scope": "partial, after reviewed_head: only 0683 PPE active-list block drain (blob fcd69f0c13e602e076ac0cede5678d0148eb8573) and 0684 resource-diagnostic slot/quarantine budget lines (blob 335c56c4dfb827025e0070eb88db8e53d92442e5), both kept byte-identical and applied with fuzz 0 (line offsets only); excludes 0682 tunnel trylock; equivalent to the PPE-B part of endpoint dd8de87169f1c1d091a81eb237341b2de09bd5bf 0651-03 and the resource_stats output of 0651-04, without their regrouping or RTL837x changes"
+      "scope": "partial, after reviewed_head: only 0682 IPIP6/MAP-E tunnel parameter read via rtnl_trylock with -EAGAIN into the existing pre-publication cleanup (blob 04753b023fcfa2945f838b479aaa6ec5b5014ea4), 0683 PPE active-list block drain (blob fcd69f0c13e602e076ac0cede5678d0148eb8573) and 0684 resource-diagnostic slot/quarantine budget lines (blob 335c56c4dfb827025e0070eb88db8e53d92442e5), all kept byte-identical and applied in numeric order with fuzz 0 (line offsets only); equivalent to the tunnel trylock of endpoint dd8de87169f1c1d091a81eb237341b2de09bd5bf 0514-04, the PPE-B part of 0651-03 and the resource_stats output of 0651-04, without their regrouping or RTL837x changes"
     },
     {
       "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
