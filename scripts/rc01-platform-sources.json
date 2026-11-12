@@ -38,7 +38,8 @@
     "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
     "99977bd751741658172c6d0f1df21af662a375e8",
     "85ebb0d08e6845c54b50370482ed0dd92cf39958",
-    "67bb668abe0b17a98278829ee38312d480ebed5e"
+    "67bb668abe0b17a98278829ee38312d480ebed5e",
+    "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6"
   ],
   "excluded_commits": [
     "6061a61a",
@@ -155,6 +156,10 @@
     },
     {
       "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
+      "scope": "after reviewed_head, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf: generic hack-6.18 769 flowtable route/neighbour revalidation, all three files (nf_flow_table.h, nf_flow_table_core.c, nf_flow_table_path.c); this commit adds only 769 (blob 87b9308766396b37b7d65e68ddc58a908eed79e0); the carried text is the endpoint blob 45ac1cfed4d84783b06adef41f2a3f28258ef8bc, whose only change from 2bb59802ceeb8bcba408a7b6694f0c4669e24eab 'refresh patches' is hunk-header function context; byte-identical, fuzz 0 without offsets"
+    },
+    {
+      "commit": "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6",
       "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 004 bridge offload allow/exclude/ibrname/last-priority rule and +kmod-nft-bridge only, onto old firewall4 e6f600c; keeps old two-argument resolve_lower_devices without WDS prefix; excludes 005/006 and the 3722ead source upgrade"
     }
   ],
