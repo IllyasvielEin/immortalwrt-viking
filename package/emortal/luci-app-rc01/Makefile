@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_VERSION:=1
-PKG_RELEASE:=3
+PKG_RELEASE:=5
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 PKG_LICENSE:=GPL-2.0-only
 LUCI_TITLE:=RC01 hardware status, preflight and connectivity LED settings
