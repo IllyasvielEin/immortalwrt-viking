@@ -9,7 +9,7 @@ learning rule after ordinary forward filters. Bridges with asymmetric or
 per-packet ACLs must be excluded from connection caching.
 
 Signed-off-by: ViKing <viking.yfy@qq.com>
-[RC01: backported from VIKINGYFY/immortalwrt 67bb668a (fixed at dd8de871)
+[RC01: backported from VIKINGYFY/immortalwrt 43d9a24a (fixed at dd8de871)
  onto firewall4 e6f600c. The old resolve_lower_devices() takes only
  (devstatus, devname); the upstream third use_prefix argument and its WDS
  prefix resolution are not carried, so bridge ports keep the old lower

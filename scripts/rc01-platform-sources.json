@@ -38,7 +38,7 @@
     "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
     "99977bd751741658172c6d0f1df21af662a375e8",
     "85ebb0d08e6845c54b50370482ed0dd92cf39958",
-    "67bb668abe0b17a98278829ee38312d480ebed5e"
+    "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6"
   ],
   "excluded_commits": [
     "6061a61a",
@@ -77,6 +77,7 @@
     "Router Tool waits for a requested child capability list before applying defaults",
     "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
     "firewall4 004 call adapted to old resolve_lower_devices(devstatus, devname); upstream use_prefix/WDS prefix resolution not carried",
+    "firewall4 100 (UP05): restart reports render/check/apply stage, failed state restore/removal and script include failure; run_includes exits 1 on a failed script include; CLI no longer claims the previous ruleset was kept",
     "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated",
     "UP02 R1: nf_conntrack_bridge.ko is owned only by kmod-nf-conntrack-bridge; kmod-nft-bridge depends on that package and only owns its meta/reject modules"
   ],
@@ -154,8 +155,8 @@
       "scope": "partial, after reviewed_head: only 0683 PPE active-list block drain (blob fcd69f0c13e602e076ac0cede5678d0148eb8573) and 0684 resource-diagnostic slot/quarantine budget lines (blob 335c56c4dfb827025e0070eb88db8e53d92442e5), both kept byte-identical and applied with fuzz 0 (line offsets only); excludes 0682 tunnel trylock; equivalent to the PPE-B part of endpoint dd8de87169f1c1d091a81eb237341b2de09bd5bf 0651-03 and the resource_stats output of 0651-04, without their regrouping or RTL837x changes"
     },
     {
-      "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
-      "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 004 bridge offload allow/exclude/ibrname/last-priority rule and +kmod-nft-bridge only, onto old firewall4 e6f600c; keeps old two-argument resolve_lower_devices without WDS prefix; excludes 005/006 and the 3722ead source upgrade"
+      "commit": "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6",
+      "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 patches only, onto old firewall4 e6f600c (no 3722ead source upgrade, release 15): 004 bridge offload allow/exclude/ibrname/last-priority rule with +kmod-nft-bridge (old two-argument resolve_lower_devices, no WDS prefix); 005 restart one-batch nft replacement of owned inet/bridge tables, FW4_RESTART flowtable-delete suppression, stop removes bridge table (blob 12169701ebf220356d0d07b1e34f0e33457005b7, byte-identical); 006 direct ct state established,related accept and separate optional invalid drop (blob aaf2cc06fbfa9921b45ed3054a42a8d40d2caf2d, byte-identical); local 100 patch reports stage, state restore and include results. Parent 67bb668a (769) is not carried"
     }
   ],
   "deferred": {

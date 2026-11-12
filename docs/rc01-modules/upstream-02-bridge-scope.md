@@ -5,12 +5,13 @@
 
 ## 来源选取
 
-- 上游：VIKINGYFY/immortalwrt 提交 `67bb668abe0b17a98278829ee38312d480ebed5e`，固定读取点 `dd8de87169f1c1d091a81eb237341b2de09bd5bf`。
+- 上游：VIKINGYFY/immortalwrt 提交 `43d9a24aab2cebab2d9bdb47a194ea28872c9cb6`，固定读取点 `dd8de87169f1c1d091a81eb237341b2de09bd5bf`。
+  （UP05 更正：本项原记为 `67bb668a`；该提交实际是 769，004 由其子提交 43d9a24a 引入，见 `upstream-05-firewall-restart.md`。补丁 hunk 与行为未变。）
   只取 `package/network/config/firewall4/patches/004-scope-bridge-flowtable-offload.patch`（blob `b81a38fb62cb…`，
   sha256 `a037fd29…b032`，与 `rc01-nss-audit-20261112/download-manifest.json` 一致）和 Makefile 中的 `+kmod-nft-bridge`。
   原作者头和 Signed-off-by 保留。
 - 不取：005/006（留给 UP05）、firewall4 源升到 `3722ead`、该提交的其他文件。
-- `scripts/rc01-platform-sources.json`：`selected_commits` 和 `followup_selection` 加入 67bb668a，并标为 partial；
+- `scripts/rc01-platform-sources.json`：`selected_commits` 和 `followup_selection` 加入 partial 记录（原误记 67bb668a，UP05 已改为 43d9a24a）；
   `local_adjustments` 记录 helper 适配。`reviewed_head` 仍为历史值 `7b3b0f0f…`，`full_merge` 仍为 false。
   该提交位于 reviewed_head 之后，scope 文字写明读取点是 dd8de871。工作流的 `viking_selected_commits` 同步追加。
   已知的 HW1 build-ID 文字偏差（版本号精确比较，build ID 用子串）本项没有处理，也没有改无线。
