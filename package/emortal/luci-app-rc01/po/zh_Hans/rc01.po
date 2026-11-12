@@ -895,3 +895,18 @@ msgstr "未设置"
 
 msgid "The guard record is written by the fan guard itself after each protection step. Publishing is best effort and can lag or be skipped, so it is shown as current only for the one running guard instance and only within 10 s; otherwise it is the last record and the current guard state is unknown. The sample age is when the guard last checked the sensors. A set latch is the guard's software decision to hold full speed until it restarts; it does not prove that the PWM write succeeded or that the fan is running at full speed, and passing checks do not replace hardware acceptance."
 msgstr "守护记录由风扇守护进程在每次保护步骤后自行写入。发布为尽力而为，可能滞后或被跳过，因此仅当记录属于唯一运行中的守护实例且在 10 秒内更新时才显示为当前；否则仅为上次记录，当前守护状态未知。采样时长指距守护进程上次检查传感器的时间。锁定为守护进程在重启前保持满速的软件决定，不证明 PWM 写入成功或风扇实际满速运行；检查通过也不能替代硬件验收。"
+
+msgid "Flow directions (IPv4 / IPv6)"
+msgstr "流方向数（IPv4 / IPv6）"
+
+msgid "Weighted flow slots (active / capacity)"
+msgstr "加权流槽位（活动 / 容量）"
+
+msgid "Quarantined rules (rules / slot budget)"
+msgstr "隔离规则（规则数 / 槽位预算）"
+
+msgid "Not reported by this kernel"
+msgstr "此内核未提供"
+
+msgid "A flow direction is one offloaded rule for one traffic direction, so a connection usually needs two. Weighted slots count each IPv6 rule as two hardware slots. Quarantined rules are software records the driver keeps when it cannot confirm their hardware rows are gone; their slot budget is a weighted ownership estimate, not a count of distinct occupied rows. Active slots plus the quarantine budget therefore do not give exact free slots or utilization, and leaving the active count does not mean the hardware row was deleted."
+msgstr "流方向数指单一流量方向的一条卸载规则，一个连接通常需要两条。加权槽位将每条 IPv6 规则计为两个硬件槽位。隔离规则是驱动无法确认其硬件行已清除时保留的软件记录；其槽位预算是按类型加权的所有权估计，不是去重后的实际占用行数。因此活动槽位加隔离预算不能得出精确的剩余槽位或利用率，规则离开活动计数也不代表硬件行已被删除。"
