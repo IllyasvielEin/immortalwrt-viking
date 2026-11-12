@@ -167,13 +167,14 @@ function ppe_state(root, now) {
 	let present = stat(root + '/sys/module/qcom_ppe') != null;
 	let debugfs = length(lsdir(root + '/sys/kernel/debug') || []) > 0;
 	let flows = bounded(base + '/active_flows', 256);
+	let counts = flows.status == 'ok' ? ppe_counts(trim(flows.data)) : null;
 	let state = {
 		present,
 		debugfs_accessible: debugfs,
 		sampled_at: now,
-		active_flows: flows.status == 'ok' ? ppe_counts(trim(flows.data)) : null,
+		active_flows: counts,
 		active_flows_source: { source: 'debugfs:ppe/active_flows',
-			status: flows.status != 'ok' ? flows.status : ppe_counts(trim(flows.data)) == null ? 'malformed' : 'ok' },
+			status: flows.status != 'ok' ? flows.status : counts == null ? 'malformed' : 'ok' },
 		resources: ppe_resources(base + '/resource_stats'),
 		direct_switch: ppe_direct_switch(base + '/direct_switch'),
 		direct_switch_status_available: stat(base + '/direct_switch') != null
@@ -683,8 +684,8 @@ export function assess(state, target) {
 	let fan = length(state.fans) == 1 ? state.fans[0] : null;
 	check('fan', fan != null && fan.rpm > 0 && fan.pwm != null && fan.pwm >= 77 && fan.pwm <= 255 &&
 		(!fan.fault_available || fan.fault === 0) ? 'ok' : 'error', 'Requires one healthy EMC2301 at address 0x2f');
-	let sensors = filter(state.temperatures, s => index([ 'nss-top-thermal', 'nss_top_thermal' ], s.name) >= 0);
-	let temperature = length(sensors) == 1 ? sensors[0].celsius : null;
+	// Same collect: nss_temperature() keeps celsius only for a single NSS sensor.
+	let temperature = state.fan.temperature.celsius;
 	check('temperature', temperature == null || temperature < 1 || temperature >= 75 ? 'error' : temperature >= 60 ? 'warn' : 'ok',
 		'Requires a valid NSS temperature below the 75 C guard threshold');
 	check('ports', !length(filter(state.ports, p => !p.present)) ? 'ok' : 'error', 'Requires lan1..lan4, sfp and wan net devices; cables may be disconnected');
