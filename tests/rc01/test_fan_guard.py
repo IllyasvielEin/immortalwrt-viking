@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 GUARD_PATH = "package/emortal/rc01-platform/files/rc01-fan-guard"
 GUARD = ROOT / GUARD_PATH
 # Guard before the reason export (modules 01-05 integrated).
-BASELINE = "a9ac7c6e3841b795e0b292232b308d72dea98929"
+# Same guard blob as the pre-rebase baseline: cedbbcd6c30affce4d184ed0738511568f0ea695.
+BASELINE = "d1a7fdc6c41c7a1121c5ffb09e8267fc17c66067"
 BUSYBOX = os.environ.get("BUSYBOX") or shutil.which("busybox")
 CC = shutil.which("cc")
 UCODE = os.environ.get("UCODE") or shutil.which("ucode")
@@ -128,6 +129,21 @@ REASONS = [
 class FanGuardTrace(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Ash builtins can bypass PATH even with standalone/applets disabled.
+        with tempfile.TemporaryDirectory(prefix="rc01-fan-path-probe-") as directory:
+            for name in ("sleep", "mv"):
+                stub = Path(directory) / name
+                stub.write_text(f"#!{BUSYBOX} sh\nprintf 'fixture-{name}\\n'\n")
+                stub.chmod(0o755)
+            result = subprocess.run(
+                [BUSYBOX, "sh", "-c", 'sleep 0; mv "$1" "$2"', "probe",
+                 str(Path(directory) / "from"), str(Path(directory) / "to")],
+                env={"PATH": directory}, capture_output=True, text=True, timeout=5)
+            if result.returncode or result.stdout.splitlines() != ["fixture-sleep", "fixture-mv"]:
+                raise AssertionError(
+                    "BusyBox must execute PATH sleep/mv fixtures; use "
+                    "scripts/rc01-verify-inputs.sh --busybox-only. "
+                    f"stdout={result.stdout!r}, stderr={result.stderr!r}")
         cls.build = tempfile.TemporaryDirectory(prefix="rc01-fan-trace-build-")
         cls.preload = Path(cls.build.name) / "trace.so"
         subprocess.run([CC, "-shared", "-fPIC", "-O2", "-o", str(cls.preload),
@@ -453,7 +469,7 @@ class FanGuardTrace(unittest.TestCase):
     def test_protection_trace_matches_baseline_guard(self):
         baseline = subprocess.run(["git", "-C", str(ROOT), "show", f"{BASELINE}:{GUARD_PATH}"], capture_output=True)
         if baseline.returncode:
-            self.skipTest("baseline guard is not available from Git")
+            self.fail("required baseline guard is not available from Git: " + BASELINE)
         with tempfile.TemporaryDirectory(prefix="rc01-fan-baseline-") as directory:
             old = Path(directory) / "rc01-fan-guard"
             old.write_bytes(baseline.stdout)
