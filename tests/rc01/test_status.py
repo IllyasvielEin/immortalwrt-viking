@@ -130,6 +130,91 @@ class Status(unittest.TestCase):
         shutil.copytree(self.root / "sys/class/mtd/mtd41", self.root / "sys/class/mtd/mtd41ro")
         self.assertTrue(self.run_status()["result"]["passed"])
 
+    def mtd_copy(self, source, target, name):
+        shutil.copytree(self.root / f"sys/class/mtd/{source}", self.root / f"sys/class/mtd/{target}")
+        if name is None:
+            (self.root / f"sys/class/mtd/{target}/name").unlink()
+        else:
+            self.write(f"sys/class/mtd/{target}/name", name)
+
+    def test_duplicate_or_case_colliding_names_are_ambiguous_not_overwritten(self):
+        cases = [("mtd123", "0:LICENSE", "license", "identity-storage"),
+                 ("mtd123", "0:license", "license", "identity-storage"),
+                 ("mtd124", "BData", "bdata", "identity-storage"),
+                 ("mtd41", "rootfs", "rootfs", "nand-ecc")]
+        for source, name, key, check in cases:
+            with self.subTest(name=name):
+                self.mtd_copy(source, "mtd200", name)
+                result = self.run_status()
+                self.assertIsNone(result["state"]["storage"][key])
+                self.assertEqual(self.levels(result)[check], "error")
+                self.assertEqual(self.levels(result)["layout"], "error")
+                shutil.rmtree(self.root / "sys/class/mtd/mtd200")
+
+    def test_partition_count_uses_real_nodes(self):
+        for name in ["extra", None]:
+            with self.subTest(name=name):
+                self.mtd_copy("mtd100", "mtd200", name)
+                result = self.run_status()
+                self.assertEqual(self.levels(result)["layout"], "error")
+                self.assertEqual(self.levels(result)["identity-storage"], "ok")
+                shutil.rmtree(self.root / "sys/class/mtd/mtd200")
+        (self.root / "sys/class/mtd/mtd100/name").unlink()
+        self.assertEqual(self.levels(self.run_status())["layout"], "error")
+
+    def test_missing_mtd_fields_stay_unknown(self):
+        for node, field, key, attribute, check in [
+                ("mtd123", "bad_blocks", "license", "bad_blocks", "identity-storage"),
+                ("mtd124", "ecc_failures", "bdata", "uncorrectable_ecc", "identity-storage"),
+                ("mtd41", "bad_blocks", "rootfs", "bad_blocks", "nand-reserve"),
+                ("mtd41", "offset", "rootfs", "offset", "layout")]:
+            for value in [None, "unreadable"]:
+                with self.subTest(node=node, field=field, value=value):
+                    path = self.root / f"sys/class/mtd/{node}/{field}"
+                    before = path.read_text()
+                    if value is None:
+                        path.unlink()
+                    else:
+                        path.write_text(value + "\n")
+                    result = self.run_status()
+                    self.assertIsNone(result["state"]["storage"][key][attribute])
+                    self.assertEqual(self.levels(result)[check], "error")
+                    path.write_text(before)
+
+    def test_every_layout_geometry_field_is_compared(self):
+        for node in ["mtd110", "mtd41"]:
+            for field, value in [("size", 131072), ("erasesize", 262144), ("writesize", 4096)]:
+                with self.subTest(node=node, field=field):
+                    path = self.root / f"sys/class/mtd/{node}/{field}"
+                    before = path.read_text()
+                    self.write(f"sys/class/mtd/{node}/{field}", value)
+                    self.assertEqual(self.levels(self.run_status())["layout"], "error")
+                    path.write_text(before)
+
+    def test_environment_map_follows_the_actual_device(self):
+        (self.root / "sys/class/mtd/mtd12").rename(self.root / "sys/class/mtd/mtd13")
+        result = self.run_status()
+        self.assertEqual(result["state"]["storage"]["environment"]["device"], "/dev/mtd13")
+        self.assertEqual(self.levels(result)["environment-map"], "error")
+        self.assertEqual(self.levels(result)["layout"], "ok")
+        self.write("etc/fw_env.config", "/dev/mtd13 0x0 0x10000 0x20000 2")
+        self.assertTrue(self.run_status()["result"]["passed"])
+
+    def test_each_collect_rereads_mtd_nodes(self):
+        mtd = json.dumps(str(self.root / "sys/class/mtd"))
+        state = self.run_script(f'''import {{ writefile, rename }} from 'fs';
+let mtd = {mtd};
+let first = collect(root, uci).storage;
+writefile(mtd + '/mtd123/ecc_failures', '1\\n');
+rename(mtd + '/mtd41', mtd + '/mtd42');
+writefile(root + '/sys/class/ubi/ubi0/mtd_num', '42\\n');
+let second = collect(root, uci).storage;
+print(sprintf('%J', [ first, second ]));''')
+        first, second = state
+        self.assertEqual((first["license"]["uncorrectable_ecc"], first["rootfs"]["device"]), (0, "/dev/mtd41"))
+        self.assertEqual((second["license"]["uncorrectable_ecc"], second["rootfs"]["device"]), (1, "/dev/mtd42"))
+        self.assertTrue(second["layout_matches"] and second["ubi_root_matches"])
+
     def test_duplicate_fan_is_not_silently_selected(self):
         target = self.root / "sys/class/hwmon/hwmon9"
         shutil.copytree(self.root / "sys/class/hwmon/hwmon8", target, symlinks=True)
