@@ -435,7 +435,6 @@ jobs:
           UCODE="$PWD/staging_dir/hostpkg/bin/ucode" \
             RC01_KERNEL_SOURCE="$PWD/$kernel_dir" RC01_WIRELESS_SOURCE="$PWD/$wireless_dir" \
             LUCI_VALIDATION_JS="$luci_resources/validation.js" LUCI_FORM_JS="$luci_resources/form.js" \
-            RC01_LUCI_VALIDATION_SOURCE="$luci_resources/validation.js" \
             python3 -B - <<'PYTEST'
           import sys
           import unittest
