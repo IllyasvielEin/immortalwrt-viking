@@ -323,6 +323,11 @@ PPE_RESOURCES = (
     "failure stage:core_role enoent:0 enospc:18446744073709551615 enomem:0 eio:0 timeout:0 other:0 last_errno:-28\n"
     "failure stage:nexthop enoent:0 enospc:0 enomem:0 eio:0 timeout:0 other:0 last_errno:0\n"
     "nexthop active:2 capacity:128 alloc:5 reuse:9 free:3\n")
+# 0684 appends a slot line and a quarantine line after the unchanged first line.
+PPE_RESOURCES_SLOTS = PPE_RESOURCES.replace(
+    "capacity:4096\n",
+    "capacity:4096\nflow ipv4_directions:12 ipv6_directions:3 active_slots:18 capacity:4096\n"
+    "quarantine rules:0 slots_budget:0\n", 1)
 PPE_DS = ("node:0 ring:1 queue:2 running:1 faulted:0 down_desc:9223372036854775807 up_desc:1 refill:0 "
           "release:0 sync:0 refill_fail:7 poll_retry:0 refill_wake:0 tx_deferred:0\n"
           "node:1 unregistered\n"
@@ -389,8 +394,10 @@ class AccelerationDiagnostics(Status):
         for name in ("flows", "reason_counters"):
             path = self.root / "sys/kernel/debug/ppe" / name
             os.mkfifo(path)
+        self.write("sys/kernel/debug/ppe/resource_stats", PPE_RESOURCES_SLOTS)
         ppe = self.ppe()
         self.assertEqual(ppe["resources"]["status"], "ok")
+        self.assertEqual(ppe["resources"]["slots"]["active_slots"], "18")
         for key, name in (("flows", "flows"), ("reasons", "reason_counters")):
             self.assertEqual(ppe["detail"][key], {
                 "source": f"debugfs:ppe/{name}", "status": "not-collected"})
@@ -399,6 +406,172 @@ class AccelerationDiagnostics(Status):
     def test_unreadable_source_is_distinct_from_missing(self):
         (self.root / "sys/kernel/debug/ppe/resource_stats").chmod(0)
         self.assertEqual(self.ppe()["resources"]["status"], "unreadable")
+
+    def test_slot_budget_lines_are_read_and_old_kernels_are_unavailable(self):
+        self.write("sys/kernel/debug/ppe/resource_stats", PPE_RESOURCES_SLOTS)
+        record = self.ppe()["resources"]
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual(record["ignored_groups"], 0)
+        self.assertEqual(record["flow"], {"ipv4_active": "12", "ipv6_active": "3", "capacity": "4096"})
+        self.assertEqual(record["slots"], {"ipv4_directions": "12", "ipv6_directions": "3",
+                                           "active_slots": "18", "capacity": "4096"})
+        # Zero is a reported value, distinct from a kernel that has no such line.
+        self.assertEqual(record["quarantine"], {"rules": "0", "slots_budget": "0"})
+        self.assertEqual(record["failures"]["core_role"]["enospc"], "18446744073709551615")
+        self.write("sys/kernel/debug/ppe/resource_stats", PPE_RESOURCES)
+        record = self.ppe()["resources"]
+        self.assertEqual(record["status"], "ok")
+        self.assertIsNone(record["slots"])
+        self.assertIsNone(record["quarantine"])
+
+    def test_bad_or_incomplete_slot_lines_withhold_all_values(self):
+        first = "host active:3 capacity:2048 flow active:12/3 capacity:4096\n"
+        for text in [first + "flow ipv4_directions:1 ipv6_directions:0 capacity:4096\n",
+                     first + "quarantine rules:1\n",
+                     first + "quarantine rules:1 slots_budget:-\n",
+                     first + "flow ipv4_directions:1 ipv6_directions:0 active_slots:1 capacity:4096 active_slots:1\n"]:
+            with self.subTest(text=text):
+                self.write("sys/kernel/debug/ppe/resource_stats", text)
+                record = self.ppe()["resources"]
+                self.assertEqual(record["status"], "malformed")
+                self.assertEqual(set(record), {"source", "status"})
+
+    @unittest.skipUnless(shutil.which("cc"), "host cc is required to run the kernel formatter")
+    def test_kernel_resource_output_is_read_by_the_collector(self):
+        # Run the real ppe_ft_resource_stats_show() (0684) with stubbed kernel
+        # edges, then collect its output. Counts are read under ft->lock.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("rc01_ppe_source", Path(__file__).with_name("test_flowtable.py"))
+        flowtable = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(flowtable)
+        with tempfile.TemporaryDirectory(prefix="rc01-ppe-source-") as temporary:
+            show = flowtable.function(flowtable.ppe_source(Path(temporary)), "ppe_ft_resource_stats_show")
+        code = r'''
+#include <assert.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
+struct list_head { struct list_head *next, *prev; };
+#define list_for_each_entry(pos,head,m) \
+    for (pos=container_of((head)->next,__typeof__(*pos),m); &pos->m!=(head); \
+         pos=container_of(pos->m.next,__typeof__(*pos),m))
+static bool held;
+struct mutex { int unused; };
+static void mutex_lock(struct mutex *m) { assert(!held); held=true; }
+static void mutex_unlock(struct mutex *m) { assert(held); held=false; }
+#define atomic_read(v) (assert(held), *(v))
+#define hash_for_each(t,b,o,m) for ((b)=0,(o)=(t); (o)<(t)+(int)(sizeof(t)/sizeof(*(t))); (o)++)
+struct seq_file { void *private; };
+static void seq_printf(struct seq_file *s, const char *f, ...) {
+    va_list a; assert(held); va_start(a,f); vprintf(f,a); va_end(a); }
+enum { PPE_FT_RES_CORE, PPE_FT_RES_MAX };
+static const char * const ppe_ft_resource_names[PPE_FT_RES_MAX] = { "core_role" };
+struct ppe_variant { unsigned int num_host_entries, num_flow_entries, num_nexthop_entries; };
+struct ppe_device { const struct ppe_variant *variant; };
+struct ppe_ft_host { int node; };
+struct ppe_flow_entry { bool is_ipv6; };
+struct ppe_ft_flow { struct list_head zombie_node; struct ppe_flow_entry entry; };
+struct ppe_flowtable {
+    struct mutex lock; int ipv4_flows, ipv6_flows; struct list_head zombies;
+    struct ppe_ft_host hosts[3]; struct ppe_device *ppe_dev;
+    unsigned long resource_failures[PPE_FT_RES_MAX][6]; int resource_last_errno[PPE_FT_RES_MAX];
+    unsigned int nexthop_active; unsigned long nexthop_allocs, nexthop_reuses, nexthop_frees;
+};
+''' + show + r'''
+int main(int argc, char **argv) {
+    static const struct ppe_variant variant = { 2048, 4096, 128 };
+    struct ppe_device dev = { &variant };
+    struct ppe_flowtable ft = { .ipv4_flows=5, .ipv6_flows=2, .ppe_dev=&dev, .nexthop_active=1,
+        .resource_failures={{0,~0UL,0,0,0,0}}, .resource_last_errno={-28} };
+    struct ppe_ft_flow z[3] = { {.entry={true}}, {.entry={false}}, {.entry={true}} };
+    struct seq_file seq = { &ft };
+    int n = argc > 1 ? 3 : 0;
+    ft.zombies.next = n ? &z[0].zombie_node : &ft.zombies;
+    for (int i = 0; i < n; i++)
+        z[i].zombie_node.next = i + 1 < n ? &z[i+1].zombie_node : &ft.zombies;
+    ppe_ft_resource_stats_show(&seq, NULL);
+    assert(!held);
+    return 0;
+}
+'''
+        directory = Path(self.temporary.name + "-cc")
+        directory.mkdir()
+        self.addCleanup(shutil.rmtree, directory)
+        (directory / "show.c").write_text(code)
+        built = subprocess.run([shutil.which("cc"), "-std=gnu11", "-Wall", "-Werror", "-Wno-unused-parameter",
+                                str(directory / "show.c"), "-o", str(directory / "show")], capture_output=True, text=True)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        expected = {(): {"rules": "0", "slots_budget": "0"}, ("z",): {"rules": "3", "slots_budget": "5"}}
+        for args, quarantine in expected.items():
+            with self.subTest(zombies=bool(args)):
+                output = subprocess.run([str(directory / "show"), *args], capture_output=True, text=True, check=True).stdout
+                self.write("sys/kernel/debug/ppe/resource_stats", output)
+                record = self.ppe()["resources"]
+                self.assertEqual(record["status"], "ok", output)
+                self.assertEqual(record["ignored_groups"], 0)
+                self.assertEqual(record["flow"], {"ipv4_active": "5", "ipv6_active": "2", "capacity": "4096"})
+                self.assertEqual(record["slots"], {"ipv4_directions": "5", "ipv6_directions": "2",
+                                                   "active_slots": "9", "capacity": "4096"})
+                self.assertEqual(record["quarantine"], quarantine)
+                self.assertEqual(record["failures"]["core_role"]["enospc"], str(2**64 - 1))
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required to render the collected state")
+    def test_slot_budget_rows_render_and_a_failed_read_drops_them(self):
+        view = ROOT / "package/emortal/luci-app-rc01/htdocs/luci-static/resources/view/status/rc01.js"
+        program = r"""
+const fs = require('fs');
+const states = JSON.parse(fs.readFileSync(0, 'utf8'));
+let refresh, pages = [];
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const dom = { content: (node, children) => { node.children = children; } };
+const rpc = { declare: () => () => Promise.resolve(states.shift()) };
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, { add: fn => { refresh = fn; } }, dom, E, v => v);
+const node = api.render(states.shift());
+pages.push(JSON.stringify(node));
+(async () => {
+  while (states.length) { await refresh(); pages.push(JSON.stringify(node)); }
+  process.stdout.write(JSON.stringify(pages));
+})().catch(e => { console.error(e); process.exitCode = 1; });
+"""
+        clock = iter(range(1000, 2000, 10))
+        def state(text=None, mode=None):
+            self.write("proc/uptime", f"{next(clock)}.00 900.00")
+            path = self.root / "sys/kernel/debug/ppe/resource_stats"
+            path.chmod(0o644)
+            if text is not None:
+                self.write("sys/kernel/debug/ppe/resource_stats", text)
+            if mode is not None:
+                path.chmod(mode)
+            result = self.run_status()
+            result["state"]["preflight"] = [result["result"]]
+            return result["state"]
+        quarantined = PPE_RESOURCES_SLOTS.replace("rules:0 slots_budget:0", "rules:2 slots_budget:3")
+        states = [state(quarantined), state(PPE_RESOURCES), state(quarantined),
+                  state(PPE_RESOURCES_SLOTS * 100), state(quarantined)]
+        if not (hasattr(os, "geteuid") and os.geteuid() == 0):
+            states.append(state(PPE_RESOURCES_SLOTS, 0))
+        page = subprocess.run([shutil.which("node"), "-e", program, str(view)], input=json.dumps(states),
+                              capture_output=True, text=True, timeout=10)
+        self.assertEqual(page.returncode, 0, page.stderr)
+        pages = json.loads(page.stdout)
+        new, old, failed = pages[0], pages[1], pages[3::2]
+        for text in ('"Flow directions (IPv4 / IPv6)"', '"12 / 3"', '"Weighted flow slots (active / capacity)"',
+                     '"18 / 4,096"', '"Quarantined rules (rules / slot budget)"', '"2 / 3"',
+                     "not a count of distinct occupied rows", "18,446,744,073,709,551,615"):
+            self.assertIn(text, new)
+        self.assertEqual(old.count('"Not reported by this kernel"'), 3)
+        self.assertNotIn('"18 / 4,096"', old)
+        self.assertIn('"18 / 4,096"', pages[2])
+        self.assertNotIn("did not advance", "".join(pages))
+        self.assertIn("Output exceeded the read bound; values withheld", failed[0])
+        if len(failed) > 1:
+            self.assertIn("Present but unreadable", failed[1])
+        for text in failed:
+            for value in ('"12 / 3"', '"18 / 4,096"', '"2 / 3"', "18,446,744,073,709,551,615"):
+                self.assertNotIn(value, text)
 
 @unittest.skipUnless(UCODE, "ucode is required for the real status collector")
 class FanStatus(Status):

@@ -118,13 +118,24 @@ function ppe_resources(path) {
 				delete group.values.stage;
 				failures[stage] = group.values;
 			}
-			else if (index([ 'host', 'flow', 'nexthop' ], group.name) >= 0 && !exists(groups, group.name))
+			// Slot budget lines (0684): a "flow" group without the first line's
+			// "active" ratio, and "quarantine". Older kernels omit both; they are
+			// then reported as null (unavailable), never as zero.
+			else if (group.name == 'flow' && !exists(group.values, 'active') && !exists(groups, 'slots'))
+				groups.slots = group.values;
+			else if (index([ 'host', 'flow', 'nexthop', 'quarantine' ], group.name) >= 0 && !exists(groups, group.name))
 				groups[group.name] = group.values;
 			else
 				ignored++;
 		}
 	}
 	if (!length(groups)) { result.status = 'malformed'; return result; }
+	for (let name, keys in { slots: [ 'ipv4_directions', 'ipv6_directions', 'active_slots', 'capacity' ],
+			quarantine: [ 'rules', 'slots_budget' ] })
+		if (groups[name] != null && length(filter(keys, k => !exists(groups[name], k)))) {
+			result.status = 'malformed';
+			return result;
+		}
 	let flow = groups.flow;
 	if (flow?.active != null) {
 		let pair = split(flow.active, '/');
@@ -133,7 +144,8 @@ function ppe_resources(path) {
 		flow.ipv6_active = pair[1];
 		delete flow.active;
 	}
-	return { ...result, host: groups.host, flow, nexthop: groups.nexthop, failures, ignored_groups: ignored };
+	return { ...result, host: groups.host, flow, slots: groups.slots, quarantine: groups.quarantine,
+		nexthop: groups.nexthop, failures, ignored_groups: ignored };
 }
 
 function ppe_direct_switch(path) {

@@ -183,6 +183,13 @@ function ppeSection(ppe) {
 	if (resources.status === 'ok') {
 		if (resources.host) rows.push([ _('Host entries (active / capacity)'), `${counter(resources.host.active)} / ${counter(resources.host.capacity)}` ]);
 		if (resources.nexthop) rows.push([ _('Next hops (active / capacity)'), `${counter(resources.nexthop.active)} / ${counter(resources.nexthop.capacity)}` ]);
+		const slots = resources.slots, quarantine = resources.quarantine;
+		rows.push([ _('Flow directions (IPv4 / IPv6)'), slots == null ? _('Not reported by this kernel') :
+			`${counter(slots.ipv4_directions)} / ${counter(slots.ipv6_directions)}` ]);
+		rows.push([ _('Weighted flow slots (active / capacity)'), slots == null ? _('Not reported by this kernel') :
+			`${counter(slots.active_slots)} / ${counter(slots.capacity)}` ]);
+		rows.push([ _('Quarantined rules (rules / slot budget)'), quarantine == null ? _('Not reported by this kernel') :
+			`${counter(quarantine.rules)} / ${counter(quarantine.slots_budget)}` ]);
 		for (const [ stage, values ] of Object.entries(resources.failures || {})) {
 			const nonzero = Object.entries(values).filter(([ k, v ]) => k !== 'last_errno' && v !== '0');
 			if (nonzero.length)
@@ -204,6 +211,7 @@ function ppeSection(ppe) {
 		[ _('CPU/drop reason source'), sourceStatus(detail.reasons) ]
 	]));
 	nodes.push(E('p', {}, _('Active counts and resource use are current state; software event counters accumulate until reset. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput.')));
+	nodes.push(E('p', {}, _('A flow direction is one offloaded rule for one traffic direction, so a connection usually needs two. Weighted slots count each IPv6 rule as two hardware slots. Quarantined rules are software records the driver keeps when it cannot confirm their hardware rows are gone; their slot budget is a weighted ownership estimate, not a count of distinct occupied rows. Active slots plus the quarantine budget therefore do not give exact free slots or utilization, and leaving the active count does not mean the hardware row was deleted.')));
 	return nodes;
 }
 
