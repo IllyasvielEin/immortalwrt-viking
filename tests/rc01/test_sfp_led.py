@@ -3,6 +3,9 @@
 The fake trigger file behaves like the kernel's: writing a trigger name
 selects it (shown in brackets), and only netdev exposes its attributes.
 Nothing here touches /sys or the host syslog.
+
+Shell code runs under dash and BusyBox ash (BUSYBOX=/path/to/busybox, else
+busybox from PATH); a BUSYBOX that is not an executable file is an error.
 """
 from pathlib import Path
 import os
@@ -18,7 +21,23 @@ ROOT = Path(__file__).resolve().parents[2]
 FILES = ROOT / "package/emortal/rc01-platform/files"
 SERVICE = FILES / "rc01-sfp-led"
 INIT = FILES / "rc01-sfp-led.init"
-SHELLS = [s for s in ("dash", "busybox") if shutil.which(s)]
+
+
+def busybox():
+    path = os.environ.get("BUSYBOX")
+    if not path:
+        return shutil.which("busybox")
+    if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+        raise RuntimeError(f"BUSYBOX={path!r} is not an executable file")
+    return os.path.abspath(path)
+
+
+BUSYBOX = busybox()
+# Shell name -> command line that runs it.
+SHELL_COMMANDS = {name: command for name, command in (
+    ("dash", [shutil.which("dash")]), ("busybox", [BUSYBOX, "sh"])) if command[0]}
+SHELLS = list(SHELL_COMMANDS) or ["sh"]
+SHELL_COMMANDS.setdefault("sh", ["sh"])
 PRESENT = "sfp-sfp:present"
 
 # Emulates the kernel trigger file and logs every trigger write.
@@ -44,7 +63,7 @@ rc01_sfp_set_trigger() {
 
 
 class SfpLed(unittest.TestCase):
-    shell = SHELLS[0] if SHELLS else "sh"
+    shell = SHELLS[0]
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-sfp-led-test-")
@@ -86,7 +105,7 @@ class SfpLed(unittest.TestCase):
         return path.read_text().split() if path.exists() else []
 
     def run_shell(self, body, shell=None):
-        command = [shutil.which(shell or self.shell)] + (["sh"] if (shell or self.shell) == "busybox" else [])
+        command = SHELL_COMMANDS[shell or self.shell]
         script = f'. "{SERVICE}"\n{FAKE_KERNEL}\nset -f\nrc01_sfp_init green:sfp sfp 50 link tx rx\n{body}'
         result = subprocess.run(command + ["-c", script], env=self.env, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -229,7 +248,7 @@ rc01_sfp_restore
         self.assertEqual(self.writes(), [PRESENT, "netdev"])
 
     def service(self, shell):
-        command = [shutil.which(shell)] + (["sh"] if shell == "busybox" else [])
+        command = SHELL_COMMANDS[shell]
         script = f'. "{SERVICE}"\n{FAKE_KERNEL}\nrc01_sfp_main green:sfp sfp 50 link tx rx'
         return subprocess.Popen(command + ["-c", script], env=self.env, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
@@ -278,11 +297,13 @@ rc01_sfp_restore
 
     def test_missing_led_exits_with_an_error(self):
         shutil.rmtree(self.led)
-        command = [shutil.which(self.shell)] + (["sh"] if self.shell == "busybox" else [])
         script = f'. "{SERVICE}"\n{FAKE_KERNEL}\nrc01_sfp_main green:sfp sfp 50 link tx rx'
-        result = subprocess.run(command + ["-c", script], env=self.env, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 1)
-        self.assertFalse(self.led.exists())
+        for shell in SHELLS:
+            with self.subTest(shell=shell):
+                result = subprocess.run(SHELL_COMMANDS[shell] + ["-c", script], env=self.env,
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertFalse(self.led.exists())
 
 
 # Stubs for rc.common, procd and the UCI config helpers.
@@ -302,13 +323,21 @@ procd_add_reload_trigger() { echo "reload $*"; }
 
 class SfpLedInit(unittest.TestCase):
     def start(self, **values):
+        """Output of start_service; the same under every shell."""
         env = {"PATH": os.environ["PATH"], "BOARD": "xiaomi,be10000", "CFG_sysfs": "green:sfp",
                "CFG_trigger": "netdev", "CFG_dev": "sfp", "CFG_mode": "link tx rx", **values}
         script = f'{INIT_STUBS}\n. "{INIT}"\nstart_service\nservice_triggers'
-        result = subprocess.run(["sh", "-c", script], env={k: v for k, v in env.items() if v is not None},
-                                capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.splitlines()
+        outputs = {}
+        for shell in SHELLS:
+            result = subprocess.run(SHELL_COMMANDS[shell] + ["-c", script],
+                                    env={k: v for k, v in env.items() if v is not None},
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, f"{shell}: {result.stderr}")
+            outputs[shell] = result.stdout.splitlines()
+        first = outputs[SHELLS[0]]
+        for shell, out in outputs.items():
+            self.assertEqual(out, first, shell)
+        return first
 
     def test_disabled_by_default(self):
         self.assertNotIn("open", self.start())
@@ -346,10 +375,9 @@ class SfpLedPackage(unittest.TestCase):
         self.assertIn('ucidef_set_led_netdev "sfp" "SFP+ port" "green:sfp" "sfp" "link tx rx"', leds)
 
     def test_shell_syntax(self):
-        for shell in SHELLS or ["sh"]:
-            command = [shutil.which(shell)] + (["sh"] if shell == "busybox" else [])
+        for shell in SHELLS:
             for path in (SERVICE, INIT):
-                result = subprocess.run(command + ["-n", str(path)], capture_output=True, text=True)
+                result = subprocess.run(SHELL_COMMANDS[shell] + ["-n", str(path)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, f"{shell} {path}: {result.stderr}")
 
 
