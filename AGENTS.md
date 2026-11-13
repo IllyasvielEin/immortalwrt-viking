@@ -20,6 +20,7 @@
 | 模块交接、简洁性改进、UP01–UP06 | [模块目录](docs/rc01-modules/)、[集成验证历史](docs/rc01-modules/08-integration.md) |
 | 匿名开发整合历史 | [2026-11-12 整合记录](docs/rc01-modules/local-rebase-integration-2026-11-12.md) |
 | 构建及产物复验实现 | [build-rc01.yml](.github/workflows/build-rc01.yml)、[verify-rc01.yml](.github/workflows/verify-rc01.yml) |
+| 千兆收包错误、PCS时钟根因与修复验收 | [千兆诊断](docs/rc01-gigabit-diagnosis.md) |
 
 ## 更新约定与验收层次
 

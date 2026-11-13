@@ -1,5 +1,11 @@
 # RC01 统一进度
 
+## 最新代码：PCS千兆时钟修复
+
+当前代码已修复PCS父时钟缓存更新顺序，以及相关的失败重试、复位错误传播和RX/TX时钟引用问题。详细根因、范围与实机验收要求见[千兆诊断](rc01-gigabit-diagnosis.md)。本地完整630项回归零失败/错误/跳过，真实内核头文件对象编译通过；ARM64与镜像验收以本提交对应的GitHub Actions构建为准，不能沿用下方旧版CI成功结论。设备仍运行此前交付版本。
+
+以下为此前交付及现场过程记录。
+
 记录日期：2026-11-13。当前源码基线为 `6ab2fe55f46756bca369c8dcde34351ba1531b98`，本地分支 `rc01/anonymous-rebase-20261112`。远端默认分支 `rc01/custom` 已快进到该提交；[PR #1](https://github.com/IllyasvielEin/immortalwrt-viking/pull/1) 已自动 **MERGED**。
 
 最新 [CI 43261551327](https://github.com/IllyasvielEin/immortalwrt-viking/actions/runs/43261551327) 的 head 为 `6ab2fe55f4`；**截至 2026-11-13T01:51:23+08:00 已确认 completed / success**。构建后的 620 项回归全部通过（71.686 秒），零失败、零错误、零跳过；原生驱动/运行时、静态引导契约、镜像容量及无线产物检查通过，已验收镜像上传成功。此处“已验收”指 CI 静态与产物验收；无实机验收、无刷机。

@@ -73,6 +73,11 @@ without inheriting bootloader or previous interface settings.
 Select the NSSCC USXGMII MII clock source before releasing XPCS reset
 so initial negotiation does not depend on a previous bootloader.
 
+Publish the configured PLL output before CCF recalculates its cached rate,
+independently of the successful interface-mode cache. Invalidate partial
+mode setup on errors, propagate reset failures, and own MII RX/TX clocks
+as a pair so retries cannot leak or underflow their enable references.
+
 Merged from:
   0313-dt-bindings-net-pcs-Add-Ethernet-PCS-for-Qualcomm-IP.patch
   0314-net-pcs-Add-PCS-driver-for-Qualcomm-IPQ9574-SoC.patch
@@ -353,7 +358,7 @@ diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq95
 new file mode 100644
 --- /dev/null
 +++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
-@@ -0,0 +1,1392 @@
+@@ -0,0 +1,1416 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
@@ -506,6 +511,7 @@ new file mode 100644
 +	/* TX clock from NSSCC to PCS MII */
 +	struct clk *tx_clk;
 +	bool usxgmii_initialized;
++	bool clocks_enabled;
 +};
 +
 +/* PCS private data */
@@ -514,6 +520,8 @@ new file mode 100644
 +	void __iomem *base;
 +	struct regmap *regmap;
 +	phy_interface_t interface;
++	/* Configured PLL output, independent of the successful mode cache. */
++	unsigned long clock_rate;
 +
 +	/* RX clock supplied to NSSCC */
 +	struct clk_hw rx_hw;
@@ -675,20 +683,49 @@ new file mode 100644
 +	state->pause |= MLO_PAUSE_TXRX_MASK;
 +}
 +
-+/* Re-enable the port clocks held off across a USXGMII reconfiguration */
-+static int ipq_pcs_restore_port_clks(struct ipq_pcs *qpcs,
-+				     phy_interface_t interface)
++/* Own RX/TX as a pair so partial failures and retries stay balanced. */
++static int ipq_pcs_mii_clks_enable(struct ipq_pcs_mii *mii)
 +{
 +	int ret;
 +
++	if (mii->clocks_enabled)
++		return 0;
++
++	ret = clk_prepare_enable(mii->rx_clk);
++	if (ret) {
++		dev_err(mii->qpcs->dev, "Failed to enable MII %d RX clock\n", mii->index);
++		return ret;
++	}
++
++	ret = clk_prepare_enable(mii->tx_clk);
++	if (ret) {
++		clk_disable_unprepare(mii->rx_clk);
++		dev_err(mii->qpcs->dev, "Failed to enable MII %d TX clock\n", mii->index);
++		return ret;
++	}
++
++	mii->clocks_enabled = true;
++	return 0;
++}
++
++static void ipq_pcs_mii_clks_disable(struct ipq_pcs_mii *mii)
++{
++	if (!mii->clocks_enabled)
++		return;
++
++	clk_disable_unprepare(mii->tx_clk);
++	clk_disable_unprepare(mii->rx_clk);
++	mii->clocks_enabled = false;
++}
++
++/* Re-enable the port clocks held off across a USXGMII reconfiguration. */
++static int ipq_pcs_restore_port_clks(struct ipq_pcs *qpcs,
++				     phy_interface_t interface)
++{
 +	if (interface != PHY_INTERFACE_MODE_USXGMII || !qpcs->qpcs_mii[0])
 +		return 0;
 +
-+	ret = clk_prepare_enable(qpcs->qpcs_mii[0]->rx_clk);
-+	if (ret)
-+		return ret;
-+
-+	return clk_prepare_enable(qpcs->qpcs_mii[0]->tx_clk);
++	return ipq_pcs_mii_clks_enable(qpcs->qpcs_mii[0]);
 +}
 +
 +static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
@@ -697,16 +734,24 @@ new file mode 100644
 +	unsigned long rate = 125000000;
 +	unsigned int val, mask, misc2 = 0;
 +	bool xpcs_mode = false;
-+	int ret;
++	int i, ret;
++
++	/* A failed reconfiguration must not leave the previous mode cached.
++	 * The shared reset also invalidates every channel before any retry.
++	 */
++	qpcs->interface = PHY_INTERFACE_MODE_NA;
++	for (i = 0; i < PCS_MAX_MII_NRS; i++)
++		if (qpcs->qpcs_mii[i])
++			qpcs->qpcs_mii[i]->usxgmii_initialized = false;
 +
 +	/* The port clocks must be held off across the reconfiguration */
-+	if (interface == PHY_INTERFACE_MODE_USXGMII && qpcs->qpcs_mii[0]) {
-+		clk_disable_unprepare(qpcs->qpcs_mii[0]->rx_clk);
-+		clk_disable_unprepare(qpcs->qpcs_mii[0]->tx_clk);
-+	}
++	if (interface == PHY_INTERFACE_MODE_USXGMII && qpcs->qpcs_mii[0])
++		ipq_pcs_mii_clks_disable(qpcs->qpcs_mii[0]);
 +
 +	/* Assert XPCS reset */
-+	reset_control_assert(qpcs->xpcs_rstc);
++	ret = reset_control_assert(qpcs->xpcs_rstc);
++	if (ret)
++		goto err_clk;
 +
 +	/* Configure PCS interface mode */
 +	mask = PCS_MODE_SEL_MASK;
@@ -785,11 +830,19 @@ new file mode 100644
 +	 * 100ms, then another 100ms to settle after release.
 +	 */
 +	if (qpcs->sys_rstc || qpcs->soft_rstc) {
-+		reset_control_assert(qpcs->sys_rstc);
-+		reset_control_assert(qpcs->soft_rstc);
++		ret = reset_control_assert(qpcs->sys_rstc);
++		if (ret)
++			goto err_clk;
++		ret = reset_control_assert(qpcs->soft_rstc);
++		if (ret)
++			goto err_clk;
 +		msleep(100);
-+		reset_control_deassert(qpcs->sys_rstc);
-+		reset_control_deassert(qpcs->soft_rstc);
++		ret = reset_control_deassert(qpcs->sys_rstc);
++		if (ret)
++			goto err_clk;
++		ret = reset_control_deassert(qpcs->soft_rstc);
++		if (ret)
++			goto err_clk;
 +		msleep(100);
 +	}
 +
@@ -844,9 +897,13 @@ new file mode 100644
 +			goto err_clk;
 +	}
 +
-+	/* Configure the RX and TX clock to NSSCC as 125M or 312.5M based
-+	 * on current interface mode.
++	/* Calibration has established the PLL output. Publish it before
++	 * clk_set_rate() asks recalc_rate(), or CCF caches the old mode rate
++	 * and NSSCC selects the wrong divider for 1G links. Keep this state
++	 * even if a later step fails: it describes the configured output,
++	 * while interface remains invalid until the whole mode is ready.
 +	 */
++	WRITE_ONCE(qpcs->clock_rate, rate);
 +	ret = clk_set_rate(qpcs->rx_hw.clk, rate);
 +	if (ret) {
 +		dev_err(qpcs->dev, "Failed to set RX clock rate\n");
@@ -879,8 +936,11 @@ new file mode 100644
 +		return ret;
 +
 +	/* Deassert XPCS */
-+	if (xpcs_mode)
-+		reset_control_deassert(qpcs->xpcs_rstc);
++	if (xpcs_mode) {
++		ret = reset_control_deassert(qpcs->xpcs_rstc);
++		if (ret)
++			goto err_clk;
++	}
 +
 +	qpcs->interface = interface;
 +
@@ -930,18 +990,13 @@ new file mode 100644
 +				  phy_interface_t interface)
 +{
 +	unsigned int reg, val;
-+	int i, ret;
++	int ret;
 +
 +	/* Configure the XPCS for USXGMII mode if required */
 +	if (qpcs->interface != interface) {
 +		ret = ipq_pcs_config_mode(qpcs, interface);
 +		if (ret)
-+			return ret;
-+
-+		/* A shared XPCS reset invalidates every channel's setup. */
-+		for (i = 0; i < PCS_MAX_MII_NRS; i++)
-+			if (qpcs->qpcs_mii[i])
-+				qpcs->qpcs_mii[i]->usxgmii_initialized = false;
++			goto err_mode;
 +
 +		/* Best-effort wait for the receiver to link before enabling
 +		 * adaptation; the PHY SerDes may only come up later.
@@ -955,23 +1010,23 @@ new file mode 100644
 +
 +		ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_USXG_EN);
 +		if (ret)
-+			return ret;
++			goto err_mode;
 +
 +		if (interface == PHY_INTERFACE_MODE_10G_QXGMII) {
 +			ret = regmap_update_bits(qpcs->regmap, XPCS_KR_CTRL,
 +						 XPCS_USXG_MODE_MASK, XPCS_10G_QXGMII_MODE);
 +			if (ret)
-+				return ret;
++				goto err_mode;
 +
 +			/* Set Alignment Marker Interval value as 0x6018 */
 +			ret = regmap_update_bits(qpcs->regmap, XPCS_DIG_STS,
 +						 XPCS_DIG_STS_AM_COUNT, 0x6018);
 +			if (ret)
-+				return ret;
++				goto err_mode;
 +
 +			ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_SOFT_RESET);
 +			if (ret)
-+				return ret;
++				goto err_mode;
 +		}
 +	}
 +
@@ -1004,6 +1059,10 @@ new file mode 100644
 +			      XPCS_MII_AN_EN | XPCS_DUPLEX_FULL);
 +	if (!ret)
 +		qpcs->qpcs_mii[index]->usxgmii_initialized = true;
++	return ret;
++
++err_mode:
++	qpcs->interface = PHY_INTERFACE_MODE_NA;
 +	return ret;
 +}
 +
@@ -1180,36 +1239,12 @@ new file mode 100644
 +
 +static int ipq_pcs_enable(struct phylink_pcs *pcs)
 +{
-+	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
-+	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
-+	int index = qpcs_mii->index;
-+	int ret;
-+
-+	ret = clk_prepare_enable(qpcs_mii->rx_clk);
-+	if (ret) {
-+		dev_err(qpcs->dev, "Failed to enable MII %d RX clock\n", index);
-+		return ret;
-+	}
-+
-+	ret = clk_prepare_enable(qpcs_mii->tx_clk);
-+	if (ret) {
-+		/* This is a fatal event since phylink does not support unwinding
-+		 * the state back for this error. So, we only report the error
-+		 * and do not disable the clocks.
-+		 */
-+		dev_err(qpcs->dev, "Failed to enable MII %d TX clock\n", index);
-+		return ret;
-+	}
-+
-+	return 0;
++	return ipq_pcs_mii_clks_enable(phylink_pcs_to_qpcs_mii(pcs));
 +}
 +
 +static void ipq_pcs_disable(struct phylink_pcs *pcs)
 +{
-+	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
-+
-+	clk_disable_unprepare(qpcs_mii->rx_clk);
-+	clk_disable_unprepare(qpcs_mii->tx_clk);
++	ipq_pcs_mii_clks_disable(phylink_pcs_to_qpcs_mii(pcs));
 +}
 +
 +static void ipq_pcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
@@ -1447,15 +1482,7 @@ new file mode 100644
 +
 +static unsigned long ipq_pcs_clk_rate_get(struct ipq_pcs *qpcs)
 +{
-+	switch (qpcs->interface) {
-+	case PHY_INTERFACE_MODE_2500BASEX:
-+	case PHY_INTERFACE_MODE_USXGMII:
-+	case PHY_INTERFACE_MODE_10G_QXGMII:
-+	case PHY_INTERFACE_MODE_10GBASER:
-+		return 312500000;
-+	default:
-+		return 125000000;
-+	}
++	return READ_ONCE(qpcs->clock_rate);
 +}
 +
 +/* Return clock rate for the RX clock supplied to NSSCC
@@ -1530,6 +1557,8 @@ new file mode 100644
 +	struct clk_init_data init = { };
 +	int ret;
 +
++	/* The unconfigured provider starts in the 125 MHz personality. */
++	WRITE_ONCE(qpcs->clock_rate, 125000000);
 +	init.ops = &ipq_pcs_rx_clk_ops;
 +	init.name = devm_kasprintf(qpcs->dev, GFP_KERNEL, "%s::rx_clk",
 +				   dev_name(qpcs->dev));
@@ -1746,6 +1775,7 @@ new file mode 100644
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION("Qualcomm IPQ9574 PCS driver");
 +MODULE_AUTHOR("Lei Wei <quic_leiwei@quicinc.com>");
+
 diff --git a/include/dt-bindings/net/qcom,ipq9574-pcs.h b/include/dt-bindings/net/qcom,ipq9574-pcs.h
 new file mode 100644
 --- /dev/null
