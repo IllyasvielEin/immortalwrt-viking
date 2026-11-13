@@ -42,7 +42,9 @@ APPSBLENV 分区为 512 KiB，擦除块 128 KiB，环境工具搜索范围为两
 ## 构建与软件选择
 
 工作流 `.github/workflows/build-rc01.yml` 使用手动 `workflow_dispatch`。
-目标是只构建上述布局；默认版与 `include_dae=true` 是同一布局的两种软件变体。
+目标是只构建上述布局；Actions 默认 `include_dae=true`，包含 dae 与 daede UI。
+可显式选择 `include_dae=false` 构建不含 dae 的同布局变体。本地准备脚本仍须显式设置
+`RC01_WITH_DAE=true` 才包含 dae。
 工作流不执行设备刷写。
 
 `software_updates` 默认 `latest`：解析 packages、luci、routing、nikki、daede 的最新 HEAD，
@@ -91,7 +93,7 @@ feed commit、归档和配方摘要。生成目录 `.rc01-sources/` 不提交版
 准备脚本重建 feeds 链接、`feeds.conf`、`.config` 和 RC01 的 `files` 覆盖文件；
 源配置放在 `defconfig/qualcommbe-rc01.config` 与 `config/rc01/`。
 
-默认包含 Nikki/Mihomo、WireGuard、Tailscale Community、中文 LuCI、CA 证书、tcpdump、
+基础软件包含 Nikki/Mihomo、WireGuard、Tailscale Community、中文 LuCI、CA 证书、tcpdump、
 htop 和 zram。dae 变体增加 dae/luci-app-daede、实际内核 BTF、cgroup/BPF 及 TC/XDP 依赖，
 保留 Nikki；两者首启均不接管流量。核心与 LuCI 随固件重编，避免在线覆盖 ROM 核心占用 overlay。
 

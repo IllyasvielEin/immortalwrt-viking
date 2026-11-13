@@ -20,7 +20,7 @@ on:
         description: 'Experimental dae + daede UI; exact version in this build source lock (runtime unverified)'
         type: boolean
         required: true
-        default: false
+        default: true
       go_bootstrap:
         description: 'Go bootstrap: verified official binary or full source chain'
         type: choice
