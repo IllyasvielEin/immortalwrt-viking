@@ -68,7 +68,7 @@
     "three PPE DS nodes, identity DMA and quarantine"
   ],
   "local_adjustments": [
-    "PCS interface cache updated only after successful mode setup",
+    "PCS output rate published before CCF recalculation, independently of the successful interface-mode cache; failed shared setup retries and paired MII clock ownership are checked",
     "6.18.60 duplicate backports removed and affected contexts refreshed",
     "RC01-only Q6 removal and WCSS disable/unbind; retain existing tzapp 0x49b00000/6MiB and memory mode",
     "Firmware 02903 paired with d7 DS guard: exact fw_version, substring build ID; exact-ID contract remains unresolved; nonmatching FW stays CPU",

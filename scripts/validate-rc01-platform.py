@@ -68,14 +68,23 @@ def verify_kernel(kernel: Path) -> dict:
         require(f"kfree_rcu(rcu_dereference_protected({pointer}, 1), rcu);" in body,
                 f"CVE-2026-98432 fix missing in {name}")
     nand = verify_nand(kernel)
-    pcs = function((kernel / "drivers/net/pcs/pcs-qcom-ipq9574.c").read_text(), "ipq_pcs_config_mode")
+    pcs_source = (kernel / "drivers/net/pcs/pcs-qcom-ipq9574.c").read_text()
+    pcs = function(pcs_source, "ipq_pcs_config_mode")
     require(pcs.count("qpcs->interface = interface;") == 1, "invalid PCS state commit")
     require(pcs.index("clk_set_rate(qpcs->qpcs_mii[0]->rx_clk, rate)") <
             pcs.index("reset_control_deassert(qpcs->xpcs_rstc)") <
             pcs.index("qpcs->interface = interface;") < pcs.index("err_clk:"),
             "PCS clocks/reset/state commit order changed")
+    require(pcs.index("WRITE_ONCE(qpcs->clock_rate, rate)") <
+            pcs.index("clk_set_rate(qpcs->rx_hw.clk, rate)"),
+            "PCS parent rate must be published before CCF recalculation")
+    require("READ_ONCE(qpcs->clock_rate)" in function(pcs_source, "ipq_pcs_clk_rate_get"),
+            "PCS clock provider must not depend on the late successful-mode cache")
+    require(pcs.index("qpcs->interface = PHY_INTERFACE_MODE_NA") <
+            pcs.index("reset_control_assert(qpcs->xpcs_rstc)"),
+            "PCS reconfiguration must invalidate the previous mode before reset")
     return {"kernel": "6.18.60", "cve_2026_98432_destructors": 2,
-            "pcs_state_commit": "after-success"} | nand
+            "pcs_state_commit": "after-success", "pcs_parent_clock": "published-before-CCF"} | nand
 
 
 def verify_wireless(wireless: Path) -> dict:
