@@ -609,14 +609,16 @@ class FanGuardTrace(unittest.TestCase):
         script = r'''
         vm() { while read -r k v _; do [ "$k" != VmData: ] || echo "$v"; done < /proc/$$/status; }
         . "$1"; rc01_fan_identity; failures=0 latched=0
-        published=0 i=0
-        while [ $i -lt 5000 ]; do
+        # Count actual publisher starts: busy reports are intentionally dropped,
+        # so a fixed number of calls depends on host scheduling and I/O speed.
+        published=0 i=0 early=
+        while [ "$published" -lt 3000 ] && [ "$i" -lt 200000 ]; do
             previous=$RC01_FAN_PUBLISHER; rc01_fan_report monitoring 1
             [ "$RC01_FAN_PUBLISHER" = "$previous" ] || published=$((published + 1))
             cat /dev/null; i=$((i + 1))
-            [ $i -ne 1000 ] || early=$(vm)
+            if [ "$published" -ge 500 ] && [ -z "$early" ]; then early=$(vm); fi
         done
-        echo "$published $early $(vm)"
+        echo "$published ${early:-0} $(vm)"
         '''
         wrapper = (f'"$BUSYBOX" mkdir -p "$RC01_PROC/$$" && printf "%s (sh) S 1 {" ".join(["0"] * 17)} 1 0\\n" "$$" '
                    f'> "$RC01_PROC/$$/stat"; ' + script)
@@ -628,7 +630,8 @@ class FanGuardTrace(unittest.TestCase):
         out, err = process.communicate(timeout=120)
         self.assertEqual(process.returncode, 0, err)
         published, early, late = map(int, out.split())
-        self.assertGreater(published, 2000)
+        self.assertEqual(published, 3000, (published, early, late))
+        self.assertGreater(early, 0)
         # About 44 bytes per unreleased job would add well over 100 kB here.
         self.assertLess(late - early, 48, (published, early, late))
 

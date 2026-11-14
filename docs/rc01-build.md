@@ -70,6 +70,12 @@ python3 -B scripts/verify-rc01-images.py bin/targets/qualcommbe/ipq95xx
 CI 将同一 `BUSYBOX` 绝对路径传给构建前及构建后的回归；系统 BusyBox 的 ash 内建 sleep 可能绕过测试桩。
 构建前允许缺少尚未构建的源码和工具而跳过对应用例，最终回归仍须零失败、零错误、零跳过。
 
+风扇后台发布的内存回归按实际启动的发布次数采样：第500次取基线，第3000次比较，
+保留48 KiB增长门槛及120秒执行超时。发布忙时会主动丢弃新请求，不能以固定调用次数
+推断已执行的发布数量。CI 43559304664 曾因5000次调用只启动1959次发布而在样本数门槛失败；
+这不是内存增长断言失败。修正测试后，延迟发布的正例通过，移除后台任务回收wait的负例
+因增长144 KiB被拒绝。此类最终原生验收失败不能绕过 `verify-rc01.yml` 的原构建验收门槛。
+
 不做完整构建时，`sh scripts/rc01-verify-inputs.sh` 会按本树固定来源准备打过补丁的 Linux/backports 源码、
 BusyBox、锁定的 LuCI 和 host ucode。工作目录仅保存生成物，每次只复用已校验的下载归档，重新准备源码与工具；
 然后执行 `. build_dir/rc01-verify-inputs/env.sh` 再运行单测和
