@@ -1,0 +1,35 @@
+Subject: [PATCH] net: ppe: disable unsafe bridge TX forwarding offload
+
+The bridge marks known unicast as well as flooded traffic for TX forwarding
+offload. EDMA treats either mark as a request for bitmap replication, sending
+FDB-hit unicast to unrelated ports. Multicast MDB destinations can likewise
+be replaced by the generic flood bitmap.
+
+Keep switchdev bridge registration and hardware forwarding, but decline TX
+forwarding offload for every port. Linux must retain per-port cloning for
+unknown unicast and multicast; merely ignoring the mark in EDMA would lose
+copies already suppressed by the bridge's hardware-domain tracking.
+
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
+@@ -894,15 +894,15 @@
+ 
+ 	ppe_bridge_port_offload_mark_set(dev, true);
+ 
+-	/* On a VLAN-unaware bridge every replication target receives
+-	 * the identical frame, so the bridge may hand over a single
+-	 * copy of flooded packets. VLAN-aware bridges keep cloning in
+-	 * software, their egress tagging differs per port.
++	/* offload_fwd_mark also marks FDB-hit unicast, not just flooding.
++	 * EDMA cannot distinguish those cases and would send known unicast
++	 * to the entire UC flood bitmap. Keep hardware bridge offload, but
++	 * let the bridge select and clone each software TX destination.
+ 	 */
+ 	ret = switchdev_bridge_port_offload(dev, dev, pb,
+ 					    &pb->switchdev_nb,
+ 					    &pb->switchdev_blocking_nb,
+-					    !vlan_aware, extack);
++					    false, extack);
+ 	if (ret)
+ 		goto err_offload;
+ 
