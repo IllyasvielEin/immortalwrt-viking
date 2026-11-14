@@ -21,6 +21,7 @@
 | 匿名开发整合历史 | [2026-11-12 整合记录](docs/rc01-modules/local-rebase-integration-2026-11-12.md) |
 | 构建及产物复验实现 | [build-rc01.yml](.github/workflows/build-rc01.yml)、[verify-rc01.yml](.github/workflows/verify-rc01.yml) |
 | 千兆收包错误、PCS时钟根因与修复验收 | [千兆诊断](docs/rc01-gigabit-diagnosis.md) |
+| 已知单播错误复制、桥 TX offload 修复及回归边界 | [TX复制修复](docs/rc01-tx-flood-fix.md) |
 
 ## 更新约定与验收层次
 
