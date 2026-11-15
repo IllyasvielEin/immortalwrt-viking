@@ -336,7 +336,6 @@ jobs:
             echo "mihomo=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/mihomo-meta/Makefile)"
             echo "tailscale=$(sed -n 's/^PKG_VERSION:=//p' feeds/packages/net/tailscale/Makefile)"
             echo "nikki=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/nikki/Makefile)"
-            echo "dnsmasq=2.93-r10@10fbc39cf57220eb93f61ce282d7561750f8d29d"
             echo "rc01_cma_mib=320"
             echo "qcn9274_hw1_mlo=false"
             echo "qcn9274_hw1_ds_abi=0x10098b57/WBE.1.0-02903"

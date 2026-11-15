@@ -210,6 +210,7 @@ def main():
             "kernel_source_sha256": result["kernel"]["sha256"],
             "mac80211": f'{result["wireless"]["version"]}-r{result["wireless"]["release"]} ({proof["mode"]})',
             "ipq_wifi": f'{result["software"]["ipq-wifi"]["release"]}@{result["software"]["ipq-wifi"]["source_commit"]}',
+            "dnsmasq": f'{result["software"]["dnsmasq"]["version"]}-r{result["software"]["dnsmasq"]["release"]}@{result["software"]["dnsmasq"]["zero_length_fix"]}',
         }
         for key, value in values.items():
             print(f"{key}={value}")

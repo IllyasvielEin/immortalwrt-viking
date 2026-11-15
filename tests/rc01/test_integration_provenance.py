@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -105,3 +106,25 @@ class IntegrationProvenance(unittest.TestCase):
     def test_legacy_selection_stays_readable_without_merge_claim(self):
         result = provenance.integration_metadata({"schema": 1}, self.root)
         self.assertFalse(result["ancestry_claim"])
+
+
+class MetadataSummary(unittest.TestCase):
+    def test_dnsmasq_summary_tracks_the_structured_build_record(self):
+        with tempfile.TemporaryDirectory(prefix="rc01-summary-") as temporary:
+            path = Path(temporary) / "metadata.json"
+            for release in (12, 13):
+                record = {
+                    "integration_proof": {"mode": "upstream-merges-with-local-overrides",
+                                          "ancestry_verified": True},
+                    "kernel": {"version": "6.18.60", "sha256": "a" * 64},
+                    "wireless": {"version": "7.2", "release": 51},
+                    "software": {"ipq-wifi": {"release": 7, "source_commit": "b" * 40},
+                                 "dnsmasq": {"version": "2.93", "release": release,
+                                             "zero_length_fix": "c" * 40}}}
+                path.write_text(json.dumps(record))
+                output = subprocess.check_output(
+                    [sys.executable, "-B", str(ROOT / "scripts/rc01-source-metadata.py"),
+                     "--summary", str(path)], text=True)
+                values = dict(line.split("=", 1) for line in output.splitlines())
+                self.assertEqual(values["dnsmasq"], "2.93-r" + str(release) + "@" + "c" * 40)
+                self.assertNotIn("dnsmasq=", (ROOT / ".github/workflows/build-rc01.yml").read_text())
