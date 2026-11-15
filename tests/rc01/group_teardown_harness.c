@@ -552,6 +552,23 @@ static void probe_after_exit(void)
 	assert(all_ab[1]->qmi.handle_initialized && all_ab[1]->soc_created && !power_downs[1]);
 	ath12k_core_deinit(all_ab[1]);assert_all_clean();assert(group_free_count==2);free_all();
 }
+static void reverse_probe_order(void)
+{
+	group_setup(3);
+	const int order[] = {2, 0, 1};
+	for (int n = 0; n < 3; n++) {
+		int i = order[n];
+		assert(!ath12k_core_init(all_ab[i]));
+		assert(all_ab[i]->device_id == i);
+		assert(current_group->num_probed == n + 1);
+		assert(current_group->ab[i] == all_ab[i]);
+		assert(all_ab[i]->soc_created == (n == 2));
+	}
+	for (int i = 0; i < 3; i++) assert(all_ab[i]->soc_created);
+	for (int n = 0; n < 3; n++) ath12k_core_deinit(all_ab[order[n]]);
+	assert_all_clean(); assert(!notifiers && unassigns == 3); free_all();
+}
+
 int main(int argc,char **argv)
 {
 	assert(argc==2);
@@ -568,6 +585,7 @@ int main(int argc,char **argv)
 	else if(!strcmp(argv[1],"probe-found-remove"))probe_remove_interleaving(2);
 	else if(!strcmp(argv[1],"remove-waiters"))remove_waiters();
 	else if(!strcmp(argv[1],"probe-after-exit"))probe_after_exit();
+	else if(!strcmp(argv[1],"reverse-probe-order"))reverse_probe_order();
 	else assert(!"unknown scenario");
 	return 0;
 }

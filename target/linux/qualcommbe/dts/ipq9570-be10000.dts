@@ -602,6 +602,8 @@
 };
 
 &wifi1 {
+	/* Preserve RC01 firmware capacity despite the shared mode-1 default. */
+	/delete-property/ qcom,ath12k-fw-memory-mode;
 	/* Use slab RX buffers without changing firmware or host capacity. */
 	qcom,rx-skb-slab;
 	qcom,board-id = <1>;
@@ -613,6 +615,8 @@
 };
 
 &wifi2 {
+	/* Preserve RC01 firmware capacity despite the shared mode-1 default. */
+	/delete-property/ qcom,ath12k-fw-memory-mode;
 	/* Use slab RX buffers without changing firmware or host capacity. */
 	qcom,rx-skb-slab;
 	qcom,board-id = <4>;
@@ -624,6 +628,8 @@
 };
 
 &wifi3 {
+	/* Preserve RC01 firmware capacity despite the shared mode-1 default. */
+	/delete-property/ qcom,ath12k-fw-memory-mode;
 	/* Use slab RX buffers without changing firmware or host capacity. */
 	qcom,rx-skb-slab;
 	qcom,board-id = <2>;

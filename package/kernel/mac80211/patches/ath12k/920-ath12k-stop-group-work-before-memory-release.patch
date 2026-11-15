@@ -1,20 +1,11 @@
-From: RC01 maintainers
-Subject: [PATCH] wifi: ath12k: serialize group lifetime and locked memory release
+Subject: [PATCH] wifi: ath12k: serialize group lifecycle and stop QMI before release
 
-Close local review R1/R2 in the 352/914 integration. Initialize QMI work
-once at core_alloc, including devices waiting for group partners. Reuse
-the existing process-context lifecycle mutex from lookup/assign through
-create and from stop through last member removal/list deletion/free.
-Workers never acquire it; drop worker-owned ag/core locks across every
-cancel/release wait. This serializes rare independent group init/remove.
+Carry the RC01 lifecycle delta from 1f23a593fcbf775a849c7cb9f3709f8a899d7c99
+onto the regrouped upstream code. Preserve stable WSI device IDs and endpoint
+checks. Initialize work at allocation, reject late events, stop work outside
+group/core locks, and release memory under the group lock. Process lifecycle
+serialization covers publication through removal; workers never take it.
 
-Stop QMI/recovery on every member before locked DMA/MLO borrower release.
-Partial create failure uses the same path after releasing ag/core locks.
-Track partial handle/workqueue/power-up ownership and reject late events.
-The allocator ABI, firmware profile, ring sizes and HW1 policy stay intact.
-
-SPDX-License-Identifier: BSD-3-Clause-Clear
----
 --- a/drivers/net/wireless/ath/ath12k/core.c
 +++ b/drivers/net/wireless/ath/ath12k/core.c
 @@ -35,7 +35,12 @@
@@ -84,7 +75,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  	ath12k_qmi_deinit_service(ab);
  }
  
-@@ -1987,13 +1999,14 @@
+@@ -1975,13 +1987,14 @@
  
  static void ath12k_core_hw_group_free(struct ath12k_hw_group *ag)
  {
@@ -104,7 +95,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  }
  
  static struct ath12k_hw_group *ath12k_core_hw_group_find_by_dt(struct ath12k_base *ab)
-@@ -2177,7 +2190,11 @@
+@@ -2189,7 +2202,11 @@
  	ath12k_dbg(ab, ATH12K_DBG_BOOT, "single device added to hardware group\n");
  
  exit:
@@ -117,7 +108,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  		ath12k_warn(ab, "unable to add new device to group, max limit reached\n");
  		goto invalid_group;
  	}
-@@ -2191,44 +2208,39 @@
+@@ -2204,44 +2221,39 @@
  	ath12k_dbg(ab, ATH12K_DBG_BOOT, "wsi group-id %d num-devices %d index %d",
  		   ag->id, ag->num_devices, wsi->index);
  
@@ -174,7 +165,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  		ath12k_core_hw_group_free(ag);
  }
  
-@@ -2239,14 +2251,37 @@
+@@ -2252,14 +2264,37 @@
  
  	if (WARN_ON(!ag))
  		return;
@@ -215,7 +206,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  }
  
  void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *ag)
-@@ -2257,10 +2292,12 @@
+@@ -2270,10 +2305,12 @@
  	if (!ag)
  		return;
  
@@ -228,7 +219,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  		return;
  	}
  
-@@ -2274,11 +2311,13 @@
+@@ -2287,11 +2324,13 @@
  			continue;
  
  		mutex_lock(&ab->core_lock);
@@ -243,7 +234,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  }
  
  static int ath12k_core_hw_group_create(struct ath12k_hw_group *ag)
-@@ -2287,38 +2326,23 @@
+@@ -2300,38 +2339,23 @@
  	int i, ret;
  
  	lockdep_assert_held(&ag->mutex);
@@ -289,7 +280,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  }
  
  void ath12k_core_hw_group_set_mlo_capable(struct ath12k_hw_group *ag)
-@@ -2389,47 +2413,56 @@
+@@ -2402,47 +2426,56 @@
  		ath12k_warn(ab, "failed to register panic handler: %d\n", ret);
  
  	mutex_lock(&ath12k_hw_group_mutex);
@@ -366,7 +357,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  	ath12k_core_panic_notifier_unregister(ab);
  }
  
-@@ -2471,6 +2504,7 @@
+@@ -2484,6 +2517,7 @@
  
  	init_waitqueue_head(&ab->peer_mapping_wq);
  	init_waitqueue_head(&ab->wmi_ab.tx_credits_wq);
@@ -385,7 +376,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  	struct ath12k_wmi_base wmi_ab;
  	struct completion fw_ready;
  	u8 device_id;
-@@ -1328,7 +1330,6 @@
+@@ -1327,7 +1329,6 @@
  int ath12k_core_resume(struct ath12k_base *ab);
  int ath12k_core_suspend(struct ath12k_base *ab);
  int ath12k_core_suspend_late(struct ath12k_base *ab);
@@ -395,7 +386,492 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  const struct firmware *ath12k_core_firmware_request(struct ath12k_base *ab,
 --- a/drivers/net/wireless/ath/ath12k/qmi.c
 +++ b/drivers/net/wireless/ath/ath12k/qmi.c
-@@ -4243,10 +4243,15 @@
+@@ -2653,303 +2653,6 @@
+ 	return ret;
+ }
+ 
+-/* clang stack usage explodes if this is inlined */
+-static noinline_for_stack
+-int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
+-{
+-	struct qmi_wlanfw_host_cap_req_msg_v01 req = {};
+-	struct qmi_wlanfw_host_cap_resp_msg_v01 resp = {};
+-	struct qmi_txn txn;
+-	int ret = 0;
+-
+-	req.num_clients_valid = 1;
+-	req.num_clients = 1;
+-	req.mem_cfg_mode = ab->qmi.target_mem_mode;
+-	req.mem_cfg_mode_valid = 1;
+-	req.bdf_support_valid = 1;
+-	req.bdf_support = 1;
+-
+-	if (ab->hw_params->fw.m3_loader == ath12k_m3_fw_loader_driver) {
+-		req.m3_support_valid = 1;
+-		req.m3_support = 1;
+-		req.m3_cache_support_valid = 1;
+-		req.m3_cache_support = 1;
+-	}
+-
+-	req.cal_done_valid = 1;
+-	req.cal_done = ab->qmi.cal_done;
+-
+-	if (ab->hw_params->qmi_cnss_feature_bitmap) {
+-		req.feature_list_valid = 1;
+-		req.feature_list = ab->hw_params->qmi_cnss_feature_bitmap;
+-	}
+-
+-	/* BRINGUP: here we are piggybacking a lot of stuff using
+-	 * internal_sleep_clock, should it be split?
+-	 */
+-	if (ab->hw_params->internal_sleep_clock) {
+-		req.nm_modem_valid = 1;
+-
+-		/* Notify firmware that this is non-qualcomm platform. */
+-		req.nm_modem |= HOST_CSTATE_BIT;
+-
+-		/* Notify firmware about the sleep clock selection,
+-		 * nm_modem_bit[1] is used for this purpose. Host driver on
+-		 * non-qualcomm platforms should select internal sleep
+-		 * clock.
+-		 */
+-		req.nm_modem |= SLEEP_CLOCK_SELECT_INTERNAL_BIT;
+-		req.nm_modem |= PLATFORM_CAP_PCIE_GLOBAL_RESET;
+-	}
+-
+-	ret = ath12k_host_cap_parse_mlo(ab, &req);
+-	if (ret < 0)
+-		goto out;
+-
+-	ret = qmi_txn_init(&ab->qmi.handle, &txn,
+-			   qmi_wlanfw_host_cap_resp_msg_v01_ei, &resp);
+-	if (ret < 0)
+-		goto out;
+-
+-	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
+-			       QMI_WLANFW_HOST_CAP_REQ_V01,
+-			       QMI_WLANFW_HOST_CAP_REQ_MSG_V01_MAX_LEN,
+-			       qmi_wlanfw_host_cap_req_msg_v01_ei, &req);
+-	if (ret < 0) {
+-		qmi_txn_cancel(&txn);
+-		ath12k_warn(ab, "Failed to send host capability request,err = %d\n", ret);
+-		goto out;
+-	}
+-
+-	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
+-	if (ret < 0)
+-		goto out;
+-
+-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+-		ath12k_warn(ab, "Host capability request failed, result: %d, err: %d\n",
+-			    resp.resp.result, resp.resp.error);
+-		ret = -EINVAL;
+-		goto out;
+-	}
+-
+-out:
+-	return ret;
+-}
+-
+-static void ath12k_qmi_phy_cap_send(struct ath12k_base *ab)
+-{
+-	struct qmi_wlanfw_phy_cap_req_msg_v01 req = {};
+-	struct qmi_wlanfw_phy_cap_resp_msg_v01 resp = {};
+-	u32 num_radios;
+-	struct qmi_txn txn;
+-	int ret;
+-
+-	ret = qmi_txn_init(&ab->qmi.handle, &txn,
+-			   qmi_wlanfw_phy_cap_resp_msg_v01_ei, &resp);
+-	if (ret < 0)
+-		goto out;
+-
+-	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
+-			       QMI_WLANFW_PHY_CAP_REQ_V01,
+-			       QMI_WLANFW_PHY_CAP_REQ_MSG_V01_MAX_LEN,
+-			       qmi_wlanfw_phy_cap_req_msg_v01_ei, &req);
+-	if (ret < 0) {
+-		qmi_txn_cancel(&txn);
+-		ath12k_warn(ab, "failed to send phy capability request: %d\n", ret);
+-		goto out;
+-	}
+-
+-	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
+-	if (ret < 0)
+-		goto out;
+-
+-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+-		ret = -EOPNOTSUPP;
+-		goto out;
+-	}
+-
+-	if (resp.single_chip_mlo_support_valid && resp.single_chip_mlo_support)
+-		ab->single_chip_mlo_support = true;
+-
+-	if (!resp.num_phy_valid) {
+-		ret = -ENODATA;
+-		goto out;
+-	}
+-
+-	ab->qmi.num_radios = resp.num_phy;
+-	if (!of_property_read_u32(ab->dev->of_node, "qcom,num-radios",
+-				  &num_radios) && num_radios) {
+-		num_radios = min_t(u32, num_radios, ab->hw_params->max_radios);
+-		ab->qmi.num_radios = min_t(u8, ab->qmi.num_radios, num_radios);
+-		ath12k_dbg(ab, ATH12K_DBG_QMI, "phy capability limited num_phy %d\n",
+-			   ab->qmi.num_radios);
+-	}
+-
+-	ath12k_dbg(ab, ATH12K_DBG_QMI,
+-		   "phy capability resp valid %d single_chip_mlo_support %d valid %d num_phy %d valid %d board_id %d\n",
+-		   resp.single_chip_mlo_support_valid, resp.single_chip_mlo_support,
+-		   resp.num_phy_valid, resp.num_phy,
+-		   resp.board_id_valid, resp.board_id);
+-
+-	return;
+-
+-out:
+-	/* If PHY capability not advertised then rely on default num link */
+-	ab->qmi.num_radios = ab->hw_params->def_num_link;
+-
+-	ath12k_dbg(ab, ATH12K_DBG_QMI,
+-		   "no valid response from PHY capability, choose default num_phy %d\n",
+-		   ab->qmi.num_radios);
+-}
+-
+-static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
+-{
+-	struct qmi_wlanfw_ind_register_req_msg_v01 *req;
+-	struct qmi_wlanfw_ind_register_resp_msg_v01 *resp;
+-	struct qmi_handle *handle = &ab->qmi.handle;
+-	struct qmi_txn txn;
+-	int ret;
+-
+-	req = kzalloc_obj(*req);
+-	if (!req)
+-		return -ENOMEM;
+-
+-	resp = kzalloc_obj(*resp);
+-	if (!resp) {
+-		ret = -ENOMEM;
+-		goto resp_out;
+-	}
+-
+-	req->client_id_valid = 1;
+-	req->client_id = QMI_WLANFW_CLIENT_ID;
+-	req->fw_ready_enable_valid = 1;
+-	req->fw_ready_enable = 1;
+-	req->request_mem_enable_valid = 1;
+-	req->request_mem_enable = 1;
+-	req->fw_mem_ready_enable_valid = 1;
+-	req->fw_mem_ready_enable = 1;
+-	req->cal_done_enable_valid = 1;
+-	req->cal_done_enable = 1;
+-	req->fw_init_done_enable_valid = 1;
+-	req->fw_init_done_enable = 1;
+-
+-	req->pin_connect_result_enable_valid = 0;
+-	req->pin_connect_result_enable = 0;
+-
+-	ret = qmi_txn_init(handle, &txn,
+-			   qmi_wlanfw_ind_register_resp_msg_v01_ei, resp);
+-	if (ret < 0)
+-		goto out;
+-
+-	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
+-			       QMI_WLANFW_IND_REGISTER_REQ_V01,
+-			       QMI_WLANFW_IND_REGISTER_REQ_MSG_V01_MAX_LEN,
+-			       qmi_wlanfw_ind_register_req_msg_v01_ei, req);
+-	if (ret < 0) {
+-		qmi_txn_cancel(&txn);
+-		ath12k_warn(ab, "Failed to send indication register request, err = %d\n",
+-			    ret);
+-		goto out;
+-	}
+-
+-	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
+-	if (ret < 0) {
+-		ath12k_warn(ab, "failed to register fw indication %d\n", ret);
+-		goto out;
+-	}
+-
+-	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+-		ath12k_warn(ab, "FW Ind register request failed, result: %d, err: %d\n",
+-			    resp->resp.result, resp->resp.error);
+-		ret = -EINVAL;
+-		goto out;
+-	}
+-
+-out:
+-	kfree(resp);
+-resp_out:
+-	kfree(req);
+-	return ret;
+-}
+-
+-/* clang stack usage explodes if this is inlined */
+-static noinline_for_stack
+-int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
+-{
+-	struct qmi_wlanfw_respond_mem_req_msg_v01 *req;
+-	struct qmi_wlanfw_respond_mem_resp_msg_v01 resp = {};
+-	struct qmi_txn txn;
+-	int ret = 0, i;
+-	bool delayed;
+-
+-	req = kzalloc_obj(*req);
+-	if (!req)
+-		return -ENOMEM;
+-
+-	/* Some targets by default request a block of big contiguous
+-	 * DMA memory, it's hard to allocate from kernel. So host returns
+-	 * failure to firmware and firmware then request multiple blocks of
+-	 * small chunk size memory.
+-	 */
+-	if (!test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags) &&
+-	    ab->qmi.target_mem_delayed) {
+-		delayed = true;
+-		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi delays mem_request %d\n",
+-			   ab->qmi.mem_seg_count);
+-	} else {
+-		delayed = false;
+-		req->mem_seg_len = ab->qmi.mem_seg_count;
+-		for (i = 0; i < req->mem_seg_len ; i++) {
+-			req->mem_seg[i].addr = ab->qmi.target_mem[i].paddr;
+-			req->mem_seg[i].size = ab->qmi.target_mem[i].size;
+-			req->mem_seg[i].type = ab->qmi.target_mem[i].type;
+-			ath12k_dbg(ab, ATH12K_DBG_QMI,
+-				   "qmi req mem_seg[%d] %pad %u %u\n", i,
+-				   &ab->qmi.target_mem[i].paddr,
+-				   ab->qmi.target_mem[i].size,
+-				   ab->qmi.target_mem[i].type);
+-		}
+-	}
+-
+-	ret = qmi_txn_init(&ab->qmi.handle, &txn,
+-			   qmi_wlanfw_respond_mem_resp_msg_v01_ei, &resp);
+-	if (ret < 0)
+-		goto out;
+-
+-	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
+-			       QMI_WLANFW_RESPOND_MEM_REQ_V01,
+-			       QMI_WLANFW_RESPOND_MEM_REQ_MSG_V01_MAX_LEN,
+-			       qmi_wlanfw_respond_mem_req_msg_v01_ei, req);
+-	if (ret < 0) {
+-		qmi_txn_cancel(&txn);
+-		ath12k_warn(ab, "qmi failed to respond memory request, err = %d\n",
+-			    ret);
+-		goto out;
+-	}
+-
+-	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
+-	if (ret < 0) {
+-		ath12k_warn(ab, "qmi failed memory request, err = %d\n", ret);
+-		goto out;
+-	}
+-
+-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+-		/* the error response is expected when
+-		 * target_mem_delayed is true.
+-		 */
+-		if (delayed && resp.resp.error == 0)
+-			goto out;
+-
+-		ath12k_warn(ab, "Respond mem req failed, result: %d, err: %d\n",
+-			    resp.resp.result, resp.resp.error);
+-		ret = -EINVAL;
+-		goto out;
+-	}
+-out:
+-	kfree(req);
+-	return ret;
+-}
+-
+ void ath12k_qmi_reset_mlo_mem(struct ath12k_hw_group *ag)
+ {
+ 	struct target_mem_chunk *mlo_chunk;
+@@ -2987,7 +2690,7 @@
+ 
+ 	lockdep_assert_held(&ag->mutex);
+ 
+-	if (!ag->mlo_mem.init_done || ag->num_started)
++	if (!ag->mlo_mem.init_done || ag->num_started || ag->mlo_mem.num_users)
+ 		return;
+ 
+ 	if (ag->mlo_mem.fixed_mem) {
+@@ -3064,8 +2767,11 @@
+ 			ath12k_qmi_unmap_fixed_mem(ab, &ab->qmi.fixed_mem[i]);
+ 	}
+ 
+-	for (i = ab->qmi.mem_seg_count; i < ARRAY_SIZE(ab->qmi.target_mem); i++)
++	for (i = ab->qmi.mem_seg_count; i < ARRAY_SIZE(ab->qmi.target_mem); i++) {
+ 		ath12k_qmi_free_dma_chunk(ab, &ab->qmi.target_mem[i]);
++		ab->qmi.target_mem[i].v.addr = NULL;
++		ab->qmi.target_mem[i].paddr = 0;
++	}
+ }
+ 
+ static int ath12k_qmi_map_fixed_mem(struct ath12k_base *ab, int idx,
+@@ -3102,10 +2808,87 @@
+ 	return 0;
+ }
+ 
+-static void ath12k_qmi_free_target_mem_chunk(struct ath12k_base *ab)
++/* A firmware can already use an MLO view before core_start increments
++ * num_started. Keep that borrower distinct from the core-start lifetime.
++ */
++static void ath12k_qmi_put_mlo_mem_ref(struct ath12k_base *ab)
++{
++	struct ath12k_hw_group *ag = ab->ag;
++
++	lockdep_assert_held(&ag->mutex);
++	if (!ab->qmi.mlo_mem_ref)
++		return;
++
++	ab->qmi.mlo_mem_ref = false;
++	if (WARN_ON_ONCE(!ag->mlo_mem.num_users))
++		return;
++	ag->mlo_mem.num_users--;
++}
++
++static void ath12k_qmi_get_mlo_mem_ref(struct ath12k_base *ab)
++{
++	struct ath12k_hw_group *ag = ab->ag;
++
++	lockdep_assert_held(&ag->mutex);
++	if (ab->qmi.mlo_mem_ref)
++		return;
++
++	ab->qmi.mlo_mem_ref = true;
++	ag->mlo_mem.num_users++;
++}
++
++static void ath12k_qmi_release_mlo_mem(struct ath12k_base *ab)
+ {
+ 	struct ath12k_hw_group *ag = ab->ag;
+ 	struct target_mem_chunk unused = {};
++	int i;
++
++	lockdep_assert_held(&ag->mutex);
++	if (!ag->mlo_mem.init_done || ag->num_started || ag->mlo_mem.num_users)
++		return;
++
++	for (i = 0; i < ARRAY_SIZE(ag->mlo_mem.chunk); i++)
++		ath12k_qmi_free_mlo_mem_chunk(ab, &unused, i);
++	ag->mlo_mem.init_done = false;
++	ag->mlo_mem.mlo_mem_size = 0;
++	ag->mlo_mem.fixed_mem = false;
++	put_device(ag->mlo_mem.alloc_dev);
++	ag->mlo_mem.alloc_dev = NULL;
++}
++
++static int ath12k_qmi_begin_mlo_request(struct ath12k_base *ab)
++{
++	struct ath12k_hw_group *ag = ab->ag;
++	u32 total_size = 0;
++	int i;
++
++	lockdep_assert_held(&ag->mutex);
++	for (i = 0; i < ab->qmi.mem_seg_count; i++) {
++		if (ab->qmi.target_mem[i].type != MLO_GLOBAL_MEM_REGION_TYPE)
++			continue;
++		if (ab->qmi.target_mem[i].size > U32_MAX - total_size)
++			return -EINVAL;
++		total_size += ab->qmi.target_mem[i].size;
++	}
++	if (total_size > INT_MAX)
++		return -EINVAL;
++
++	/* This request replaces this device's previous views. A failed request
++	 * drops only this borrower; another partner's pre-start views stay live.
++	 */
++	ath12k_qmi_put_mlo_mem_ref(ab);
++	if (ag->mlo_mem.mlo_mem_size && total_size != ag->mlo_mem.mlo_mem_size) {
++		if (ag->mlo_mem.num_users || ag->num_started)
++			return -EINVAL;
++		ath12k_qmi_release_mlo_mem(ab);
++	}
++
++	return 0;
++}
++
++static void ath12k_qmi_free_target_mem_chunk(struct ath12k_base *ab)
++{
++	struct ath12k_hw_group *ag = ab->ag;
+ 	struct target_mem_chunk *chunk;
+ 	int i;
+ 
+@@ -3121,18 +2904,8 @@
+ 		chunk->dma_allocated = false;
+ 	}
+ 
+-	if (!ag->num_started && ag->mlo_mem.init_done) {
+-		/* A shorter request may no longer contain an MLO view. Release by
+-		 * group ownership, never by the new request's segment count.
+-		 */
+-		for (i = 0; i < ARRAY_SIZE(ag->mlo_mem.chunk); i++)
+-			ath12k_qmi_free_mlo_mem_chunk(ab, &unused, i);
+-		ag->mlo_mem.init_done = false;
+-		ag->mlo_mem.mlo_mem_size = 0;
+-		ag->mlo_mem.fixed_mem = false;
+-		put_device(ag->mlo_mem.alloc_dev);
+-		ag->mlo_mem.alloc_dev = NULL;
+-	}
++	ath12k_qmi_put_mlo_mem_ref(ab);
++	ath12k_qmi_release_mlo_mem(ab);
+ }
+ 
+ static int ath12k_qmi_alloc_chunk(struct ath12k_base *ab,
+@@ -3261,6 +3034,7 @@
+ 		chunk->v.ioaddr = (u8 __iomem *)mlo_chunk->v.ioaddr + offset;
+ 		chunk->size = size;
+ 		chunk->type = MLO_GLOBAL_MEM_REGION_TYPE;
++		ath12k_qmi_get_mlo_mem_ref(ab);
+ 		return 0;
+ 	}
+ 
+@@ -3300,6 +3074,7 @@
+ 	chunk->v.addr = (u8 *)mlo_chunk->v.addr + offset;
+ 	chunk->size = size;
+ 	chunk->type = MLO_GLOBAL_MEM_REGION_TYPE;
++	ath12k_qmi_get_mlo_mem_ref(ab);
+ 
+ 	return 0;
+ }
+@@ -3312,6 +3087,9 @@
+ 	u32 mlo_size = 0;
+ 
+ 	mutex_lock(&ag->mutex);
++	ret = ath12k_qmi_begin_mlo_request(ab);
++	if (ret)
++		goto err;
+ 
+ 	if (!ag->mlo_mem.init_done) {
+ 		memset(ag->mlo_mem.chunk, 0, sizeof(ag->mlo_mem.chunk));
+@@ -3388,8 +3166,11 @@
+ 		goto err;
+ 	}
+ 
+-	for (i = ab->qmi.mem_seg_count; i < ARRAY_SIZE(ab->qmi.target_mem); i++)
++	for (i = ab->qmi.mem_seg_count; i < ARRAY_SIZE(ab->qmi.target_mem); i++) {
+ 		ath12k_qmi_free_dma_chunk(ab, &ab->qmi.target_mem[i]);
++		ab->qmi.target_mem[i].v.addr = NULL;
++		ab->qmi.target_mem[i].paddr = 0;
++	}
+ 
+ 	mutex_unlock(&ag->mutex);
+ 
+@@ -3428,6 +3209,9 @@
+ 
+ 	mutex_lock(&ag->mutex);
+ 	ath12k_qmi_begin_fixed_request(ab);
++	ret = ath12k_qmi_begin_mlo_request(ab);
++	if (ret)
++		goto out;
+ 
+ 	if (!ag->mlo_mem.init_done) {
+ 		memset(ag->mlo_mem.chunk, 0, sizeof(ag->mlo_mem.chunk));
+@@ -4339,10 +4123,15 @@
  	event->data = data;
  
  	spin_lock(&qmi->event_lock);
@@ -413,7 +889,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  
  	return 0;
  }
-@@ -4639,14 +4644,22 @@
+@@ -4735,14 +4524,22 @@
  	spin_unlock(&qmi->event_lock);
  }
  
@@ -439,7 +915,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  	ab->qmi.target_mem_mode = ab->target_mem_mode;
  	ret = qmi_handle_init(&ab->qmi.handle, ATH12K_QMI_RESP_LEN_MAX,
  			      &ath12k_qmi_ops, ath12k_qmi_msg_handlers);
-@@ -4654,6 +4667,7 @@
+@@ -4750,6 +4547,7 @@
  		ath12k_warn(ab, "failed to initialize qmi handle\n");
  		return ret;
  	}
@@ -447,7 +923,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  
  	ab->qmi.event_wq = alloc_ordered_workqueue("ath12k_qmi_driver_event", 0);
  	if (!ab->qmi.event_wq) {
-@@ -4661,30 +4675,54 @@
+@@ -4757,30 +4555,54 @@
  		return -EFAULT;
  	}
  
@@ -515,7 +991,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
  	ath12k_qmi_aux_uc_free(ab);
  	ath12k_qmi_m3_free(ab);
  	ath12k_qmi_free_target_mem_chunk(ab);
-@@ -4693,6 +4731,7 @@
+@@ -4789,6 +4611,7 @@
  
  void ath12k_qmi_free_resource(struct ath12k_base *ab)
  {

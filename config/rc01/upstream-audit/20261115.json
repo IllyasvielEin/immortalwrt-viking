@@ -1,0 +1,2367 @@
+{
+  "schema": 1,
+  "local": "c0c8b86ad07c170bbb0c6c5caa8b862ad06ee96e",
+  "upstream": "1f21e82da200de8ff389d315bcacd719e02bf829",
+  "records": [
+    {
+      "sha": "17d1ac0c34b3f7eefb407277d25f4b78591f44c8",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d58d0507801a3cab73802e6434314eea0596ba31",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "5dbfbfe46225e244fe06c42f11b50bc710f731dd",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "4e7173571c64faced3172e51a83fa314d5d5f600",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "90f54dddcf833c2ddde722dd8b298ec54c59eb98",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "6c57d4105add93c3b983ca2dfbb4d6f66f696f92",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "47ce1cd5dfeffb9c7789c8b637f654098898d6a3",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6061a61a37fdb1e06b8973c7b73bc79a52df8226",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "a8d4a44c8ede4c703e8866fbf709b34dd1506294",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "f120d87c9200ae1ddad9a1d9996d51cf0fb14709",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "1e95b974f6e040e24a26800d5aa9dcc9e0f592d8",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6149690bf77473633aaf820d6569c97a9f2908ab",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "490d9e9cb2131a989551a055c0e84f70174e3787",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "490a5b388762702dd68b81472095f8773265adc9",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "7e8c4cef998c6789a29d2253b21a2721e3f19044",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "ec73307670005a1f00cbeb039dc90709fa2a871e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "1aa6d54649c4aacdacec6a619829f4a2189023a9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4a0760b8fe946ed02bf79ef378458bbaeec2ccb8",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "6325e6b1fccd7513b65734e34797ef9e4459406c",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "b4f7857f9c0c21e83d0c3e76917093f4011053db",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "3a916ff1e9dcd6279b2a180dce0008a623aa88f6",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "5d0172f3cc97156763d1c493fbcfb25ed9098493",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "5cd11f17f3a73780b13cb1ee2ed0ecbc7e3ea6be",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "880fb0322788530325afff9c0b1bcafbcfde5c25",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ab487ee6e73aaf145dda088a7da4c492d27d58c3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "79d0dfb8d7459d4ed19a86580863f8830fecfb1a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "db2f52595b71f6f99c2343c3403fc8804b0c4ddb",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "fc829ac2613305aae23e82c07368b1991f5d3617",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b3e78cf803061f6e99b96e6b176f08cfed850a36",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "5057a9aba5ba25cd835095c7ff512baa1ec676b7",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d6934586b67962881665aa28b454d17d3aa436ae",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "429ccec2644e602b68fe5ebf83d9821c6aed191c",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "6362669c096b615a6ec0fa9b2b713aa69560ff8b",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "c4116f3904e09db9b034e4d1cd0c936d0520d1f8",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "84e70f447eb0b8e70aaf1434b67a54c65a3f46a5",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "0ced767f14bb7291bdd9f466ffb5969eab33cae2",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "05574936572fa17d104b0fa8d8378296a93dfe9e",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "db310ff0fb5db94135f43be4f50536f0d033b476",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "32f1c26eb631b16b4184ba54d267a3984c8072d0",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "c59b9de355150023a94be9af1b91e7017bb64ba3",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "8ce797daed8d066a8dcec75b26ab2d3955cc8226",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "9115e6ee4817a1869ee9e4aa5bade9304f4af34e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "0508180cc788356f5cdf563bfbab9318960c2a81",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "996ae0e11351ac93225f3e7c0f0e10cd4c77b039",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "a1788e6156cf4541aaae31191b693d2008c79541",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "ef1df3e11a5027c3bda2c77c50c8cb64800e3722",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d109b71475d9013082d1b1d1f015fb71b706373f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "06870bc01bd2a5af54e3ba088ae7ee9423f0909e",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9cf980770f712b4c0b6b4d4ab5a3d7134fcc0f97",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "5ee26cbc97182ebf2d42aa4763c4a415fd651be5",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "116414a355720649d400975e48a3adb9b063040e",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "41ab3e1f38c3ba0802fe2f82e7a3d771ad940a59",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "29685471580827b23dfa1cf4a4df6f2032fa7e16",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "a516fe3151abf787a4b1e428d692700a86626d3f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ea80bab79ce35cb26a6da1a07500466ea0bca4db",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "508ee51ccb7a98ace2d2aec47737c23050f0f025",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "031e587f670b67d6f9a1e309eb93f24b8a1f7c34",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1bb839094a2cc4dffc85182d751f754b1b4df416",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3d4885318836becbd4e521af3f6c94b35c8e162d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3b7e7c00e21b4a371080e029e9080297bc67ad9e",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "bd4d64e08b47056b8752ff03e7a2d5ea0cb456aa",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "7be6b668ad829fa7c67066f2f1f6f8440a33cbd3",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "fc8ff4d2eda91f6aaa2579011c7ea0874dcb630f",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "b2ea590e51025af83952e9752b79fe81ba624729",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "de7287983a5afb8a66b06679c2a91fc45c30bbe7",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4d88332bc467837aba1b6aff8985f85d2835b633",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "feeb0328244b0d167ad6aef71a99e97858c5dbdc",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "bf610ebb84d6b75667cef2f1237b21cb565eb589",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ab8f8fa7f8a5f3d64d68549c6b1e9ea19d6983b5",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "25835fd97e567639d0cc27fb9de9e118a9342a1e",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "feb8ac5e7e421a73fda862997175b77eaaf0c7aa",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "74ca8f0ee3d7746806437e06fe9a808da81910d4",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1c58daa6c5ed34c1da4fc9608fd9d9b0c522227d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7eb9f10a83324d8980e8088bb295fc28a96cd15b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "368ddb3df251a9a00c4c70f1f1bd9ee1085e737b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1c763084f10edd01986878b76c02222958cfd808",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a1b5d54cf90fc0ed7a4a8d4669d6bd9c994a463d",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "fb7bd8633b979e8182e15278e16cfcbc8e74a6e2",
+      "review_status": "complete",
+      "review_depth": "完整文件路径/patch diff与无线相关hunk核对；无线host展开验证，其余平台范围有限。"
+    },
+    {
+      "sha": "350501f839d00bc5429058f30066fe7d8c8f93f1",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "9ea2ee39744ef9430b9fda14e28b2ad68dfb671d",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "b8854008b0e905069af66f99b9fdd4ff83fac123",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "5fb9d9cd90ca751b5066a37517caa9fbc158ded7",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "c7f955edec83c5e8890cd050d31ab2786fc3ff86",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "5799d2da76998be50432b0a3325b42713b4b619b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c47ee8b4ec8bf7389447686553c97e6b5bdb55f8",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "291615b083eb528d0bb552f67fbc4972ed311599",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "5fa5ca5f9e28d9b918e252fb3199b0be8ff4e161",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "7754c0aabe68cea2d16c9e9bee0d74e4a2c51895",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9c06db5c401fcf38abfbb4307a8e4d65b38ec11a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "424d512d407316bef49475714a1c860c67b0b230",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "9e881bc5befdef5bda37208a62aac11c2282a15e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "a939b3fbfd8d19503bed77c831a63c130ef4fd3b",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "01a6c84e210d467b5d108ce760debfc4fcb3d60d",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "f1a94fa34229af9ecf3df7801964a98a05370aa5",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "e0da70b1bd4323a762d261347509746f35bdd9e3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6f1cd40d9dbc6e5bb4eb94c8af01d9c4977274a9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "eb65ad4fd900a537b01b1fc167d75ae4105d4b98",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "382a2109c849a45873aa908b4912fab667f603a0",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "834934b53245ed37e19b8300c37fbe18df664cc3",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "456ef6d54b90ccfa2cb5adddb48a61138fb039cd",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "85810d18ca10067a20834f1a8cbda3b8d5871a9e",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "a5e96c837ead549820867bb83c1ad471e39f5ace",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "d51b1bd834e9ad0880a5357f4a3b4f0c30e26e75",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "f246bdf1f2de3b41e6ec2a93b855c171561bd0c2",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9c657433066aa5075d5e62060dacd4a24b947abb",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "25a9767749316d2b037d950b4675a0cc969cd558",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "955c3c677db09f07c62ef9029db73670326ac450",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ba2d4021199bf2cb019e1c2ca611740c357cf993",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b3a3e4bdd0e8603fb38346bde8e7118839f18f02",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "554f401d6b09eee91486a4b0399393605996e130",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "2b71d7b87141736a45812b7a6037e56c7a445598",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d87d67fcfa49136800e893d2a6f7a8e5e0448d73",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "112b8ae2a7c9bf823130f8f050c2fe3ab47de850",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4a8669d5212a86ee213211bb859c55f348451d93",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d6a91d867bb24c4fc99200743d186b39fde246ac",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "778d561059fe01a527cf49451ef4de14f433e303",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "e9c079fb55f25328a52c0d4a02954ba46c3ba4fb",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "109e42bc98f1efee1c88e5ae4dac9e5afa988f97",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "aeb6a34499de48d9a866125d253c581b8400c736",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "098cfcbd7a5dcd6e09002b30fc1fe2952f4b39c0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "bf0e70d6e5fdb4459b03b1b98d443b98f0df9e94",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "6432c1db26e56eeea48b8541abdb18683d9b34e9",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "68bfaba185fa2f583aaf8370277041a708568a67",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c1bd42c934e580150ef39b78604f417f4c0342d5",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "5b3efb652f816d8024801e0b165532e20654a678",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "46e6335fbd3b825008a39758a45fa97a39814e3b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "e4ac504c5a556dd19ee5f4e42369f71d9fb327d7",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "f5a832801f666a03ac5c37da7b96c780fd32df62",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "f779ba4eabcb26e993cec57b4cab1bf4507905b2",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "d1eecd0d77e6235c2495e3d6da2d54094b2ea89f",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "785608b9eef60d95c157eac182730f9fb5349e6f",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "bebb028c5dd06a154e3aa2b68b53fd5b8be609ff",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "a862af6877c32d21bc7ab1fb55ff9666b45982c7",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "79cff2f1a9807da85ced3277127d287aa11c185a",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "eeef252aa78adbea4368acc28da57c13ef03f963",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "d18d5915f1b68126955f36712df2bdb5d79ba8b8",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "df3f508932c6bcecc4537803d109a189f08b2128",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "12d70962050e69ee11638eb8f5c1aea870b2b1e6",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "a308971a6092d0ffd562acbbc88a9a52ec14a244",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "46625a05e6d866236aca244ac31d1fe2edab814e",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "f2128d80d93952dced50cb08c888815e02145ad8",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "1ff08643259b4866de3d190e3625e316813e807e",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "e82eb5be04a8e3beabdbd99ec97575e6b3c295e4",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "5751c4e989f38ae5e5c6517e8c8ba6af9c16fed9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ab97af8180b7c2220d789fff5ab37e4f7bc8fa00",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "54d5e7756fd55c5bbe8c5aaf523d6873ec310430",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6202a8f848c56c12ab5bac435121f493e1db4a84",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ab4b4d1370845c751a4c9195aa3398e5c2b051aa",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "988fb4b79a76bac88092d9d2645422eadb2f4f0c",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "da936eccb2f9e07225a97ffe48959c5e9be82c9a",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "e66d9da8d4cde62aabe823b38e1781be998d9c04",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "f6163c4dd7b5493150c20d7fe4c0da20efcc0ff2",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "0392b744856ad0cd5e8d2ffca0dc96b347170212",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "cd46a39b20fc6e14777909bb1439bf88b18785cc",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "b6cbb16aa06ccc62f3c97d49fdb236a059f900cf",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "51db64785952b65a2c0e7b356aec08115da628ec",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "096b5a8700f2f5139a33072baeec1e7465639756",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d6e72a29e56fc2e56fcaf9aa84703ae63eba3518",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "8a66d78bbeef7543b055740f596b1fbb76479a84",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b4a8b4beaa5a22b8745059c629caefafdfe9ce5a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "cdfdfb19e0759347486600cbccdf70580f4ddbe7",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "404063a611dd0aeae2bf232fa6458c3d3f92d6dc",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "db0e0d53a97594ede357d2b15b3099011081a891",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "615306a8e0821373d41d7f723d6fb3cb96caeb15",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c3283d198ec431d20b92109f32dfbe2e288aeba3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b734dda4c3f567046d81e60836c0b4dc1b069200",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c0d791c01a35faec5d1f213fa91272e991508630",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1356b3ab32ab73b2f4f031ace94d6f58929e2edd",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "b1e9474fad24253c408e74d8665b63df854e8222",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "e14841b1fc8edbe71524035890ad17d79488e227",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "2cac72feed9460fd9303b66a11feaed89fb854fe",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "1b857f4d08f88d8cb5976c077fa1006a55d74a29",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "f8c787e0169788649f074680941c20d21fa8b7a2",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "2778c373e03dd67ff25bda1de602173e97e1c5c1",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "9f18519988b3316b1550066cd22d0c2d0d79a385",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "9e8897ecd3ebb3aff82b80405edc72c311878057",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "cb9ae505cbb2816adce927754b17b34de1383c8b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "8ee73857ba77b4d59029a0972428c8eaf85b06ff",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "c14c181a24caa216c6f3f9fe92b4e9b342a28c46",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "19c0e79b8179fe43c80197fcc58039347a3a33e8",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "eba504d70d716af9d4d70411b3ca0344305c6a47",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "6725e5724dce2a14c22a19dbda5cbf326e8491f8",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "465cfe57d769ec26829272f5273c226a486e4033",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "33cc11923a9b82192c567e400c6c5811d4019059",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "da31c27ce373c0e1cea79ac374c7c8f7994ec079",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b09cbfe7d2f234e8313c5d3151801d58dd533c9a",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "39d736d491cbd5bfe40246e619f6cd372b9b0af0",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "4230ddcaf04e82fa5bf8f1522c43d9ca6812318a",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "c3a2158018d10dad0814f79e1b2342837cc9c250",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "68700f4140bd4e7ea0022f36a1d521b2f1f90a22",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "141b5c72dfab831c122259cb4629e0a8e1873e8a",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "59e6376a27056e7d8cb139c95ac47e7195a092b6",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "21adae87e807d4756a39735e18e893ccbb31f64a",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "811cdf105f5cf964903957a08b4fdddd4fdcc893",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "0adf20fa1f7e754fff0688bffacd40f515f6a212",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4b01eb7dec5d9d18407db758649758eeb8d227f4",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "17e2954e66a34606370fac831baaf4a93e30ebc5",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "0a9adc7ee57bcafbc7010b4e14e1771c52bc6e6c",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "b73f94a31f03a8dd80614e3d904c1a6bbb2c7ddc",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "38be3e382fd6f2b3320d7bae1aefa6e849fb73a9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "928da2c524b2d78d1cf358aa91962cfc2bf21ac4",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "3d2e648677883a5f952062b07893801a7230cb9d",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6165312e3dc66373da91976a5d2bf9683770b9b9",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "042f7034ea896cc794060c0d8d4417de9af24db1",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "200e4de030be782e83a3af67df033c5ec4f655bb",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "458ba27cdaece326f77a2db272b1876dca97e975",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "84ae6acf859083e8bc8065e4f0ab8a71c31e6eb7",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "43e739574e7656087f030dc4313627e6742c3103",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "44545a037ee5840e463a31a0b70797ffb861b6c6",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "df5dc616523c5e22807988470740125661557c21",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "dfb167123f7606af82bd665ff758264576ce10e6",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "f8e7af4f9723a67209258e1fe4ac43288b16a765",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "3119b579027c07d19d20be9116247a6ef723ba23",
+      "review_status": "complete",
+      "review_depth": "完整配方diff及固定本地ABI/依赖核对；外部发布C差异未全量独审"
+    },
+    {
+      "sha": "d13ba979b017b63ebc18a4deab161b9557ea07f3",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "ffd992627ef2179553fe0e8d1d34d034f8c8ea28",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1f97f4e46c1bc60b8aaad133843fe5f566452d95",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "89489ba0a7332bc6b6b063bc39a18b5dad320710",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "39e77cc05db95748aad847daf0d16a148a6c91a3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "493672ae76c8bf3fe202eedc565d7ee3335a2928",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6fc74db0ddb6a172949d4a02b95a0a8c1e602d58",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "e46b15c661ec028db70aa1aa68310e4b534b6611",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "f2f18a30b6df7fec88b2c25c8d72fd33c56eee19",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6b8f39af04d0189c17ab272c7778d48f9eca5153",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "0c517f6d778213f5436579aceb5153af32597632",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "558a82c913e77e74e42feb400cdf2888317757aa",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "7b39be5788d367a4a2cbfafc58e4c0c09e905f4d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6745b44c86196bc1dd15bd7714f2ca95f9281a4f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1b83fdb5635a595dc26d535d712360d756675eb8",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3658e64cf8ddfc5920c5ba7df2e43ddb1c40cc12",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c993be6b769d668913ed955259e54f15fadd3316",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "00727d897c6fff1a31cf697b2f308546f81024c8",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "3c8d4969c236d43d7455895a4bbc358967d461e4",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "59831fca9fcf124790bf6057d0c28c94062310e0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "01402f4edd513a8dd9c6d6f69520d7122a71fedc",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4709ab047bbcc99e82e178a1f3b01b6c1de1e2e9",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "9e23b429eab4edb7f3e134d930e30d622a8f90f8",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "af227eb36a7c7e524437243430bbdb195630a06b",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "2d98322953a99228a758508bd8d6d5f445252919",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "9b6fce180cf9e8c6f31cff6c7054367b2a82da9a",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "593547bf31096e7873cd233236b8466f04829c1e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "2806a9cb2562d10eb3ef081de5645e79c5ad71ab",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "9655e49b9b05c5cb77de81cf132b7a2f92452913",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "1eda6c35a4bf05fd8dbd262b3329d573b4c4b208",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "c623e36dbd2592a8efcab58e531d5d8be7eb2060",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "474e8bd7d7c92f9d78f939637c07dd5fb47e8536",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "bd742322ea2bec96d45713cef7a42edb7ee91532",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "932b3dc5177a848ba3d8068da2e24ac9b6eb1771",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "b455c5b8514f2a6de0e3c68276771f953bddb046",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "de7e6ba56e4557fc32dca87ea7f9cfabbb2a2678",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "05d7c63800a9c75b9b232f43e1af66614f3d44b0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d4a7ba94622e148a7621e916b02c86e401febb1b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4765b657625ec5bbda74b44400465fe043802b30",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "889dccc9c0e1d58bff4a577f9ada2e139f961055",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "1beba155f77b4db99369af1257c343e998a597c4",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a32636c54a79a65d63d505693930cfe865e540a8",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "818fcdfdec216001122bd833c5ddd8a715a1fc58",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "f111cdf6db6793cc88de3618b34d1a13d4c307ef",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "50595e765f42bdb518402f8a0bd1ae1f649f4823",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "516da1de900c3ae45daa09cbfbfec985e0179661",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "476e0a9725f26a446199dc20630fee1ad875252f",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "f9dd19a1a2820891cddd0c3cea538984a5b6c497",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "23a1cd30b1a3bc3dabe6d1560ee2d2a5d28a3310",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "8f32c0f61c9871b317b4df9d161c9e21e6d1ae32",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "e44e8cf26aa8e5abc204bdf54f58d27aaac993a7",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "7a54294609a4a8075eac2302f60e3a4031ef3596",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "ced6a648901fa6ff7f2a18d854164845d89fa024",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "cdbcf643349657dfb0c6f589b61f4e2af7d1bd56",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "431127568ce805368f7cf7a971383f2989fb19df",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "9e5ba22d2457535e0706c51f6c5ddcab2be68ad7",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "d0a6b8ea54fc578c01ea9770038cb783e8ff37f9",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "d0533a299bd1c5d344ced6d57879aa05c4614981",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "fe77893a3cce3b1e492d75db6d7a60e71ee977a7",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "bea8c322974f63458b63aaa5047eb5531a60bfc5",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "f90462e7c12584c363dd8e8243a66e05195ea3f8",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "bec5e15f08a4aa14d2a41cdae5f89fb57271b2a7",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "e2f6de5a19a20d80ec41443831adfbbfbecf7838",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "4e0a3532ecb0c06ea8f840f4eb8c3d62f71fc143",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "d6aa6e6918dfb7d075d2c2f3e46cf5be96f265c0",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "1635b9cfaa287e03be8592129ea15fac33f351ce",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "f93cd56a1e5bc0ec7a4b0a90a713db75fcc8a9fe",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9a7d04e31c3c66a9925079ed4fd483ee50222e41",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "1b2f66bb6163a7e6e335f103058246608a50970b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "049a55739dce2886c8c491899e91310346499b7e",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "2f6a39d080ba801b761c9867e2660b66d2ddf79a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "2b4015b75a69c95ce97ec4cd7619587ac9067df7",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "fd21818135171ac03dca908685396a871021efcd",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "8e4a3ef7603cf43a273149561ed910a446e61c63",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "a5ce65890f186246c207bfb69d7040bae5039e30",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "d408b016ca5adf6db80eca4cdcc6d61e96b79d39",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "a7593dae2e669a61c7815e87b7d38d3a91184756",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "99977bd751741658172c6d0f1df21af662a375e8",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "279676f8088d1af739a133879bfbce4e00b9175f",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "29fc7b2153c5f965024b0c0632a844f9b173813c",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "11bdaa6c6fbf570e664a9b670cf54d0feba8b387",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "30b66b0fba4dfc248d61915b08e92e4cabd2323a",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "daec15abee5ff99436fc57dd30fff9a300c1d17a",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "e3912c9b486c8732ff9f46521c94323757d84fda",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "7b46f21f4c1c5806a6f3b9a36c7d97373e945a75",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "ad9388760558b1d10718d90396c32fdcff2df936",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "519300e5d00996a22a8db516c5cc78f31c1ee2fc",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "e240d0e0c89a7908dfc31bb33998bfd5353341e9",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6933e3ceafddc6a34cec86132e1297c4208ad4b0",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "3db8bb921213c843f2e844e8cf698b3274a3d164",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "4f9945c14cbfc784d1f519889f507c019fde96a0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "85ebb0d08e6845c54b50370482ed0dd92cf39958",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "bbf0eed75be7d9d9b7e9ef9f69c185ecb912c973",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "5d47149898968e8aae0cea840f524edfcd8e1812",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "74b748e7e449df00f0da2319c5263a1c7affbf8c",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "352b4c96cdc78b3e8d37255133ac05c7990600f1",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "67bb668abe0b17a98278829ee38312d480ebed5e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "b926c16346bf3e92109a6758281f00945a311211",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b596544a69197621a737f62dfa78274c5aa5380a",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "0be9600dbc3d9217da45d1ebc914c5aba8c45404",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "3d6b3a82280c3cdd4e964578b9908c6739f1712a",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "ed395c137f0c0de67e5743fc832afe9aac81532d",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "763492bdae433a8f391c10fca87313580a4e734d",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "d9f08be0523601ae81fdcc6979c08e93da3fa10c",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "2bb59802ceeb8bcba408a7b6694f0c4669e24eab",
+      "review_status": "complete",
+      "review_depth": "完整文件路径/patch diff与无线相关hunk核对；无线host展开验证，其余平台范围有限。"
+    },
+    {
+      "sha": "1887488d2aa635f221f7fa39dda623ca7f47005f",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "dd8de87169f1c1d091a81eb237341b2de09bd5bf",
+      "review_status": "complete",
+      "review_depth": "实际diff范围/核心接口与适用路径审查；大型驱动、二进制或重排未逐行全量审计"
+    },
+    {
+      "sha": "104c3d773812cff6fc0e774accb33c81b5fd5f64",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "99aec6efe1c114804c5e3b7678fabbebca27e74c",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "a066473cf38e3b3f91b523065c6f14f0dbf6742e",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "02cfff9116feb30be608b116f8710c0efb9381e3",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "0b433e656fd6886aa2f32f923c8d2d8dfc94835e",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "5ddc661192cbf6836d1d7f77773dc7b9e6cfb82d",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "5c1e21d94d097233d8ddc3d87914f7ee6c792264",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "146dc3d5badc0531072f0d0da7114cd667cc63c2",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "635cf6af01ec66b681995ea69fd84f45147ba12b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "2736c99fe481972b4adc6ac194caa986acbb2322",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "35142c9f42f6d8152c5c269b2808865c2780735e",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "e3ace262a643f95dbe08700805dc8ab66d9160d3",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "3db07dd574ea6228ea23fffe0f8f9c284a639729",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6663e14fd2d6426834ed320b6afc7955df345815",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "a64d688c197cc244466d01cba1b9d1f2c366c173",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "d42cc475c60e12a2031d0f39c02e7a265458eb56",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "5c5a157852271d66489790048de935f3ebd36fa4",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ca6fd132b9d69c933331eb98284cc773b4da530a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "497ab5bc431afcaad915964574dd950f9edff9c4",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a4076a8021f277da9b018ed81cbf5afde25d7d4f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6af0ea55027f2175938ce13785b64706ce70f045",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ea6f658d92e1d2b16fdc587c080567a0fbcb9a05",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a3ffc9af4e3ff9d9846af4e809306c1850f0cda9",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "bddeb1e5fe3f758c08cb521afc86687f0f7e64c5",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "058f0010861a1841bf652e561536ed143388cccf",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "031659df7f07c53d29743009c2c8fbc8eb2a05f8",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "955b582a660c651197fbda3eb2142ffdf0e0c5df",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "af5dfc4f0166a23b0ad9868892a0500695a1c803",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b12b44bfdf0c057eb75f3fb480b9ff0c3098af33",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "c9ce96fffe1c19fa99f2bf7e410a3cfab039f900",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "5e9498b1d2ad784ab6e0df3714866198a78562f3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9bd92798ce75676ba14af0a0d5e9bc2c791527d0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "bb8054e84763a88c5328d4563d027bed570c14e9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "04860d8c2dae365bd6f066648b6509f743481ccd",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b77041e555138355ad321a0ad1753b75c92a6d4f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c35b90f1a7214d979c67c95f970865b8b35d35ad",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "92ca2fdfa1502e5c630e89f9d09be2a552c2e110",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c75816c63ed90bf761785447b27878e468a78fcf",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4ec4ca8f06980072d43dd22a7d9dea8b0ed470c9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "704bb1dbbfdc6377ecde07a8bd9990258e777ac0",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6d7142ca66a66fe242f577083ef633601abcf014",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "5062c68dfdee8eef1f1ba14f75ed4ff3444280c5",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "fe0aacd956950727e6bdf82e8d22d385f6d33eb6",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "21d948fc5fb0f637dbf0bab8742e34c87460fc7a",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "4ab83cc3825817f4d0006c1cc1ebd4ddf530d3bb",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "524fafc43ac83627cb069c680c0c6815b664f71d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "18614d80396be314e1bffca3f384e831bf166b62",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7a783bccd944c7e83cc34d007bbe0f4a7519b7f6",
+      "review_status": "complete",
+      "review_depth": "实际diff路径、配方选择门槛、内嵌patch的SoC/compatible/Kconfig与关键hunk核对；非RC01驱动未逐行全语义/硬件审计"
+    },
+    {
+      "sha": "f4fc292d48e5ba15110b1d4f5cc6756ba4477441",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "36a0b8ceda37284e17e4965cca0816277916bd7d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "394c59212922752147aea7fa0c3b265ade544e4d",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "9f31835a0eb82e0f2923255a43fd7d7c45e000cb",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "d20f1483379d598663ab49757f1cad3d86c99e09",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "d299f39e1a18026e406e8f12b5231e30c3e26cde",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "a530a202cea0e14cc2a021808aeacc3829bf67e5",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "c243368acc3ebdcdcc17055988cda52d06989ae3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "216e4da8635d3217e2c33d716e7d9430da0ea1d7",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "9d83aff3467e1e3852ddf62e61dac5145ad9dbdf",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "76ba875e0e041fbaa8ed1458e089c21287a5a224",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b97760cbc90505d80eafbbb4e0f683932c221c86",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7e8bfcfe76204efc9433be341642901876eb555b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b4fe23228144c9d3a5e0f783219fa55b1eb3d679",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "606ee33b8a049244759de735a48e98b00ec8ad5c",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "85e54359cf7de03033f74faa7f7cc7f287313c34",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "8736aff81050ad27e31122d4df19354cf3cb5698",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "13e5b0b98b0f1411a3fa45939f0b018e7a4007f9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a0e44e8538c938f43daaeaa28547ed3513b11215",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3124deab398aeef6347dda85a776831d17fcf135",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "2fc5621de364040770d49df3b277c5779c6c604d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "435f14840817f8cecb1e602b9f2e7121badc401d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7efbba7631b5401b9f470e28fca0d6a18f579f83",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "706052b20fd1cb29a2230e32efac6440457bc20a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d862a34d9e079ca92ed09a21b9275f0a1c0728a9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3236b6ae94d4dc44320490a83e8b7a746f121ebc",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7360c0cf0bd451dd520b3df23ce085f5ff3f0bc2",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "668af0910b82efde7ab983fa22e7cab233b3ec35",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "63d330d047823f8ea4a95885703e66e8e9916e22",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7edc67adadb1e2d21ca53b0377086f80224a6cba",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "dd12789734d355120c2124b9fe1bb2e3e08b42f0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "67a23e5b5cc189447b56024a82ed113b5627aac3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4324965489d7de8266246fd23402f8a5de96f491",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "6207b0c6fef59a985b18bc59a8f2253e4cb7479f",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "8f1fa500e31c6e9549c272c35ab74096187ccf40",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "36b5807a329a8218dfd084b52239db9197663213",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "dd72c4c198330e208c2357625693a03996cae741",
+      "review_status": "complete",
+      "review_depth": "实际提交 diff 与限定本地线索"
+    },
+    {
+      "sha": "3d5a743f1f0cb77aed8ed63b2f9aa75700b4322c",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "89e69d9391d79e0bb72d567cf6360ad4967a6fc5",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d068e4608f83361fb4a6ae8a8cc4b46d81219bbe",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "7445c691763843ab6995cee040b49d2a723e610d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3b197b2007b13b4fae1f5dd6ca04f2390dfd78fd",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4d5d291a264ed2e8a5ea1df82c22043c7df97b18",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "ada52cc7ed401153a8d0b026d1edf918bfc04c45",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "dab12e766366dceb149e70aa1155005b6a571299",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "6d65cccfbb069f899f0236174e6c964c822a2c18",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "30a23ae451602aa8cdaa8532c19855162c3e2de1",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "e775f6f5466e636425dc05a863b43c6755a3403f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b7c150a8a4c10fdffc048eb49966a0e4590e8e37",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "fdcff2c3d16747942ca05dc28f4262be6ed02b87",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4c3c99146d03659d657d05353c782c3d516c544d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "87063cf6a4e952cfaddda7722411de8d5a34d2e9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7794b0a0b624e091bed15a09975e324ffbe7735b",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "edf736b816489141f2d15aa3f574207b8a94d1b5",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "6a7572173b2e86e8625499c2510fd6e19297c7a9",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b520a407fec0970880032ece15b56076e4746306",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "3936fd49be8e508c43df61dc4284bb1daaec1166",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "388dfcfcfefd55e2e65b6882f5051f0396f223fd",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b83fda63d6c6cb30b6a9c47a48341e21c0404443",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ecc4a30859f2b556b0ad1c0b83ca226b36f4ab8c",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "256d17384600f12896ecea3bbd85acd024af8fff",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "d31662d6388ad1603ad4c0042cacbddbd9ee48f4",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "b62ab40710061e6b6443db85699b78196dfb7b10",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "488cf8781be7ef24baa96bcb4cd432fd9eb9f637",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "806db56d3d857c3b32eb79da44918f15bd356a0b",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "cd99e658acaf77fad92433bbac00ca5f234e1893",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "35388a3e7844c322448b009f2359075d14b52a82",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1bc88365e0baffc7b80a87a0046af46e93b707c6",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b556a45351485f93f822ea4a9a3ada699e9c67fb",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "06429657494cc196773ccfb6ac0ada4fd81adf2b",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "f4867d540c13604f4341a42330f529918eebed9a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "1d28fc6a374ecd8d2ec72ab406bb4ef43b24aea0",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "ed7552c355f4ed12b6817ab205e1baee3f565d71",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "d5629bba98772afee95e4083b7464d6754eeb8e6",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "b0f96dc6219abecf725b4697272b4e624f21ae54",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "f89459ef328f35d3291c5075089737e40b66638d",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "7b26f9c0d8205f14340a6bb605db1e410ffee71f",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "36fbdeb2d6c1b4631b5a46b896b9fe5287922418",
+      "review_status": "complete",
+      "review_depth": "实际完整diff、固定本地配方及相关输入/调用关系核对"
+    },
+    {
+      "sha": "882a1cdf68297bb68d4bdf379624708a6b65329e",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c9cf0b0212a0a895af10927c0561c755f023ad86",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "24c13d794c810e14b52bd6e9720a1f512b5e5f23",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    },
+    {
+      "sha": "ea807f48427f97606212f34d64f28741ee894256",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "c4da96081c13bfd1062134cb356b9d3b7f7e64bf",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "69e820d6969d201800c99f93ebbe92b9f96f4ce8",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "29efd3e6a3aa76801f18bd43d29e327011890ebc",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "4620fb5534d5bb7e079f7a5b2fbcc7381b32c69a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "15eb30ddfd27a871d031ccb78cdb95012014c83a",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "e2ed57b957dc983fae535ca14a0969711537d752",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a4ba8240d8a1aaef7e8c6f2d65e841a9bfd2b8c5",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "9b930da698caa1bd976026d637db3516305127dd",
+      "review_status": "complete",
+      "review_depth": "全部remerge路径与实际决议读取；RC01共用接口深入核对；其它平台限定路径/hunk/包定义，不作硬件全审"
+    },
+    {
+      "sha": "2ebd74ffc094139e035b344b8ee85c7091713829",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "ae05e28febbc1ae65c3cd1027faf030a32eacca3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "a28b17f14c8da15d1519ae2eb48703b60cefaa3f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "5e067759a59b06d6455457323af1360c12ee01f3",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "0881dd2d1f2942778e0ac75e0445edd3efadda1f",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "51c575f312cacdbfa67d2458f9dbf4ccb02c2ea2",
+      "review_status": "complete",
+      "review_depth": "清单路径级"
+    },
+    {
+      "sha": "37ca362e07278ff7e9722c1162dafb208e4baa44",
+      "review_status": "complete",
+      "review_depth": "实际diff关键逻辑与两端路径/blob核对；非全部硬件运行验证"
+    },
+    {
+      "sha": "7638316a30fe7dbb232f9de76c4275f16b45b14a",
+      "review_status": "complete",
+      "review_depth": "路径、修改hunk与调用对象核对；明显非RC01驱动/平台，不声称目标运行深审。"
+    },
+    {
+      "sha": "1f21e82da200de8ff389d315bcacd719e02bf829",
+      "review_status": "complete",
+      "review_depth": "实际diff与固定本地patch/调用链对照；重要重组另做公开固定源码fuzz0展开比较。"
+    }
+  ]
+}

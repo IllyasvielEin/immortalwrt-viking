@@ -252,6 +252,31 @@ print(sprintf('%J', { values, first, second, unchanged: initialized == sprintf('
                 self.assertEqual(ap["ssid"], "RC01-Xiaomi-5.8G")
                 self.assertEqual((radio["disabled"], ap["disabled"]), ("1", "1"))
 
+    @unittest.skipUnless(UCODE, "ucode is required for capability intersection regression")
+    def test_child_modes_width_and_frequency_span_bound_defaults(self):
+        for caps, ranges, expected in (
+            ({"max_width": 40}, [], "EHT40"),
+            ({"modes": ["EHT20", "EHT80"]}, [], "EHT80"),
+            ({"max_width": 160}, [[5180000, 5220000]], "EHT40"),
+        ):
+            with self.subTest(caps=caps, ranges=ranges):
+                values, board = self.wireless_fixture()
+                values["wireless"]["radio0"]["radio"] = 1
+                board["wlan"]["phy0"]["info"]["radios"] = [
+                    {"index": 1, "bands": {"5G": {"default_channel": 36, **caps}},
+                     "freq_ranges": ranges}]
+                result = self.run_wireless(values, board)
+                self.assertEqual(result["values"]["wireless"]["radio0"]["htmode"], expected)
+
+    @unittest.skipUnless(UCODE, "ucode is required for automatic bandwidth policy regression")
+    def test_advertised_320_does_not_change_rc01_automatic_160_policy(self):
+        values, board = self.wireless_fixture("6g", 5, 320)
+        board["wlan"]["phy0"]["info"]["bands"]["6G"]["modes"].append("EHT320")
+        result = self.run_wireless(values, board)
+        radio = result["values"]["wireless"]["radio0"]
+        self.assertEqual(radio["htmode"], "EHT160")
+        self.assertEqual(radio["disabled"], "1")
+
     @unittest.skipUnless(UCODE, "ucode is required for missing child-radio regression")
     def test_missing_child_or_band_waits_without_initializing_or_marking(self):
         for children in (

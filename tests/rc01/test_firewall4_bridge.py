@@ -16,7 +16,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "package/network/config/firewall4"
 UCODE = os.environ.get("UCODE") or shutil.which("ucode")
-# Pristine e6f600c tree (repository patches are applied to a copy) or the
+# Pristine 3722ead tree (repository patches are applied to a copy) or the
 # prepared build_dir tree, which already carries them.
 SOURCE = os.environ.get("RC01_FIREWALL4_SOURCE")
 
@@ -62,20 +62,20 @@ all:;@:
     def test_ibrname_meta_is_packaged(self):
         makefile = (PACKAGE / "Makefile").read_text()
         self.assertIn("+kmod-nft-bridge", makefile)
-        self.assertIn("PKG_SOURCE_VERSION:=e6f600c458bda7bc2d87b07e78fd06b50c9d7131", makefile)
+        self.assertIn("PKG_SOURCE_VERSION:=3722eadc088c3ab81389596ca9796112b436583a", makefile)
         # meta ibrname needs nft_meta_bridge, which only kmod-nft-bridge ships.
         netfilter = (ROOT / "include/netfilter.mk").read_text()
         self.assertTrue("call nf_add,NFT_BRIDGE,CONFIG_NFT_BRIDGE_META, $(P_EBT)nft_meta_bridge"
                         in netfilter)
         modules = (ROOT / "package/kernel/linux/modules/netfilter.mk").read_text()
         self.assertRegex(modules, r"define KernelPackage/nft-bridge\n(?:.+\n)*?\t\$\(KCONFIG_NFT_BRIDGE\)")
-        # The old helper takes (devstatus, devname); no WDS prefix argument.
+        # The new source accepts the kernel-dependent WDS prefix argument.
         patch = (PACKAGE / "patches/004-scope-bridge-flowtable-offload.patch").read_text()
-        self.assertIn("+\t\t\t\tpush(ports, ...resolve_lower_devices(devstatus, entry));", patch)
+        self.assertIn("+\t\t\t\tpush(ports, ...resolve_lower_devices(devstatus, entry, this.kernel >= 0x06110000));", patch)
 
 
 @unittest.skipUnless(UCODE, "ucode is required to render firewall4")
-@unittest.skipUnless(SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 e6f600c tree")
+@unittest.skipUnless(SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 3722ead tree")
 class BridgeScope(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

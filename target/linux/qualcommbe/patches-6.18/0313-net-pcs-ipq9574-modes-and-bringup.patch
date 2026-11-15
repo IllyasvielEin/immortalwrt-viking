@@ -1,5 +1,5 @@
-From: ViKing <viking.yfy@qq.com>
-Date: Wed, 4 Nov 2026 10:40:00 +0800
+From: Lei Wei <quic_leiwei@quicinc.com>
+Date: Sun, 15 Nov 2026 14:43:15 +0800
 Subject: [PATCH] net: pcs: ipq9574: implement link modes and UNIPHY bring-up
 
 The 'UNIPHY' PCS block in the IPQ9574 SoC includes PCS and SerDes
@@ -66,9 +66,11 @@ Align the USXGMII configuration sequence with the SSDK:
 Reuse the qcom-ipq9574 PCS driver for IPQ5332 with an explicit MII clock
 rate request during link-up.
 
-Use the SFP state machine to gate forced 1000BASE-X and 2500BASE-X links
-without in-band negotiation. Select the SGMII+ MAC personality explicitly
-without inheriting bootloader or previous interface settings.
+Use the SFP state machine to gate forced 1000BASE-X links without
+in-band negotiation. Read the PCS link bit for 2500BASE-X even when
+autonegotiation is disabled: copper modules can leave LOS deasserted
+while their copper link is down. Select the SGMII+ MAC personality
+explicitly without inheriting bootloader or previous interface settings.
 
 Select the NSSCC USXGMII MII clock source before releasing XPCS reset
 so initial negotiation does not depend on a previous bootloader.
@@ -358,7 +360,7 @@ diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq95
 new file mode 100644
 --- /dev/null
 +++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
-@@ -0,0 +1,1416 @@
+@@ -0,0 +1,1403 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
@@ -582,23 +584,10 @@ new file mode 100644
 +}
 +
 +static void ipq_pcs_get_state_2500basex(struct ipq_pcs *qpcs,
-+					unsigned int neg_mode,
 +					struct phylink_link_state *state)
 +{
 +	unsigned int val;
 +	int ret;
-+
-+	/* A copper SFP without PHY I2C access cannot provide 2500BASE-X
-+	 * in-band status. In that mode the SFP state machine already gates
-+	 * phylink through its LOS-driven link_up and link_down callbacks.
-+	 */
-+	if (neg_mode == PHYLINK_PCS_NEG_INBAND_DISABLED) {
-+		state->link = true;
-+		state->speed = SPEED_2500;
-+		state->duplex = DUPLEX_FULL;
-+		state->pause |= MLO_PAUSE_TXRX_MASK;
-+		return;
-+	}
 +
 +	ret = regmap_read(qpcs->regmap, PCS_MII_STS(0), &val);
 +	if (ret) {
@@ -1278,7 +1267,7 @@ new file mode 100644
 +		ipq_pcs_get_state_sgmii(qpcs, index, state);
 +		break;
 +	case PHY_INTERFACE_MODE_2500BASEX:
-+		ipq_pcs_get_state_2500basex(qpcs, neg_mode, state);
++		ipq_pcs_get_state_2500basex(qpcs, state);
 +		break;
 +	case PHY_INTERFACE_MODE_USXGMII:
 +	case PHY_INTERFACE_MODE_10G_QXGMII:

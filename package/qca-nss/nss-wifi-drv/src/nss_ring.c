@@ -174,6 +174,7 @@ static void nss_notify_recv(struct nss_core *core,
 	nss_msg_seen(core, ncm, desc->payload_len);
 	nss_msg_census(ncm);
 	nss_flow_notify(ncm, desc->payload_len);
+	nss_pool_notify(core, ncm, desc->payload_len);
 
 	if (nss_wifili_is_soc(ncm->interface))
 		nss_wifili_notify(core, ncm, desc->payload_len);
@@ -635,7 +636,7 @@ static int nss_refill(struct nss_core *core, int budget)
 		struct sk_buff *skb;
 		dma_addr_t dma;
 
-		if (atomic_read(&core->buffers_queued) + filled >= core->pool_size)
+		if (atomic_read(&core->buffers_queued) + filled >= READ_ONCE(core->pool_size))
 			break;
 
 		if (next == READ_ONCE(map->h2n_nss_index[NSS_H2N_RING_EMPTY_BUF]))
@@ -806,6 +807,7 @@ static int nss_poll_n2h(struct napi_struct *napi, int budget)
 				atomic_dec(&core->buffers_queued);
 				if (nss_redir_recv(core, desc, skb) ||
 				    nss_mesh_recv(core, napi, desc, skb) ||
+				    nss_wifili_special_recv(core, napi, desc, skb) ||
 				    nss_data_recv(core, napi, desc, skb))
 					goto next;
 				dma_unmap_single(core->dev, NSS_SKB_CB(skb)->dma,

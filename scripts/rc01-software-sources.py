@@ -40,7 +40,7 @@ PLATFORM_PATHS = (*PROTECTED, "target/linux/qualcommbe", "target/linux/generic/b
                   "package/firmware/ath12k-firmware", "package/firmware/ipq-wifi",
                   "package/boot/uboot-tools", "package/network/config/netifd",
                   "package/emortal/luci-app-router-tool", "defconfig/qualcommbe-rc01.config",
-                  "config/rc01/files", "package/emortal/rc01-platform")
+                  "config/rc01/files", "config/rc01/upstream-audit", "package/emortal/rc01-platform")
 
 
 class SourceError(ValueError):

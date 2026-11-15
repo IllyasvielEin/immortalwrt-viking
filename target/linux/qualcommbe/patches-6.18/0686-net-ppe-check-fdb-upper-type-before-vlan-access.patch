@@ -1,0 +1,21 @@
+Subject: [PATCH] net: ppe: check FDB upper type before bridge VLAN access
+
+A topology transition may leave a non-bridge upper device in a cached
+flow. Check its type before br_vlan_enabled() reads bridge private state.
+Keep the existing RTNL, flow lock and RCU lifetime ordering.
+
+Carried from the RC01 adjustment in 1f23a593fcbf775a849c7cb9f3709f8a899d7c99;
+upstream moved the worker from local 0681 into 0680 during regrouping.
+
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
+@@ -4930,7 +4930,8 @@
+ 			continue;
+ 		rcu_read_lock();
+ 		master = netdev_master_upper_dev_get_rcu(idev);
+-		vid = master && br_vlan_enabled(master) ?
++		vid = master && netif_is_bridge_master(master) &&
++			br_vlan_enabled(master) ?
+ 			(flow->vlan >= 0 ? ft->vlans[flow->vlan].cvid :
+ 			 flow->rule.data.ingress_cvid) : 0;
+ 		valid = master && netif_is_bridge_master(master) &&

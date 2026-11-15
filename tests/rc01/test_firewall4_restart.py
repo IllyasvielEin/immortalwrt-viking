@@ -62,14 +62,14 @@ class PackagePatches(unittest.TestCase):
             data = (bridge.PACKAGE / "patches" / name).read_bytes()
             self.assertEqual(hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(), blob, name)
         makefile = (bridge.PACKAGE / "Makefile").read_text()
-        for line in ("PKG_RELEASE:=15", "PKG_SOURCE_DATE:=2026-10-29",
-                     "PKG_SOURCE_VERSION:=e6f600c458bda7bc2d87b07e78fd06b50c9d7131",
-                     "PKG_MIRROR_HASH:=d67c4a2fe4072f641ea532379f463ab3169aea8c2aa54966154a4670fda2e1ac"):
+        for line in ("PKG_RELEASE:=3", "PKG_SOURCE_DATE:=2026-11-08",
+                     "PKG_SOURCE_VERSION:=3722eadc088c3ab81389596ca9796112b436583a",
+                     "PKG_MIRROR_HASH:=a95c6cfe419c7d4e22bda5608aa6e46c67dadc9c7096879702d614cc498759d0"):
             self.assertIn(line + "\n", makefile)
 
 
 @unittest.skipUnless(bridge.UCODE, "ucode is required to render firewall4")
-@unittest.skipUnless(bridge.SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 e6f600c tree")
+@unittest.skipUnless(bridge.SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 3722ead tree")
 class RestartRender(unittest.TestCase):
     setUpClass = classmethod(bridge.BridgeScope.setUpClass.__func__)
     render = bridge.BridgeScope.render
@@ -133,7 +133,7 @@ class RestartRender(unittest.TestCase):
                 self.assertEqual([line + "\n" for line in result.stderr.splitlines()
                                   if line.startswith("Include")], failed)
 
-@unittest.skipUnless(bridge.SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 e6f600c tree")
+@unittest.skipUnless(bridge.SOURCE, "set RC01_FIREWALL4_SOURCE to the firewall4 3722ead tree")
 @unittest.skipUnless(BUSYBOX, "BusyBox ash is required to run fw4")
 class RestartScript(unittest.TestCase):
     @classmethod

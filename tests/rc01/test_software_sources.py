@@ -836,7 +836,12 @@ class SourceMetadataIntegration(unittest.TestCase):
             state=root/".rc01-sources";state.mkdir()
             sources.write_json(state/"lock.json",lock)
             (state/"feeds.conf").write_text(sources.feeds_text(lock))
-            with mock.patch.object(metadata,"ROOT",root),mock.patch.object(metadata,"local_patchset",return_value={"sha256":"a"*64}):
+            # This fixture exercises the software lock/recipe contract. The
+            # merge ancestry and review inventory have their own real Git DAG
+            # tests in test_integration_provenance.py.
+            with mock.patch.object(metadata,"ROOT",root), \
+                 mock.patch.object(metadata,"integration_metadata",return_value={"mode":"fixture"}), \
+                 mock.patch.object(metadata,"local_patchset",return_value={"sha256":"a"*64}):
                 result=metadata.metadata()
                 self.assertEqual(result["software_resolution"]["mode"],"latest")
                 self.assertEqual(result["software"]["tailscale"]["version"],manifest[0]["version"])

@@ -1,50 +1,130 @@
 {
-  "schema": 1,
-  "upstream": "https://github.com/VIKINGYFY/immortalwrt",
-  "baseline": "e5b0e82156513e81b6b712e4498ab15fd3a28571",
-  "reviewed_head": "7b3b0f0fce341d6a92a0ad9b1b3d37e3fe384f8b",
-  "integration": "selected-commits",
-  "full_merge": false,
-  "previous_selected_commits": [
-    "4e7173571c64faced3172e51a83fa314d5d5f600",
-    "47ce1cd5dfeffb9c7789c8b637f654098898d6a3",
-    "d58d0507801a3cab73802e6434314eea0596ba31",
-    "5dbfbfe46225e244fe06c42f11b50bc710f731dd"
-  ],
-  "selected_commits": [
-    "f120d87c9200ae1ddad9a1d9996d51cf0fb14709",
-    "1e95b974f6e040e24a26800d5aa9dcc9e0f592d8",
-    "6149690bf77473633aaf820d6569c97a9f2908ab",
-    "490d9e9cb2131a989551a055c0e84f70174e3787",
-    "490a5b388762702dd68b81472095f8773265adc9",
-    "7e8c4cef998c6789a29d2253b21a2721e3f19044",
-    "ec73307670005a1f00cbeb039dc90709fa2a871e",
-    "90f54dddcf833c2ddde722dd8b298ec54c59eb98",
-    "a7593dae2e669a61c7815e87b7d38d3a91184756",
-    "279676f8088d1af739a133879bfbce4e00b9175f",
-    "50595e765f42bdb518402f8a0bd1ae1f649f4823",
-    "29fc7b2153c5f965024b0c0632a844f9b173813c",
-    "e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5",
-    "11bdaa6c6fbf570e664a9b670cf54d0feba8b387",
-    "30b66b0fba4dfc248d61915b08e92e4cabd2323a",
-    "9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc",
-    "e44e8cf26aa8e5abc204bdf54f58d27aaac993a7",
-    "7a54294609a4a8075eac2302f60e3a4031ef3596",
-    "ced6a648901fa6ff7f2a18d854164845d89fa024",
-    "6c57d4105add93c3b983ca2dfbb4d6f66f696f92",
-    "f9dd19a1a2820891cddd0c3cea538984a5b6c497",
-    "b4f7857f9c0c21e83d0c3e76917093f4011053db",
-    "516da1de900c3ae45daa09cbfbfec985e0179661",
-    "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
-    "99977bd751741658172c6d0f1df21af662a375e8",
-    "85ebb0d08e6845c54b50370482ed0dd92cf39958",
-    "67bb668abe0b17a98278829ee38312d480ebed5e",
-    "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6"
-  ],
-  "excluded_commits": [
-    "6061a61a",
-    "17d1ac",
-    "a8d4a44c8ede4c703e8866fbf709b34dd1506294"
+  "schema": 2,
+  "integration": {
+    "mode": "upstream-merges-with-local-overrides",
+    "upstream_url": "https://github.com/VIKINGYFY/immortalwrt",
+    "upstream_ref": "owrt",
+    "imported_head": "1f21e82da200de8ff389d315bcacd719e02bf829",
+    "acceptance": "integration-candidate; physical acceptance not performed"
+  },
+  "review": {
+    "local_base": "c0c8b86ad07c170bbb0c6c5caa8b862ad06ee96e",
+    "inventory": "config/rc01/upstream-audit/20261115.json",
+    "inventory_sha256": "9fa763a02edf106efc036502e9f6c6fd58dc47733ccd8a52b65460828c933b92",
+    "completed_unique_commits": 472
+  },
+  "legacy_selection": {
+    "path": "config/rc01/upstream-audit/selected-20261114.json",
+    "sha256": "e8ba40841bfe00cda71e3544ea4920f47c0e8d4657eac5dbbeeaa3fa3922b42e"
+  },
+  "local_overrides": [
+    {
+      "id": "RC01-LAYOUT",
+      "paths": [
+        "config/rc01/layout.json",
+        "package/boot/uboot-tools/uboot-envtools/files/qualcommbe_ipq95xx",
+        "target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh"
+      ],
+      "reason": "保留身份区、唯一布局、ENV两擦除块、FIT别名和升级预检",
+      "exit_condition": "上游具备同一RC01布局契约且完成迁移验收后再退出"
+    },
+    {
+      "id": "RC01-BOARD",
+      "paths": [
+        "target/linux/qualcommbe/dts/ipq9570-be10000.dts",
+        "target/linux/qualcommbe/image/ipq95xx.mk"
+      ],
+      "reason": "保留MAC/校准/TrustZone/CMA320和原无线资源策略，避免公共mode1自动生效",
+      "exit_condition": "独立硬件比较证明新默认安全且获选择后变更"
+    },
+    {
+      "id": "RC01-THERMAL-UI",
+      "paths": [
+        "package/emortal/rc01-platform",
+        "package/emortal/rc01-rgb",
+        "package/emortal/luci-app-rc01",
+        "package/emortal/luci-app-rc01-rgb"
+      ],
+      "reason": "保留风扇故障保护、RGB及状态界面；不重复启用小米控制服务",
+      "exit_condition": "上游具备等价故障保护与接口后再迁移"
+    },
+    {
+      "id": "RC01-PCS",
+      "paths": [
+        "target/linux/qualcommbe/patches-6.18/0313-net-pcs-ipq9574-modes-and-bringup.patch"
+      ],
+      "reason": "独立时钟值、失败重试、复位错误和成对MII所有权",
+      "exit_condition": "上游包含等价失败态契约且故障注入通过"
+    },
+    {
+      "id": "RC01-PPE-TX",
+      "paths": [
+        "target/linux/qualcommbe/patches-6.18/0685-net-ppe-disable-unsafe-tx-forwarding-offload.patch"
+      ],
+      "reason": "保留正确单播/MDB出口语义",
+      "exit_condition": "上游精确TX复制实现通过现有正负例及实机验证"
+    },
+    {
+      "id": "RC01-PPE-FDB",
+      "paths": [
+        "target/linux/qualcommbe/patches-6.18/0686-net-ppe-check-fdb-upper-type-before-vlan-access.patch"
+      ],
+      "reason": "读取bridge私有VLAN状态前验证upper类型",
+      "exit_condition": "上游具备等价类型检查后移除"
+    },
+    {
+      "id": "RC01-ARP",
+      "paths": [
+        "target/linux/generic/pending-6.18/151-net-bridge-do-not-send-arp-replies-if-src-and-target.patch"
+      ],
+      "reason": "使用锁内邻居地址快照ha",
+      "exit_condition": "上游使用等价安全快照后移除"
+    },
+    {
+      "id": "RC01-NAND",
+      "paths": [
+        "target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch"
+      ],
+      "reason": "保留NAND实际ID长度和几何诊断",
+      "exit_condition": "有等价诊断与恢复证据时重新评估"
+    },
+    {
+      "id": "RC01-FIREWALL",
+      "paths": [
+        "package/network/config/firewall4/patches/100-rc01-report-restart-result-boundaries.patch"
+      ],
+      "reason": "保留重启阶段、状态恢复及include失败返回语义",
+      "exit_condition": "上游等价处理并通过规则生命周期回归后移除"
+    },
+    {
+      "id": "RC01-RADIO-DEFAULTS",
+      "paths": [
+        "package/emortal/luci-app-router-tool/root/usr/share/router-tool/wireless.uc"
+      ],
+      "reason": "等待指定子radio且自动20/80/160策略不变",
+      "exit_condition": "上游等价等待行为且带宽策略经本板验证后变更"
+    },
+    {
+      "id": "RC01-WIRELESS-LIFETIME",
+      "paths": [
+        "package/kernel/mac80211/patches/ath12k/914-rc01-protect-pre-start-mlo-borrowers.patch",
+        "package/kernel/mac80211/patches/ath12k/920-ath12k-stop-group-work-before-memory-release.patch",
+        "package/kernel/mac80211/patches/ath12k/921-rc01-quiesce-pci-qmi-failure-before-powerdown.patch",
+        "package/kernel/mac80211/patches/ath12k/922-rc01-preserve-regulatory-request-order.patch"
+      ],
+      "reason": "保留每设备MLO借用和组/QMI/PCI退出保护；移除DFS相同规则跳过优化",
+      "exit_condition": "上游具备等价生命周期和异步请求顺序保护后逐项退出"
+    },
+    {
+      "id": "RC01-SOFTWARE",
+      "paths": [
+        "scripts/rc01-software-sources.py",
+        "config/rc01/feeds.conf",
+        "defconfig/qualcommbe-rc01.config"
+      ],
+      "reason": "独立锁定应用/feed、保留daemon选择和现有Rust构建路径",
+      "exit_condition": "按独立应用升级与构建验证迁移"
+    }
   ],
   "kernel": {
     "version": "6.18.60",
@@ -54,123 +134,9 @@
   },
   "wireless": {
     "version": "7.2",
-    "release": 47,
+    "release": 51,
     "sha256": "6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454",
-    "release_scope": "local selected-commits; not upstream r47 or a full merge"
-  },
-  "local_preserved": [
-    "RC01 identity-preserved layout and 32MiB minimum writable budget",
-    "five-argument 64KiB envtools mapping",
-    "C4 default and C6 same-payload alias",
-    "442 per-entry NAND ID correction and 0412 full-length probe diagnostics",
-    "push-pull fan and fail-safe guard",
-    "BusyBox awk preflight and ramfs layout recheck",
-    "three PPE DS nodes, identity DMA and quarantine"
-  ],
-  "local_adjustments": [
-    "PCS output rate published before CCF recalculation, independently of the successful interface-mode cache; failed shared setup retries and paired MII clock ownership are checked",
-    "6.18.60 duplicate backports removed and affected contexts refreshed",
-    "RC01-only Q6 removal and WCSS disable/unbind; retain existing tzapp 0x49b00000/6MiB and memory mode",
-    "Firmware 02903 paired with d7 DS guard: exact fw_version, substring build ID; exact-ID contract remains unresolved; nonmatching FW stays CPU",
-    "Keep old 906/317/338/342 and independently adapt dependencies; preserve CMA320 and ring sizes",
-    "914 uses per-device MLO borrowers to protect pre-start partners, and releases coherent owner before unknown PCI-type fallback",
-    "PPE FDB worker verifies bridge master before reading bridge private VLAN data",
-    "Router Tool waits for a requested child capability list before applying defaults",
-    "352 quiesces both PCI remove paths before power-down; preserves entry QMI failure decision and event-before-restart order",
-    "firewall4 004 call adapted to old resolve_lower_devices(devstatus, devname); upstream use_prefix/WDS prefix resolution not carried",
-    "firewall4 100 (UP05): restart reports render/check/apply stage, failed state restore/removal and script include failure; run_includes exits 1 on a failed script include; CLI no longer claims the previous ruleset was kept",
-    "920 review R1/R2: QMI work initialized at core_alloc; existing global process lifecycle mutex serializes lookup/publication/create through stop/unassign/list removal/free; workers never take it; stop waits drop ag/core locks, memory release holds ag mutex; exiting groups cannot be recreated",
-    "UP02 R1: nf_conntrack_bridge.ko is owned only by kmod-nf-conntrack-bridge; kmod-nft-bridge depends on that package and only owns its meta/reject modules"
-  ],
-  "followup_selection": [
-    {
-      "commit": "a7593dae2e669a61c7815e87b7d38d3a91184756",
-      "scope": "ESMT full-length table correction; no unrelated DTS reorder"
-    },
-    {
-      "commit": "279676f8088d1af739a133879bfbce4e00b9175f",
-      "scope": "915 encrypted native-WiFi EAPOL"
-    },
-    {
-      "commit": "50595e765f42bdb518402f8a0bd1ae1f649f4823",
-      "scope": "352 MHI/QMI teardown"
-    },
-    {
-      "commit": "29fc7b2153c5f965024b0c0632a844f9b173813c",
-      "scope": "916 four-address CPU fallback"
-    },
-    {
-      "commit": "e0d65efeee0db0bd8ec9d49c8cfc70e05ec98ad5",
-      "scope": "917 conditional HW1 RX padding"
-    },
-    {
-      "commit": "11bdaa6c6fbf570e664a9b670cf54d0feba8b387",
-      "scope": "918 control-port hook and lifetime"
-    },
-    {
-      "commit": "30b66b0fba4dfc248d61915b08e92e4cabd2323a",
-      "scope": "919 bounded HALT and error propagation"
-    },
-    {
-      "commit": "9d326a6a05e6237fc8dfb4ec716c4f11eb6e6bcc",
-      "scope": "netifd existing AP bridge attributes"
-    },
-    {
-      "commit": "e44e8cf26aa8e5abc204bdf54f58d27aaac993a7",
-      "scope": "719-04 software flowtable policy invalidation"
-    },
-    {
-      "commit": "7a54294609a4a8075eac2302f60e3a4031ef3596",
-      "scope": "719-05 old FDB port notification"
-    },
-    {
-      "commit": "ced6a648901fa6ff7f2a18d854164845d89fa024",
-      "scope": "partial: 0680 generic notifiers/carrier +0681 FDB worker; excludes RTL/MPPE capability changes"
-    },
-    {
-      "commit": "6c57d4105add93c3b983ca2dfbb4d6f66f696f92",
-      "scope": "partial: 910 property reader; excludes other board DTS"
-    },
-    {
-      "commit": "f9dd19a1a2820891cddd0c3cea538984a5b6c497",
-      "scope": "partial: RC01 three-radio slab policy; no mode1"
-    },
-    {
-      "commit": "b4f7857f9c0c21e83d0c3e76917093f4011053db",
-      "scope": "partial: full old-317-compatible ath12k 914 plus RC01-only Q6/WCSS removal; excludes mode1/AHB/ath11k"
-    },
-    {
-      "commit": "516da1de900c3ae45daa09cbfbfec985e0179661",
-      "scope": "partial: ath12k firmware recipe only, no ath11k"
-    },
-    {
-      "commit": "d7cb81d96a4a10ab5a44ce916dc5d9406cd44559",
-      "scope": "HW1 02903 DS ABI gate: exact fw_version and substring build ID, not an exact two-field comparison"
-    },
-    {
-      "commit": "99977bd751741658172c6d0f1df21af662a375e8",
-      "scope": "Router Tool per-child auto-channel defaults"
-    },
-    {
-      "commit": "85ebb0d08e6845c54b50370482ed0dd92cf39958",
-      "scope": "partial, after reviewed_head: only 0682 IPIP6/MAP-E tunnel parameter read via rtnl_trylock with -EAGAIN into the existing pre-publication cleanup (blob 04753b023fcfa2945f838b479aaa6ec5b5014ea4), 0683 PPE active-list block drain (blob fcd69f0c13e602e076ac0cede5678d0148eb8573) and 0684 resource-diagnostic slot/quarantine budget lines (blob 335c56c4dfb827025e0070eb88db8e53d92442e5), all kept byte-identical and applied in numeric order with fuzz 0 (line offsets only); equivalent to the tunnel trylock of endpoint dd8de87169f1c1d091a81eb237341b2de09bd5bf 0514-04, the PPE-B part of 0651-03 and the resource_stats output of 0651-04, without their regrouping or RTL837x changes"
-    },
-    {
-      "commit": "67bb668abe0b17a98278829ee38312d480ebed5e",
-      "scope": "after reviewed_head, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf: generic hack-6.18 769 flowtable route/neighbour revalidation, all three files (nf_flow_table.h, nf_flow_table_core.c, nf_flow_table_path.c); this commit adds only 769 (blob 87b9308766396b37b7d65e68ddc58a908eed79e0); the carried text is the endpoint blob 45ac1cfed4d84783b06adef41f2a3f28258ef8bc, whose only change from 2bb59802ceeb8bcba408a7b6694f0c4669e24eab 'refresh patches' is hunk-header function context; byte-identical, fuzz 0 without offsets"
-    },
-    {
-      "commit": "43d9a24aab2cebab2d9bdb47a194ea28872c9cb6",
-      "scope": "partial, read at dd8de87169f1c1d091a81eb237341b2de09bd5bf beyond reviewed_head: firewall4 patches only, onto old firewall4 e6f600c (no 3722ead source upgrade, release 15): 004 bridge offload allow/exclude/ibrname/last-priority rule with +kmod-nft-bridge (old two-argument resolve_lower_devices, no WDS prefix); 005 restart one-batch nft replacement of owned inet/bridge tables, FW4_RESTART flowtable-delete suppression, stop removes bridge table (blob 12169701ebf220356d0d07b1e34f0e33457005b7, byte-identical); 006 direct ct state established,related accept and separate optional invalid drop (blob aaf2cc06fbfa9921b45ed3054a42a8d40d2caf2d, byte-identical); local 100 patch reports stage, state restore and include results. Parent 67bb668a (769) is not carried"
-    }
-  ],
-  "deferred": {
-    "mode1": "separate runtime comparison candidate; default remains original profile",
-    "dae": "source update is a separate opt-in application batch; compilation and runtime acceptance tracked independently",
-    "906_split": "retain existing 906; no unproved source-equivalence refactor",
-    "1635_cleanup": "not a prerequisite for old-317-compatible 914",
-    "DFS911": "pending request A/B/A ordering defect unresolved",
-    "3db8bb9": "WCSS copied dump has no direct benefit with RC01 Q6 disabled"
+    "release_scope": "Viking 1f21e82da2 merged with explicit RC01 local overrides"
   },
   "ath12k_firmware": {
     "url": "https://github.com/VIKINGYFY/ath12k-firmware-ddwrt.git",
@@ -193,18 +159,14 @@
       }
     }
   },
-  "optional_dae": {
-    "integration": "separate opt-in application commit; disabled by default",
-    "feed_commit": "3520a79bd9c68843801dc89d7d6e155d2c43c833",
-    "version": "2026.11.09-r3",
-    "lock": "config/rc01/patches/daede/sources.json",
-    "native_api_default": "disabled; when enabled default loopback, remote needs secret",
-    "kernel_btf": "actual-built-kernel only"
-  },
   "boot_contract": {
     "layout": "config/rc01/layout.json",
     "materials": "config/rc01/boot/materials.json",
-    "validation": "static-candidate-only; no device boot or flashing",
-    "runtime": "not-performed"
+    "validation": "per-build static checks; per-device acceptance separate"
+  },
+  "validation_policy": {
+    "source": "actual patch application and RC01 host regressions with bound inputs",
+    "target": "ARM64 build and image contract validation required before delivery",
+    "physical": "separate authorization and hardware acceptance"
   }
 }

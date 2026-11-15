@@ -243,8 +243,10 @@ static void fixed(void)
 	fail_map_after = -1;
 	assert(!ath12k_qmi_assign_target_mem_chunk(&ab));
 	cleanup(&ab); cleanup(&ab);
-	/* Dynamic owner followed by an unknown fixed-PCI request must free it. */
-	ab.dev_flags = 0; ab.hif.bus = ATH12K_BUS_PCI;
+	/* Dynamic owner followed by an unknown fixed/AHB request must free it.
+	 * Upstream removed the separate fixed-PCI allocator; do not describe
+	 * this generic fixed-memory cleanup as testing that deleted path. */
+	ab.dev_flags = 0; ab.hif.bus = ATH12K_BUS_AHB;
 	ab.qmi.mem_seg_count = 1;
 	request(&ab, 0, HOST_DDR_REGION_TYPE, 64);
 	assert(!ath12k_qmi_alloc_target_mem_chunk(&ab));

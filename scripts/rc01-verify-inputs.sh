@@ -45,8 +45,10 @@ rm -rf "$W/src/busybox-$BBV"
 tar -C "$W/src" -xjf "$W/dl/busybox-$BBV.tar.bz2"
 patchdir "$W/src/busybox-$BBV" "$TREE/package/utils/busybox/patches"
 # Target applet/ash defaults from the package's Config-defaults.in
-# (IPV6 on, TARGET_bcm53xx off), as Build/Configure would see them.
+# (IPV6 on, TARGET_bcm53xx/SMALL_FLASH/LOW_MEMORY_FOOTPRINT off),
+# as Build/Configure would see them for RC01.
 awk '/^config BUSYBOX_DEFAULT_/ { sym = substr($2, 17); seen = 0; next }
+     /^[ \t]+default .* if SMALL_FLASH \|\| LOW_MEMORY_FOOTPRINT$/ { next }
      /^[ \t]+default / && !seen { seen = 1; sub(/^[ \t]+default /, "")
        if ($0 ~ / if TARGET_bcm53xx$/) v = "n"; else { sub(/ if IPV6$/, ""); v = $0 }
        if (v == "n") print "# CONFIG_" sym " is not set"; else print "CONFIG_" sym "=" v }' \

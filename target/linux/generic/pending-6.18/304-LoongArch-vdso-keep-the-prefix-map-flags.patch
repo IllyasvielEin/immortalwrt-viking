@@ -41,4 +41,3 @@ Signed-off-by: John Crispin <john@phrozen.org>
  	$(CONFIG_CC_OPT_INLINE_MEMSET) \
  	$(CLANG_FLAGS) \
  	-D__VDSO__
- 

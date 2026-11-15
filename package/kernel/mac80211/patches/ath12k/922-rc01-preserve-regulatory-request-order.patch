@@ -1,0 +1,52 @@
+Subject: [PATCH] wifi: ath12k: submit regulatory requests even if currently published
+
+A queued B request may still replace published A. Skipping a later A based
+only on wiphy->regd leaves B queued and violates A/B/A request ordering.
+Drop the current-only optimization while retaining all other regulatory
+serialization. This deliberately forgoes unchanged-rule DFS state retention
+until a pending-request-aware solution is independently validated.
+
+--- a/drivers/net/wireless/ath/ath12k/reg.c
++++ b/drivers/net/wireless/ath/ath12k/reg.c
+@@ -264,25 +264,6 @@
+ 	for (i = 0; i < regd_orig->n_reg_rules; i++)
+ 		memcpy(&regd_copy->reg_rules[i], &regd_orig->reg_rules[i],
+ 		       sizeof(struct ieee80211_reg_rule));
+-}
+-
+-static bool ath12k_regd_is_current(struct wiphy *wiphy,
+-				   const struct ieee80211_regdomain *regd)
+-{
+-	const struct ieee80211_regdomain *wiphy_regd;
+-	bool equal = false;
+-
+-	rcu_read_lock();
+-	wiphy_regd = rcu_dereference(wiphy->regd);
+-	if (wiphy_regd && wiphy_regd->n_reg_rules == regd->n_reg_rules &&
+-	    wiphy_regd->dfs_region == regd->dfs_region &&
+-	    !memcmp(wiphy_regd->alpha2, regd->alpha2, sizeof(regd->alpha2)) &&
+-	    !memcmp(wiphy_regd->reg_rules, regd->reg_rules,
+-		    regd->n_reg_rules * sizeof(regd->reg_rules[0])))
+-		equal = true;
+-	rcu_read_unlock();
+-
+-	return equal;
+ }
+ 
+ int ath12k_regd_update(struct ath12k *ar, bool init)
+@@ -410,14 +391,7 @@
+ 		goto err;
+ 	}
+ 
+-	/* Adding a VIF can regenerate unchanged rules for a shared wiphy.
+-	 * Reapplying them discards DFS availability established by another
+-	 * radio. Keep startup/recovery and every actual rule change intact.
+-	 */
+-	ret = 0;
+-	if (init || ah->state != ATH12K_HW_STATE_ON ||
+-	    !ath12k_regd_is_current(hw->wiphy, regd_copy))
+-		ret = regulatory_set_wiphy_regd(hw->wiphy, regd_copy);
++	ret = regulatory_set_wiphy_regd(hw->wiphy, regd_copy);
+ 
+ 	kfree(regd_copy);
+ 

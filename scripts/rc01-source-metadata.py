@@ -43,6 +43,67 @@ def local_patchset():
     return {"sha256": digest, "files": records}
 
 
+def integration_metadata(result, root=None):
+    """Bind a merge claim to real Git ancestry and the complete review set.
+
+    Schema 1 remains readable for historical source selections. Schema 2
+    records imported history separately from local overrides and acceptance.
+    """
+    root = ROOT if root is None else root
+    if result.get("schema") == 1:
+        return {"mode": "legacy-selection", "ancestry_claim": False}
+    if result.get("schema") != 2:
+        raise ValueError("unsupported platform provenance schema")
+    integration = result["integration"]
+    if integration.get("mode") != "upstream-merges-with-local-overrides":
+        raise ValueError("unsupported integration mode")
+    upstream = integration["imported_head"]
+    local = result["review"]["local_base"]
+    for sha in (upstream, local):
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise ValueError("integration references must be full commit IDs")
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    head = git("rev-parse", "HEAD")
+    for ancestor in (upstream, local):
+        if subprocess.run(["git", "merge-base", "--is-ancestor", ancestor, head],
+                          cwd=root, capture_output=True).returncode:
+            raise ValueError("build HEAD does not contain the declared integration ancestry")
+    if git("ls-files", "--unmerged"):
+        raise ValueError("cannot record provenance for an unresolved merge")
+    review = result["review"]
+    path = (root / review["inventory"]).resolve()
+    if not path.is_relative_to(root.resolve()):
+        raise ValueError("review inventory must be inside the source tree")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != review["inventory_sha256"]:
+        raise ValueError("review inventory digest differs")
+    inventory = json.loads(data)
+    if inventory["local"] != local or inventory["upstream"] != upstream:
+        raise ValueError("review inventory endpoints differ")
+    records = inventory["records"]
+    shas = [record["sha"] for record in records]
+    expected = set(git("rev-list", f"{local}..{upstream}").splitlines())
+    if len(set(shas)) != len(shas) or set(shas) != expected:
+        raise ValueError("review inventory has duplicate, missing or extra commits")
+    if review["completed_unique_commits"] != len(expected):
+        raise ValueError("review count differs from actual commit set")
+    for record in records:
+        if record.get("review_status") != "complete" or not record.get("review_depth"):
+            raise ValueError("review inventory contains incomplete records")
+    legacy = result["legacy_selection"]
+    legacy_path = (root / legacy["path"]).resolve()
+    if not legacy_path.is_relative_to(root.resolve()):
+        raise ValueError("legacy provenance must be inside the source tree")
+    if hashlib.sha256(legacy_path.read_bytes()).hexdigest() != legacy["sha256"]:
+        raise ValueError("legacy provenance digest differs")
+    return {"mode": integration["mode"], "source_head": head,
+            "imported_head": upstream, "ancestry_verified": True,
+            "reviewed_unique_commits": len(expected),
+            "review_inventory_sha256": review["inventory_sha256"],
+            "physical_acceptance": "not-performed"}
+
+
 def kernel_btf_metadata():
     kernels = list(ROOT.glob("build_dir/target-*/linux-qualcommbe_ipq95xx/linux-6.18.60/vmlinux"))
     if len(kernels) != 1:
@@ -70,6 +131,7 @@ def kernel_btf_metadata():
 
 def metadata():
     result = json.loads((ROOT / "scripts/rc01-platform-sources.json").read_text())
+    result["integration_proof"] = integration_metadata(result)
     kernel = result["kernel"]
     actual = "6.18" + value("target/linux/generic/kernel-6.18", "LINUX_VERSION-6.18")
     if actual != kernel["version"] or value("target/linux/generic/kernel-6.18", f"LINUX_KERNEL_HASH-{actual}") != kernel["sha256"]:
@@ -132,8 +194,26 @@ def metadata():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--summary", action="store_true", help="print verified build metadata as public key=value lines")
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
+    if args.summary:
+        result = json.loads(args.output.read_text())
+        proof = result["integration_proof"]
+        merged = proof.get("ancestry_verified", False)
+        values = {
+            "viking_integration": proof["mode"],
+            "viking_full_merge": str(merged).lower(),
+            "viking_imported_head": proof.get("imported_head", "not-merged"),
+            "viking_reviewed_commits": proof.get("reviewed_unique_commits", 0),
+            "kernel": result["kernel"]["version"],
+            "kernel_source_sha256": result["kernel"]["sha256"],
+            "mac80211": f'{result["wireless"]["version"]}-r{result["wireless"]["release"]} ({proof["mode"]})',
+            "ipq_wifi": f'{result["software"]["ipq-wifi"]["release"]}@{result["software"]["ipq-wifi"]["source_commit"]}',
+        }
+        for key, value in values.items():
+            print(f"{key}={value}")
+        return
     args.output.write_text(json.dumps(metadata(), indent=2) + "\n")
 
 

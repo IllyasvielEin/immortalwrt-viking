@@ -38,8 +38,12 @@ class FirmwarePairing(unittest.TestCase):
         for name, blob in (("amss.bin", self.amss), ("m3.bin", self.m3)):
             self.sources["ath12k_firmware"]["hw1"]["files"][name] = {
                 "bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
+        self.driver_version = (self.sources["kernel"]["version"] + "." +
+                               self.sources["wireless"]["version"] + "-r" +
+                               str(self.sources["wireless"]["release"]))
         self.packages = {"ath12k-firmware-qcn9274-ddwrt": "2026.11.07~774f0cca-r1",
-                         "kmod-ath12k": "6.18.60.7.2-r47", "kmod-mac80211": "6.18.60.7.2-r47"}
+                         "kmod-ath12k": self.driver_version,
+                         "kmod-mac80211": self.driver_version}
 
     def verify(self, **changes):
         args = {"amss": self.amss, "m3": self.m3, "module": self.driver,
@@ -58,7 +62,7 @@ class FirmwarePairing(unittest.TestCase):
 
     def test_stale_public_ci_package_versions_are_rejected(self):
         for package in self.packages:
-            packages = self.packages | {package: self.packages[package].replace("r47", "r44").replace("r1", "r0")}
+            packages = self.packages | {package: self.packages[package] + "-stale"}
             with self.subTest(package=package), self.assertRaises(artifacts.images.VerificationError):
                 self.verify(packages=packages)
 
@@ -97,7 +101,7 @@ class FirmwarePairing(unittest.TestCase):
                     result = artifacts.verify_image(upgrade, self.sources)
                     self.assertEqual(result["ath12k_wifi7.ko"]["sha256"], hashlib.sha256(self.driver).hexdigest())
             # A real installed DB drift must be rejected by the full extractor.
-            database.write_text(correct.replace("6.18.60.7.2-r47", "6.18.60.7.2-r44"))
+            database.write_text(correct.replace(self.driver_version, "6.18.60.7.2-r44"))
             squashfs = work / "wrong-packages.squashfs"
             subprocess.run(["mksquashfs", str(root), str(squashfs), "-noappend", "-processors", "1", "-quiet"],
                            check=True, capture_output=True)

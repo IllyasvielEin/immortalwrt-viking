@@ -141,3 +141,6 @@ class GroupTeardown(unittest.TestCase):
 
     def test_probe_after_group_exit_builds_a_new_independent_group(self):
         self.scenario("probe-after-exit")
+
+    def test_wsi_id_is_independent_of_probe_order_and_count(self):
+        self.scenario("reverse-probe-order")

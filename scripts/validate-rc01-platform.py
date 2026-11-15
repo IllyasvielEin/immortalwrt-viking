@@ -134,10 +134,13 @@ def verify_wireless(wireless: Path) -> dict:
             setup.index("!ath12k_wifi7_ds_hw1_compat(dp->ab)") < setup.index("kzalloc"),
             "unknown HW1 firmware must retain CPU fallback")
     profile = function(core, "ath12k_core_pre_init")
-    require('"qcom,rx-skb-slab"' in profile and '"qcom,ath12k-low-memory"' in profile and
-            profile.index('"qcom,rx-skb-slab"') < profile.index('"qcom,ath12k-low-memory"') and
-            "ab->low_memory_rx = true;" in profile,
-            "independent slab selection must preserve old low-memory semantics")
+    require('"qcom,rx-skb-slab"' in profile and
+            "ab->low_memory_rx = of_property_read_bool" in profile and
+            "param = &ath12k_mem_profile_based_param[ab->target_mem_mode];" in profile and
+            "ab->profile_param = param;" in profile and
+            '"qcom,ath12k-low-memory"' not in core,
+            "slab selection must remain independent of the firmware capacity profile; "
+            "the retired host-only override must not return")
     bind = function(ds, "ath12k_ds_bind_vif")
     require("nf_register_net_hook" in bind and "if (ret)\n\t\treturn ret;" in bind,
             "control-port ingress hook registration/error propagation missing")
