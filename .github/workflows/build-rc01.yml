@@ -63,12 +63,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Record source time
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
-
       - name: Reclaim runner space
         shell: bash
         run: |
@@ -224,7 +218,8 @@ jobs:
           set -euo pipefail
           sh scripts/prepare-rc01.sh 2>&1 | tee prepare.log
           ./scripts/diffconfig.sh > rc01.diffconfig
-          echo "SOURCE_DATE_EPOCH=$(python3 -c 'import json; print(json.load(open(".rc01-sources/lock.json"))["source_date_epoch"])')" >> "$GITHUB_ENV"
+          . ./.rc01-sources/environment.sh
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
         env:
           GH_TOKEN: ${{ github.token }}
 

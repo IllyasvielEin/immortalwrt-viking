@@ -9,3 +9,12 @@ Copyright and license notices remain in the files. `recipe-closure.json` binds t
 Only the manifest's explicit fields may vary: the stable Go 1.27 patch/source hash/package release; daemon recipe versions, content-addressed filenames, source hashes and package releases; LuCI version/package release; and known component pin values. The bootstrap source remains 1.24.13. Pin keys, comments and structure remain exact. Unsupported changes fail before applying the local patches; successful patch application alone is insufficient.
 
 Snapshots include the complete Go inputs and the daemon files needed to exercise the real local patch offline. The remaining daemon closure files are bound by their source commit, path, mode and SHA256. Replay derives recipes and provenance again from these inputs instead of trusting auxiliary facts in an external source lock.
+
+`locks/with-dae.json` is a completed locked-mode source lock for the current
+reviewed platform inputs and the five commits in `config/rc01/feeds.conf`.
+It is generated through `scripts/prepare-rc01.sh` with `RC01_UPDATE_MODE=locked`
+and `RC01_WITH_DAE=true`; it is source provenance, not firmware build acceptance.
+Replay with the same variant still checks every platform input and re-derives
+the recipes from pinned feed objects. A platform change requires a newly
+prepared and reviewed lock; historical locks are deliberately not migrated.
+The build guide documents replay and refresh commands.

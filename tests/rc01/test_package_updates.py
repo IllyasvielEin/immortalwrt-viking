@@ -1,6 +1,7 @@
 """Offline checks against the real pinned recipe objects; no feed update/build."""
 from pathlib import Path
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/patch-rc01-packages.py"
@@ -157,32 +159,40 @@ class PackageRecipeTests(unittest.TestCase):
                     self.assert_refused_unchanged("SOURCE_DATE_EPOCH timestamp guard")
                     path.write_text(original)
 
-    def test_real_prepare_timestamp_guard_and_hook_replay_together(self):
-        project = self.work / "prepare-fixture"
-        (project / "scripts").mkdir(parents=True)
-        (project / "feeds").mkdir()
-        shutil.copy2(SCRIPT, project / "scripts" / SCRIPT.name)
-        shutil.copytree(PATCHES, project / "config/rc01/patches/packages")
-        for name, feed in self.feeds.items():
-            (project / "feeds" / name).symlink_to(feed, target_is_directory=True)
-        path = self.recipes()["nikki"]
-        path.write_text(self.originals["nikki"])
-        prepare = (ROOT / "scripts/prepare-rc01.sh").read_text()
-        end = prepare.index("\nfi\npython3 -B scripts/rc01-software-sources.py finish-locked")
-        section = prepare[prepare.index("core_makefile="):end]
-        for _ in range(2):
-            result = subprocess.run(["sh", "-eu", "-c", section], cwd=project,
-                                    capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(NEW_TIME, path.read_text())
-            self.assertEqual(variable(path.read_text(), "PKG_VERSION"), "1.19.34")
-        path.write_text(path.read_text().replace(NEW_TIME, "PKG_BUILD_TIME:=unknown"))
-        before = self.snapshot()
-        result = subprocess.run(["sh", "-eu", "-c", section], cwd=project,
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Mihomo timestamp recipe changed", result.stderr)
-        self.assertEqual(self.snapshot(), before)
+    def test_locked_resolver_timestamp_guard_and_package_patches_together(self):
+        spec = importlib.util.spec_from_file_location("software_sources", ROOT / "scripts/rc01-software-sources.py")
+        sources = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sources)
+        lock = {"with_dae": False, "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
+        for name, recipe in self.recipes().items():
+            recipe.write_text(self.originals[name])
+        # Scope out the separately tested Go adapter; derive real application
+        # bytes from the pinned objects, then use prepare's guarded writer.
+        def pristine(feed, name):
+            return subprocess.check_output(["git", "-C", str(self.feeds[feed]), "show", "HEAD:" + name])
+        with mock.patch.object(sources, "ROOT", self.work), \
+             mock.patch.object(sources, "pristine", side_effect=pristine), \
+             mock.patch.object(sources, "go_adapter"):
+            shutil.copytree(PATCHES, self.work / "config/rc01/patches/packages")
+            sources.locked_sources(lock)
+            # The resolver's output paths use feeds/<name>/, unlike the
+            # standalone patch script's configurable fixture directories.
+            (self.work / "feeds").mkdir()
+            for name, feed in self.feeds.items():
+                feed.rename(self.work / "feeds" / name)
+                self.feeds[name] = self.work / "feeds" / name
+            for _ in range(2):
+                sources.apply_outputs(lock)
+                for item in MANIFEST:
+                    path = self.recipes()[item["feed"]]
+                    self.assertEqual(sources.digest(path.read_bytes()), item["applied_sha256"])
+                self.assertIn(NEW_TIME, self.recipes()["nikki"].read_text())
+            path = self.recipes()["nikki"]
+            path.write_text(path.read_text().replace(NEW_TIME, "PKG_BUILD_TIME:=unknown"))
+            before = self.snapshot()
+            with self.assertRaisesRegex(sources.SourceError, "pre/postimage drift"):
+                sources.apply_outputs(lock)
+            self.assertEqual(self.snapshot(), before)
 
     def test_symlinked_recipe_is_rejected(self):
         path = self.recipes()["nikki"]
@@ -210,14 +220,6 @@ class IntegrationContractTests(unittest.TestCase):
         self.assertEqual(by_feed["nikki"]["source_sha256"], "5ef52ba261e872e99658422165d0c0a9fbebcf3366c9544ac8da813933e3d245")
         # These exact flags/call sites also preserve the existing source build.
         self.assertNotIn("GOSUMDB", SCRIPT.read_text())
-
-    def test_prepare_calls_package_hook_after_pin_and_timestamp_guards(self):
-        prepare = (ROOT / "scripts/prepare-rc01.sh").read_text()
-        hook = "python3 -B scripts/patch-rc01-packages.py feeds/packages feeds/nikki"
-        self.assertEqual(prepare.count(hook), 1)
-        self.assertLess(prepare.index("Feed revision mismatch"), prepare.index(hook))
-        self.assertLess(prepare.index("Mihomo timestamp recipe changed"), prepare.index(hook))
-        self.assertLess(prepare.index(hook), prepare.index("make defconfig"))
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ def write_json(path, data):
 
 
 def write_preparation_phase(lock, state):
-    if state not in ("planned", "locked-pending", "complete"):
+    if state not in ("planned", "complete"):
         raise SourceError("invalid local source preparation phase")
     checksum = digest(json.dumps(lock, sort_keys=True, separators=(",", ":")).encode())
     write_json(STATE / "preparation.json", {"schema": 1, "state": state,
@@ -82,7 +82,7 @@ def preparation_phase(lock):
         raise SourceError("unsafe local source preparation phase")
     phase = json.loads(path.read_text())
     checksum = digest(json.dumps(lock, sort_keys=True, separators=(",", ":")).encode())
-    if (phase.get("schema") != 1 or phase.get("state") not in ("planned", "locked-pending", "complete")
+    if (phase.get("schema") != 1 or phase.get("state") not in ("planned", "complete")
             or phase.get("mode") != lock["mode"] or phase.get("lock_sha256") != checksum):
         raise SourceError("local preparation phase differs from the current source lock")
     return phase["state"]
@@ -314,7 +314,6 @@ def plan(mode, replay=None):
         lock = json.loads(Path(replay).read_text())
         if not lock.get("prepared") or lock.get("schema") != 1:
             raise SourceError("replay needs a completed software source lock")
-        validate_lock(lock)
         lock["replay"] = True
     else:
         lock = {"schema": 1, "mode": mode, "resolved_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -827,10 +826,17 @@ def prepare():
     verify_feeds(lock)
     ensure_baseline_objects()
     if lock["mode"] == "locked":
-        # Existing exact baseline patch guards remain the locked-mode adapter.
-        write_preparation_phase(lock, "locked-pending")
-        return
-    if lock.get("replay"):
+        # Derive once from reviewed feed objects; the shell never patches feeds.
+        keys = ("outputs", "inputs", "package_manifest", "go", "optional_dae", "dae_patch", "nikki")
+        derived = {key: value for key, value in lock.items() if key not in keys}
+        locked_sources(derived)
+        if lock.get("replay"):
+            for key in keys:
+                if derived.get(key) != lock.get(key):
+                    raise SourceError(f"locked replay {key} differ from reviewed sources/adapters")
+        generated_feed_changes(derived, set(derived["outputs"]))
+        lock = derived
+    elif lock.get("replay"):
         if not lock.get("prepared"):
             raise SourceError("incomplete replay source lock")
         replay_sources(lock)
@@ -882,9 +888,9 @@ def verify(lock=None):
 def locked_sources(lock):
     """Rebuild locked-mode provenance from reviewed sources, never live diffs.
 
-    The legacy patch entry points run first. Reconstruct their expected bytes
-    in isolation so capture/replay cannot bless an arbitrary changed feed file.
-    No release query or source download is needed for this reviewed baseline.
+    Reconstruct expected bytes in isolation, then use the same guarded output
+    application as latest/replay. No release query or application source
+    download is needed for this reviewed baseline.
     """
     go_adapter(lock)
     directory = ROOT / "config/rc01/patches/packages"
@@ -949,44 +955,9 @@ def locked_sources(lock):
     lock["dae_patch"] = "".join(patches)
 
 
-def finish_locked():
-    lock = load_lock()
-    if lock["mode"] != "locked":
-        return
-    phase = preparation_phase(lock)
-    if phase != "locked-pending":
-        if phase in (None, "complete") and lock.get("prepared"):
-            verify(lock)
-            return
-        raise SourceError("locked finish requires this plan's verified preparation phase")
-    keys = ("outputs", "inputs", "package_manifest", "go", "optional_dae", "dae_patch", "nikki")
-    derived = {key: value for key, value in lock.items() if key not in keys}
-    locked_sources(derived)
-    if lock.get("replay"):
-        for key in keys:
-            if derived.get(key) != lock.get(key):
-                raise SourceError(f"locked replay {key} differ from reviewed sources/adapters")
-    generated_feed_changes(derived, set(derived["outputs"]))
-    # Legacy locked adapters preserve pre-existing group-write bits. Check
-    # every produced byte first, then give this build's generated recipes the
-    # same canonical modes as latest/replay. Prior user chmod changes were
-    # already rejected by plan/reset before these adapters ran.
-    for name, item in derived["outputs"].items():
-        current = file_snapshot(safe_output(name))
-        actual = digest(current["content"]) if current is not None else None
-        if actual != item["after"]:
-            raise SourceError(f"locked adapter output differs from reviewed bytes: {name}")
-    apply_outputs(derived)
-    derived["prepared"] = True
-    verify(derived)
-    write_json(STATE / "lock.json", derived)
-    write_source_artifacts(derived)
-    write_preparation_phase(derived, "complete")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("plan", "prepare", "verify", "finish-locked"))
+    parser.add_argument("command", choices=("plan", "prepare", "verify"))
     parser.add_argument("--mode", choices=("latest", "locked"), default=os.environ.get("RC01_UPDATE_MODE", "latest"))
     parser.add_argument("--replay", default=os.environ.get("RC01_REPLAY_LOCK"))
     args = parser.parse_args()
@@ -995,8 +966,6 @@ def main():
             plan(args.mode, args.replay)
         elif args.command == "prepare":
             prepare()
-        elif args.command == "finish-locked":
-            finish_locked()
         else:
             verify()
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:

@@ -273,18 +273,14 @@ class BootstrapTests(unittest.TestCase):
             "    Path('.rc01-sources').mkdir(exist_ok=True)\n"
             "    Path('.rc01-sources/lock.json').write_text('{\"mode\":\"locked\",\"source_date_epoch\":1}')\n"
             "    shutil.copyfile('config/rc01/feeds.conf', '.rc01-sources/feeds.conf')\n"
-        )
-        for name in ("golang", "daede"):
-            executable(f"scripts/patch-rc01-{name}.sh", f'echo patch-{name} >> "$RC01_TEST_EVENTS"\n')
-        (project / "scripts/patch-rc01-packages.py").write_text(
-            "import os\nfrom pathlib import Path\n"
-            "with Path(os.environ['RC01_TEST_EVENTS']).open('a') as events:\n"
-            "    events.write('patch-packages\\n')\n"
+            "    Path('.rc01-sources/environment.sh').write_text('export SOURCE_DATE_EPOCH=1\\n')\n"
+            "elif sys.argv[1] == 'prepare':\n"
+            "    import os\n"
+            "    with Path(os.environ['RC01_TEST_EVENTS']).open('a') as events: events.write('sources-prepared\\n')\n"
         )
         executable("scripts/validate-rc01-config.sh",
                    'exec "$RC01_TEST_PYTHON" -B scripts/rc01-go-bootstrap.py validate-config "$1"\n')
         executable("test-bin/python3", 'exec "$RC01_TEST_PYTHON" -B "$@"\n')
-        executable("test-bin/git", f'echo feed-head >> "$RC01_TEST_EVENTS"\nprintf "%s\\n" {FEED_REVISION}\n')
         executable("test-bin/make", '''case "$*" in
     defconfig)
         grep -Fqx CONFIG_FRAGMENT_APPLIED=y .config
@@ -312,7 +308,7 @@ esac
                 self.assertEqual(result.returncode, 0, result.stderr)
                 bootstrap.validate_config(project / ".config", selected)
                 self.assertEqual(events.read_text().splitlines(),
-                                 ["patch-daede", "feed-head", "patch-golang", "patch-packages", "defconfig", "recipe-parse"])
+                                 ["sources-prepared", "defconfig", "recipe-parse"])
         result = prepare({"RC01_GO_BOOTSTRAP_ROOT": str(root), "RC01_TEST_MANGLE_CONFIG": "1"})
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("recipe-parse", events.read_text())
