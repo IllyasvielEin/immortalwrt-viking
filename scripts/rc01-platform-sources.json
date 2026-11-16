@@ -112,10 +112,16 @@
         "package/kernel/mac80211/patches/ath12k/914-rc01-protect-pre-start-mlo-borrowers.patch",
         "package/kernel/mac80211/patches/ath12k/920-ath12k-stop-group-work-before-memory-release.patch",
         "package/kernel/mac80211/patches/ath12k/921-rc01-quiesce-pci-qmi-failure-before-powerdown.patch",
-        "package/kernel/mac80211/patches/ath12k/922-rc01-preserve-regulatory-request-order.patch"
+        "package/kernel/mac80211/patches/ath12k/922-rc01-preserve-regulatory-request-order.patch",
+        "package/kernel/mac80211/patches/ath12k/923-ath12k-regulatory-lifetime-and-publication.patch",
+        "package/kernel/mac80211/patches/ath12k/924-01-ath12k-put-group-ref-on-hash-init-failure.patch",
+        "package/kernel/mac80211/patches/ath12k/924-02-ath12k-serialize-memory-requests-in-event-worker.patch",
+        "package/kernel/mac80211/patches/ath12k/924-03-ath12k-close-and-drain-group-before-host-teardown.patch",
+        "package/kernel/mac80211/patches/ath12k/924-04-ath12k-recover-all-members-with-one-group-owner.patch",
+        "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch"
       ],
-      "reason": "保留每设备MLO借用和组/QMI/PCI退出保护；移除DFS相同规则跳过优化",
-      "exit_condition": "上游具备等价生命周期和异步请求顺序保护后逐项退出"
+      "reason": "每设备MLO借用、唯一组恢复owner、QMI事件所有权和锁外退出屏障；单ab监管门控与sender排空、固定来源和同步等价发布、吸收DOUBT；923替代历史922异步语义",
+      "exit_condition": "上游具备等价失败态、寿命和监管发布契约并通过对应回归后逐项退出"
     },
     {
       "id": "RC01-SOFTWARE",
@@ -170,5 +176,9 @@
     "source": "actual patch application and RC01 host regressions with bound inputs",
     "target": "ARM64 build and image contract validation required before delivery",
     "physical": "separate authorization and hardware acceptance"
+  },
+  "local_repair": {
+    "manifest": "config/rc01/upstream-audit/local-repair-20261116.json",
+    "sha256": "74892ccddcdf850101804ce0fd0f67535dfe8746e8fad0a54448da0771c62b2d"
   }
 }

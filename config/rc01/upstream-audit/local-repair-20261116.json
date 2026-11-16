@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "baseline": "a0b1b29b091dc120892b5945d4da1a7653ece19c",
+  "implementation_head": "b171b4782d9b65e4c47a46c85d0f246eb0b4e341",
+  "upstream_head": "1f21e82da200de8ff389d315bcacd719e02bf829",
+  "patches": [
+    {
+      "path": "target/linux/qualcommbe/patches-6.18/0313-net-pcs-ipq9574-modes-and-bringup.patch",
+      "sha256": "785e65a02555e270352677d45987304fa0db0b21d02c34351fb337785bbd2274"
+    },
+    {
+      "path": "target/linux/qualcommbe/patches-6.18/0324-arm64-dts-qcom-ipq9574-add-PCS-uniphy-nodes.patch",
+      "sha256": "a7ff7ff1aaa2b79f6ac1d67b15e52b60cbd74db8cd558b34ade5438c3b8974c9"
+    },
+    {
+      "path": "target/linux/qualcommbe/patches-6.18/0356-02-arm64-dts-qcom-ipq9574-describe-remaining-uniphy-resets.patch",
+      "sha256": "37d9998a97ad41785c8e4d99aac661b8ef6d18c5430ae8197bb5c4c95a32eb94"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/923-ath12k-regulatory-lifetime-and-publication.patch",
+      "sha256": "0d0986f4b7c7ce4171ff1641fea2ca867605e9a8d4b81160880bd2f7f046897f"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/924-01-ath12k-put-group-ref-on-hash-init-failure.patch",
+      "sha256": "bb24d8e7336680c7e95de56ff4df8c5e4a3765b663160d8dedcf5266b4d69841"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/924-02-ath12k-serialize-memory-requests-in-event-worker.patch",
+      "sha256": "c6393dbf8a6b0ba022b712c482629093692f28a75121e976b087cc01350deabe"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/924-03-ath12k-close-and-drain-group-before-host-teardown.patch",
+      "sha256": "730871246b38f23f9db104faf14ee5c47276d1e188d0e19e39b50697e20f35fd"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/924-04-ath12k-recover-all-members-with-one-group-owner.patch",
+      "sha256": "1c21b82426e31b3dbe9e233dbe4325a9b70b167e95b82e8506b783f9d103af9c"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch",
+      "sha256": "037f048b404b9f7eb64e00f15a79102c916fef2d592c00941fd5febf176238f8"
+    }
+  ]
+}

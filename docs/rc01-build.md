@@ -148,3 +148,17 @@ RC01 使用 EMC2301 风扇控制器及 `emc2305` 驱动，按设备寻找 hwmon�
 温控保留非零转速下限和故障满速保护；先验收起转、转速与温度响应，再进行负载测试。
 代理先用单客户端验证 DNS、IPv4/IPv6、回程及实际接管，再对照 PPE/无线加速；
 Nikki 与 dae 每次只启用一个透明代理。后续安装内核模块使用同一构建的包与来源。
+
+
+## 离线对象级验证
+
+`tests/rc01/wireless_replay.py <固定backports归档> <新生成目录>` 按当前维护补丁重放；
+已集成923的树不要再传入第三个外部分支补丁参数。对象验证入口为
+`tests/rc01/wireless_arm64_objects.sh <prepared Linux> <隔离工具链> <可写backports副本> <ARM64对象目录>`。
+该脚本按正式mac80211 Build/Prepare删除vendored headers，不能在共享只读输入上运行。
+早期DFS对象脚本遗漏这一步所需的MHI桥接已移除；它不是生产构建额外要求。
+
+完整离线回归还使用 RC01_DNSMASQ_SOURCE、RC01_FIREWALL4_SOURCE、RC01_PACKAGES_FEED，
+及本树feeds/packages、feeds/nikki中的固定Git对象；常规kernel/wireless、BUSYBOX、UCODE、LuCI变量仍按上文。
+这些离线输入必须对应固定来源，不以缺输入skip代替最终回归。对象编译和源码回归不生成可验收镜像；
+完整目标配置、模块链接、镜像及设备仍须另行验收。
