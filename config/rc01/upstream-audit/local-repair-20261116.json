@@ -39,6 +39,10 @@
     {
       "path": "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch",
       "sha256": "037f048b404b9f7eb64e00f15a79102c916fef2d592c00941fd5febf176238f8"
+    },
+    {
+      "path": "package/kernel/mac80211/patches/ath12k/926-ath12k-close-mgmt-completions-and-limit-regd-dedup.patch",
+      "sha256": "f19f761082e7a423907b397b9206261553db249f45ac8228f6adb680a46b108e"
     }
   ]
 }

@@ -101,6 +101,8 @@ class DFSLifetime(unittest.TestCase):
         r = subprocess.run([str(self.binary), case], capture_output=True, text=True, timeout=15)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_recovery_equal_rules_still_publish(self): self.run_case('recovery-equal')
+
     def test_init_pending_consumed_second_init(self): self.run_case('init')
     def test_sync_aba_on_off_preserves_dfs(self): self.run_case('aba')
     def test_all_fields_and_wmm(self): self.run_case('fields')

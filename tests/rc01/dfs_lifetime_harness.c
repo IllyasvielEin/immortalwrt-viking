@@ -198,6 +198,8 @@ static bool ap_active;
 static int scan_sends;
 static bool ath12k_mac_vif_ap_active_any(struct ath12k_base *ab){return ap_active;}
 static int ath12k_wmi_send_11d_scan_start_cmd(struct ath12k *ar,struct wmi_11d_scan_start_arg *arg){assert(ar->ab->reg_senders);scan_sends++;return send_failure;}
+#define ATH12K_HW_STATE_OFF 0
+#define ATH12K_HW_STATE_RESTARTED 3
 #include "prepared-dfs.h"
 struct fixture {struct ath12k_hw ah;struct ath12k_base ab;struct ath12k ar[3];struct ieee80211_hw hw;struct wiphy w;struct cfg80211_registered_device cfg;__typeof__(*(((struct ath12k *)0)->pdev)) pd[3];__typeof__(*(((struct ath12k_base *)0)->hw_params)) params;};
 static struct fixture f;
@@ -230,7 +232,11 @@ static void user_case(void){
  ath12k_reg_events_close(&f.ab);assert(ath12k_reg_events_open(&f.ab)==0);assert(atomic_load(&f.ah.reg_user_country)==-1);
 }
 int main(int argc,char **argv){assert(argc==2);setup();const char *which=argv[1];
- if(!strcmp(which,"init")){
+ if(!strcmp(which,"recovery-equal")){
+  f.w.regd=rd('A');f.ah.regd_init_done=true;
+  f.ah.state=ATH12K_HW_STATE_RESTARTING;request('A');assert(sync_publications==1);
+  f.ah.state=ATH12K_HW_STATE_RESTARTED;request('A');assert(sync_publications==2);
+ }else if(!strcmp(which,"init")){
   f.ab.default_regd[0]=rd('A');assert(ath12k_regd_update(&f.ar[0],true)==0);assert(init_submissions==1 && !f.w.regd && f.cfg.requested_regd);
   request('B');assert(f.w.regd->alpha2[0]=='B' && !f.cfg.requested_regd);consume();assert(f.w.regd->alpha2[0]=='B');
   /* Published A -> illegal init B pending -> runtime A skip is the old trap. */

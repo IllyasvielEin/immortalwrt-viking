@@ -179,6 +179,6 @@
   },
   "local_repair": {
     "manifest": "config/rc01/upstream-audit/local-repair-20261116.json",
-    "sha256": "74892ccddcdf850101804ce0fd0f67535dfe8746e8fad0a54448da0771c62b2d"
+    "sha256": "020cfd1b9d36dd4491a71861a89e67360b71d56031b75781cf2d0a5698531355"
   }
 }

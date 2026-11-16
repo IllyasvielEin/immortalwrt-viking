@@ -1,0 +1,36 @@
+Subject: [PATCH] ath12k: drain management completions and retain recovery regd publication
+
+Reuse the existing MAC delivery barrier for TX completion readers before
+recovery destroys their IDR. Keep equal-rule suppression limited to ON/OFF;
+recovery retains publication without introducing another state or lock.
+
+---
+--- a/drivers/net/wireless/ath/ath12k/wmi.c
++++ b/drivers/net/wireless/ath/ath12k/wmi.c
+@@ -7533,6 +7533,10 @@
+ 	}
+ 
+ 	rcu_read_lock();
++	/* Pair with mac_delivery_close() and its RCU drain before IDR cleanup. */
++	if (READ_ONCE(ab->mac_delivery_stopped))
++		goto exit;
++
+ 	ar = ath12k_mac_get_ar_by_pdev_id(ab, le32_to_cpu(tx_compl_param.pdev_id));
+ 	if (!ar) {
+ 		ath12k_warn(ab, "invalid pdev id %d in mgmt_tx_compl_event\n",
+--- a/drivers/net/wireless/ath/ath12k/reg.c
++++ b/drivers/net/wireless/ath/ath12k/reg.c
+@@ -598,8 +598,11 @@
+ 		ret = regulatory_set_wiphy_regd(hw->wiphy, regd_copy);
+ 		if (!ret)
+ 			ah->regd_init_done = true;
+-	} else if (ath12k_reg_equal(rcu_dereference_protected(hw->wiphy->regd,
+-					lockdep_is_held(&hw->wiphy->mtx)), regd_copy)) {
++	} else if ((ah->state == ATH12K_HW_STATE_ON ||
++		    ah->state == ATH12K_HW_STATE_OFF) &&
++		   ath12k_reg_equal(rcu_dereference_protected(hw->wiphy->regd,
++							      lockdep_is_held(&hw->wiphy->mtx)),
++				    regd_copy)) {
+ 		ret = 0;
+ 	} else {
+ 		ret = regulatory_set_wiphy_regd_sync(hw->wiphy, regd_copy);
