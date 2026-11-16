@@ -250,20 +250,20 @@ static bool of_property_read_bool(struct device_node *node,const char *name)
 static int ath12k_core_get_wsi_info(struct ath12k_hw_group *ag,struct ath12k_base *ab)
 { (void)ab;for(int i=0;i<dt_members;i++)ag->wsi_node[i]=of_node_get(&nodes[i]);ag->num_devices=dt_members;return 0; }
 static void ath12k_core_hw_group_stop(struct ath12k_hw_group *ag)
-{ lockdep_assert_held(&ag->mutex); }
+{ (void)ag; assert_unlocked(); }
 static void ath12k_core_stop(struct ath12k_base *ab)
 {
- lockdep_assert_held(&ab->ag->mutex); lockdep_assert_held(&ab->core_lock);
- if (!ab->core_live) return;
- assert(ab->hw_group_ref); assert(ab->ag->num_started > 0);
- ab->hw_group_ref=false; ab->ag->num_started--;
+ assert_unlocked();
+ assert(!ab->hw_group_ref);
+ ab->core_live=false;
 }
+
 static void ath12k_reg_events_close(struct ath12k_base *ab) { (void)ab; }
 static void ath12k_reg_events_drain(struct ath12k_base *ab) { (void)ab;assert_unlocked(); }
 static void ath12k_hif_irq_disable(struct ath12k_base *ab) { (void)ab; }
 static void ath12k_core_mac_delivery_close(struct ath12k_base *ab) { assert_unlocked();cancel_work_sync(&ab->rfkill_work); }
 static bool ath12k_dp_cmn_device_deinit(struct ath12k_base *ab) { (void)ab;return true; }
-static void ath12k_mac_destroy(struct ath12k_hw_group *ag) { lockdep_assert_held(&ag->mutex); }
+static void ath12k_mac_destroy(struct ath12k_hw_group *ag) { (void)ag; assert_unlocked(); }
 static void ath12k_core_recovery_error(struct ath12k_base *ab,int err) { (void)ab;(void)err; }
 static void ath12k_core_to_group_ref_put(struct ath12k_base *ab)
 {

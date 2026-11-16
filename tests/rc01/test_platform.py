@@ -184,6 +184,12 @@ class PreparedPlatform(unittest.TestCase):
             shutil.copytree(Path(WIRELESS) / "drivers/net/wireless/ath/ath12k",
                             copied / "drivers/net/wireless/ath/ath12k")
             platform.verify_wireless(copied)
+            core = copied / "drivers/net/wireless/ath/ath12k/core.c"
+            original = core.read_text()
+            core.write_text(original.replace("ath12k_reg_events_drain(ab);", "/* omitted drain */"))
+            with self.assertRaises(images.VerificationError):
+                platform.verify_wireless(copied)
+            core.write_text(original)
             ds = copied / "drivers/net/wireless/ath/ath12k/wifi7/ppe_ds.c"
             ds.write_text(ds.read_text().replace("0x10098b57", "0x1003009f").replace("WBE.1.0-02903", "WBE.1.0.r4-00159"))
             with self.assertRaises(images.VerificationError):

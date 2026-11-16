@@ -117,7 +117,7 @@ static bool ath12k_dp_cmn_device_deinit(struct ath12k_base *ab) {
 static void ath12k_core_to_group_ref_put(struct ath12k_base *ab) { if(ab->hw_group_ref) {ab->hw_group_ref=false;ab->ag->num_started--;} }
 static void ath12k_core_stop(struct ath12k_base *ab) {
  assert_closed(); if(!ab->core_live) return; ab->core_live=false;
- ab->dp_live=!ath12k_dp_cmn_device_deinit(ab);ath12k_core_to_group_ref_put(ab);atomic_fetch_add(&stopcores,1);
+ assert(!ab->hw_group_ref);ab->dp_live=!ath12k_dp_cmn_device_deinit(ab);atomic_fetch_add(&stopcores,1);
 }
 static void ath12k_hif_power_down(struct ath12k_base *ab,bool suspend) { (void)ab;(void)suspend;atomic_fetch_add(&powerdowns,1); }
 static void ath12k_qmi_release(struct ath12k_base *ab) {

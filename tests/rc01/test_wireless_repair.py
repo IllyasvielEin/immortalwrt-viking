@@ -186,6 +186,18 @@ int main(void) {
         harness = (Path(__file__).parent / 'wireless_mac_resources_harness.c').read_text()
         self.compile_run(harness.replace('#include "mac-resources-functions.inc"', functions))
 
+    def test_permanent_stop_synchronizes_framework_users_outside_group_lock(self):
+        source = (Path(SOURCE) / 'drivers/net/wireless/ath/ath12k/core.c').read_text()
+        body = declaration(source, 'ath12k_core_hw_group_stop')
+        harness = (Path(__file__).parent / 'wireless_owner_barriers_harness.c').read_text()
+        self.compile_run(harness.replace('#include "owner-barriers.inc"', body))
+        unlock = '\tmutex_unlock(&ag->mutex);'
+        self.assertEqual(body.count(unlock), 1)
+        mutant = body.replace(unlock, '').replace('\tath12k_mac_unregister(ag);',
+                                                 '\tath12k_mac_unregister(ag);\n' + unlock)
+        self.compile_run(harness.replace('#include "owner-barriers.inc"', mutant),
+                         rejected='teardown resource lock held')
+
 
 if __name__ == '__main__':
     unittest.main()

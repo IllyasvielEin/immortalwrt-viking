@@ -1,0 +1,112 @@
+Subject: [PATCH] wifi: ath12k: run owner teardown barriers outside resource locks
+
+Close and drain fix membership before teardown. Keep started-reference
+updates under the group mutex, but synchronize thermal, mac80211 and
+transport users without holding group or core locks. Permanent exit holds
+the lifecycle mutex; recovery has a single owner joined by permanent exit.
+
+---
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -749,8 +749,7 @@
+ 	ath12k_dp_ds_stop_group(ab->ag);
+ 	ath12k_link_sta_rhash_tbl_destroy(ab);
+ 
+-	ath12k_core_to_group_ref_put(ab);
+-
++	/* The stopped group owner released the started reference under ag. */
+ 	if (!test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags)) {
+ 		ath12k_dp_reoq_lut_addr_reset(ath12k_ab_to_dp(ab));
+ 		ath12k_qmi_firmware_stop(ab);
+@@ -1081,12 +1080,9 @@
+ 
+ static void ath12k_core_device_cleanup(struct ath12k_base *ab)
+ {
+-	mutex_lock(&ab->core_lock);
+-
+ 	ath12k_hif_irq_disable(ab);
+ 	ath12k_core_pdev_destroy(ab);
+ 
+-	mutex_unlock(&ab->core_lock);
+ }
+ 
+ static int ath12k_core_device_setup(struct ath12k_base *ab)
+@@ -1118,13 +1114,19 @@
+ 	struct ath12k_base *ab;
+ 	int i;
+ 
+-	lockdep_assert_held(&ag->mutex);
++	lockdep_assert_held(&ath12k_hw_group_mutex);
++	ath12k_dp_ds_stop_group(ag);
++	mutex_lock(&ag->mutex);
+ 
+ 	/* Setup can fail and destroy radios before this group is registered. */
+ 	clear_bit(ATH12K_GROUP_FLAG_REGISTERED, &ag->flags);
+-	ath12k_dp_ds_stop_group(ag);
+ 	/* Keep every partner and its WMI event path live until teardown ACKs. */
+ 	ath12k_mac_mlo_teardown(ag);
++	mutex_unlock(&ag->mutex);
++
++	/* All producers are closed and drained; lifecycle ownership pins the
++	 * group while thermal and mac80211 synchronize their users.
++	 */
+ 
+ 	for (i = ag->num_devices - 1; i >= 0; i--) {
+ 		ab = ag->ab[i];
+@@ -1859,11 +1861,17 @@
+ 		mutex_unlock(&ag->mutex);
+ 		return -ESHUTDOWN;
+ 	}
++	for (i = 0; i < ag->num_devices; i++)
++		if (ag->ab[i])
++			ath12k_core_to_group_ref_put(ag->ab[i]);
++	mutex_unlock(&ag->mutex);
++	/* The sole recovery owner pins membership; permanent exit joins it.
++	 * Do not hold ag/core across thermal, CE or DS callback barriers.
++	 */
+ 	for (i = 0; i < ag->num_devices; i++) {
+ 		ab = ag->ab[i];
+ 		if (!ab)
+ 			continue;
+-		mutex_lock(&ab->core_lock);
+ 		ath12k_core_pdev_destroy(ab);
+ 		ath12k_core_stop(ab);
+ 		/* Partial/pre-start bundles have no core_live, but still owe
+@@ -1873,10 +1881,7 @@
+ 			ab->dp_live = !ath12k_dp_cmn_device_deinit(ath12k_ab_to_dp(ab));
+ 		if (ab->dp_live)
+ 			ret = -EIO;
+-		ath12k_core_to_group_ref_put(ab);
+-		mutex_unlock(&ab->core_lock);
+-	}
+-	mutex_unlock(&ag->mutex);
++	}
+ 	for (i = 0; i < ag->num_devices; i++) {
+ 		ab = ag->ab[i];
+ 		if (!ab)
+@@ -2574,20 +2579,21 @@
+ 		ath12k_core_mac_delivery_close(ab);
+ 	}
+ 
++	ath12k_core_hw_group_stop(ag);
+ 	mutex_lock(&ag->mutex);
+-	ath12k_core_hw_group_stop(ag);
++	for (i = 0; i < ag->num_devices; i++)
++		if (ag->ab[i])
++			ath12k_core_to_group_ref_put(ag->ab[i]);
++	mutex_unlock(&ag->mutex);
+ 	for (i = 0; i < ag->num_devices; i++) {
+ 		ab = ag->ab[i];
+ 		if (!ab)
+ 			continue;
+-		mutex_lock(&ab->core_lock);
+ 		ath12k_core_stop(ab);
+ 		if (ab->dp_live)
+ 			ab->dp_live = !ath12k_dp_cmn_device_deinit(ath12k_ab_to_dp(ab));
+-		mutex_unlock(&ab->core_lock);
+ 	}
+ 	ath12k_mac_destroy(ag);
+-	mutex_unlock(&ag->mutex);
+ 	/* core_stop/mode-off was the last non-worker transaction user. */
+ 	for (i = 0; i < ag->num_devices; i++)
+ 		if (ag->ab[i])

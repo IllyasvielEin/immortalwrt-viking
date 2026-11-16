@@ -169,8 +169,28 @@ def verify_wireless(wireless: Path) -> dict:
             "if (!test_bit(ATH12K_PCI_FLAG_INIT_DONE" not in down,
             "partially started MHI must be powered down")
     remove = function(pci, "ath12k_pci_remove")
-    require(remove.index("&ab->qmi.event_work") < remove.index("&ab->restart_work"),
-            "QMI event work must drain before restart work")
+    require("ath12k_core_deinit(ab);" in remove,
+            "PCI remove must enter the shared group teardown owner")
+    group_cleanup = function(core, "ath12k_core_group_cleanup")
+    for call in ("ath12k_core_group_close(ag);", "ath12k_qmi_drain(ab);",
+                 "cancel_work_sync(&ab->restart_work);", "ath12k_reg_events_drain(ab);",
+                 "ath12k_core_hw_group_stop(ag);", "ath12k_core_stop(ab);",
+                 "ath12k_qmi_release(ag->ab[i]);"):
+        require(call in group_cleanup, f"group cleanup missing {call}")
+    require(group_cleanup.index("ath12k_core_group_close(ag);") <
+            group_cleanup.index("mutex_unlock(&ag->mutex);",
+                                group_cleanup.index("ath12k_core_group_close(ag);")) <
+            group_cleanup.index("ath12k_qmi_drain(ab);") <
+            group_cleanup.index("&ab->restart_work") <
+            group_cleanup.index("ath12k_reg_events_drain(ab);") <
+            group_cleanup.index("ath12k_core_hw_group_stop(ag);") <
+            group_cleanup.index("ath12k_core_stop(ab);") <
+            group_cleanup.index("ath12k_qmi_release(ag->ab[i]);"),
+            "group owner must close/drain before unregister and release QMI last")
+    drain = function(qmi, "ath12k_qmi_drain")
+    require("cancel_work_sync(&ab->qmi.event_work);" in drain and
+            "qmi_handle_release" not in drain,
+            "QMI worker must drain while the handle still receives replies")
     allocation = function(core, "ath12k_core_alloc")
     require("ath12k_qmi_init_work(ab);" in allocation and
             "INIT_WORK(&ab->qmi.event_work" not in function(qmi, "ath12k_qmi_init_service"),
@@ -178,7 +198,7 @@ def verify_wireless(wireless: Path) -> dict:
     destroy = function(core, "ath12k_core_hw_group_destroy")
     lifecycle = "&ath12k_hw_group_mutex"
     for name in ("ath12k_core_hw_group_assign", "ath12k_core_hw_group_unassign",
-                 "ath12k_core_hw_group_free", "ath12k_core_hw_group_destroy"):
+                 "ath12k_core_hw_group_free", "ath12k_core_group_cleanup"):
         require(f"lockdep_assert_held({lifecycle});" in function(core, name),
                 f"group lifetime helper lacks its common lock contract: {name}")
     for name in ("ath12k_core_init", "ath12k_core_deinit", "ath12k_core_hw_group_cleanup"):
@@ -188,11 +208,10 @@ def verify_wireless(wireless: Path) -> dict:
     creation = function(core, "ath12k_core_init")
     require(creation.index("ATH12K_GROUP_FLAG_UNREGISTER") < creation.index("ath12k_core_hw_group_create(ag)"),
             "creation must reject a group already exiting")
-    stop = destroy.index("ath12k_qmi_stop_service(ab);")
-    release = destroy.index("ath12k_core_soc_destroy(ab);")
-    require(destroy.index("mutex_unlock(&ag->mutex);") < stop <
-            destroy.rindex("mutex_lock(&ag->mutex);") < release,
-            "group teardown must stop workers outside ag lock before locked release")
+    require("ath12k_core_group_cleanup(ag);" in destroy and
+            destroy.index("ath12k_core_group_cleanup(ag);") <
+            destroy.index("ath12k_core_soc_destroy(ag->ab[i]);"),
+            "soc storage must outlive the shared cleanup owner")
     deinit = function(qmi, "ath12k_qmi_deinit_service")
     require("lockdep_assert_held(&ab->ag->mutex);" in deinit and
             "cancel_work_sync" not in deinit and "qmi_handle_release" not in deinit,
