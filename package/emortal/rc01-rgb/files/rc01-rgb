@@ -3,7 +3,7 @@
 //
 // RC01 RGB light bar service. Started by /etc/init.d/rc01-rgb only when
 // rc01_rgb.main.enabled=1; configuration changes restart it through procd.
-// It drives red/green/blue:ambient and nothing else, and turns them off on
+// It drives red/green/blue:ambient and turns still-owned channels off on
 // SIGTERM/SIGINT/SIGHUP. Status: /var/run/rc01-rgb.status (JSON).
 import { readfile, writefile, rename, unlink } from 'fs';
 import * as rgb from 'rc01.rgb';
@@ -41,8 +41,14 @@ let stopping = false;
 for (let name in [ 'SIGTERM', 'SIGINT', 'SIGHUP' ])
 	signal(name, () => { stopping = true; });
 
-if (!rgb.claim(ctx))
-	log('could not clear the trigger of every RGB LED');
+if (!rgb.claim(ctx)) {
+	if (!ctx.yielded) {
+		rgb.off(ctx);
+		log('could not clear the trigger of every RGB LED');
+		exit(1);
+	}
+	log('RGB LED changed; leaving it alone');
+}
 
 function monotonic_ms() {
 	let t = clock(true);
@@ -52,9 +58,19 @@ function monotonic_ms() {
 let start = monotonic_ms(), last_status, write_failed = false, failure;
 try {
 	while (!stopping) {
+		// Stay yielded until restart, without procd repeatedly reclaiming LEDs.
+		if (ctx.yielded) {
+			sleep(rgb.IDLE_MS);
+			continue;
+		}
 		let now = localtime();
 		let f = rgb.frame(ctx, cfg, now.hour * 60 + now.min, monotonic_ms() - start);
 		let ok = rgb.show(ctx, f.rgb);
+		if (ctx.yielded) {
+			log('RGB LED changed; leaving it alone');
+			unlink(STATUS);
+			continue;
+		}
 		if (!ok && !write_failed)
 			log('LED write failed; retrying');
 		write_failed = !ok;

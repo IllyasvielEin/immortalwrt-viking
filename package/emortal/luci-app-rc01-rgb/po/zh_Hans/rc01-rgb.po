@@ -4,8 +4,8 @@ msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: zh_Hans\n"
 msgid "RGB Light"
 msgstr "RGB 灯光"
 
-msgid "Top RGB light bar. Off by default; the wiring is taken from a public reference and still needs checking colour by colour on the device. This service only drives red/green/blue:ambient, never the system, network, port or SFP LEDs, and never the fan."
-msgstr "顶部 RGB 灯条。默认关闭；接线取自公开参考，仍需在设备上逐色核对。本服务只控制 red/green/blue:ambient，不控制系统灯、network 灯、网口灯、SFP 灯，也不控制风扇。"
+msgid "Top RGB light bar. Off by default; the wiring is taken from a public reference and still needs checking colour by colour on the device. This service only drives red/green/blue:ambient, never the system, network, port or SFP LEDs, and never the fan. If any ambient channel is configured in System > LED Configuration or changed by another controller, the whole RGB bar is left to that controller until restart."
+msgstr "顶部 RGB 灯条。默认关闭；接线取自公开参考，仍需在设备上逐色核对。本服务只控制 red/green/blue:ambient，不控制系统灯、network 灯、网口灯、SFP 灯，也不控制风扇。若任一 ambient 通道已在“系统 > LED 配置”中配置，或被其他控制程序修改，整个 RGB 灯条将让出控制权，直到服务重启。"
 
 msgid "Status"
 msgstr "状态"
@@ -16,8 +16,8 @@ msgstr "服务"
 msgid "Service disabled at boot"
 msgstr "服务未设为开机启动"
 
-msgid "Not running (RGB off, LED missing or system LEDs off)"
-msgstr "未运行（RGB 未启用、未找到灯或系统已关闭所有 LED）"
+msgid "Not running (RGB off, LED missing, system LEDs off or LED configured in system)"
+msgstr "未运行（RGB 未启用、未找到灯、系统已关闭所有 LED 或灯已在系统中配置）"
 
 msgid "Running; no status yet"
 msgstr "运行中；暂无状态"

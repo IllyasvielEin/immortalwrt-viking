@@ -3,7 +3,8 @@
 
 # Runs the RGB service only when rc01_rgb.main.enabled=1 (default 0) and
 # system leds_off is not set. It then owns red/green/blue:ambient; no other
-# LED is touched. Disabled, stopped or crashed for good, the bar is off.
+# LED is touched. Disabled, stopped or crashed for good, the bar is off unless
+# a system LED section has taken it over.
 # Starts after /etc/init.d/led (START=96).
 START=97
 STOP=10
@@ -11,6 +12,23 @@ USE_PROCD=1
 
 RC01_RGB_LEDS="red:ambient green:ambient blue:ambient"
 RC01_RGB_SYSFS="${RC01_SYSFS:-/sys}"
+
+# A single system LED declaration reserves the whole colour group.
+rc01_rgb_reserved() {
+	local sysfs led
+	config_get sysfs "$1" sysfs
+	for led in $RC01_RGB_LEDS; do
+		[ "$sysfs" != "$led" ] || RC01_RGB_RESERVED=1
+	done
+	return 0
+}
+
+rc01_rgb_system_owned() {
+	RC01_RGB_RESERVED=0
+	config_load system
+	config_foreach rc01_rgb_reserved led
+	[ "$RC01_RGB_RESERVED" = 1 ]
+}
 
 rc01_rgb_off() {
 	local led
@@ -27,6 +45,10 @@ start_service() {
 	config_get_bool enabled main enabled 0
 	[ "$enabled" = 1 ] || return 0
 	[ "$(uci -q get system.@system[-1].leds_off)" = 1 ] && return 0
+	! rc01_rgb_system_owned || {
+		logger -t rc01-rgb 'RGB LED configured in system; leaving it alone'
+		return 0
+	}
 	for led in $RC01_RGB_LEDS; do
 		[ -e "$RC01_RGB_SYSFS/class/leds/$led/brightness" ] || {
 			logger -t rc01-rgb "LED $led not found; RGB service not started"
@@ -42,10 +64,11 @@ start_service() {
 	procd_close_instance
 }
 
-# procd has already asked the instance to stop; it turns the bar off
-# itself, this covers an instance that was killed or never came up.
+# procd has already asked the instance to stop; it turns off the channels
+# it still owns. This covers an instance that was killed or never came up,
+# so a restart does not find the bar lit. A system LED section keeps its LED.
 service_stopped() {
-	rc01_rgb_off
+	rc01_rgb_system_owned || rc01_rgb_off
 }
 
 service_triggers() {

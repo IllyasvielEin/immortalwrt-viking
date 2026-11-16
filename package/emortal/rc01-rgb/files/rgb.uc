@@ -235,7 +235,8 @@ function read_traffic(ctx, cfg, now_ms) {
 }
 
 export function create(root, device) {
-	let ctx = { root: root || '', device, paths: [], last: [ -1, -1, -1 ], missing: [] };
+	let ctx = { root: root || '', device, paths: [], missing: [], last: [ -1, -1, -1 ],
+		held: [ false, false, false ], expected: [ 0, 0, 0 ], yielded: false };
 	for (let name in LEDS) {
 		let path = ctx.root + '/sys/class/leds/' + name;
 		push(ctx.paths, path);
@@ -245,19 +246,58 @@ export function create(root, device) {
 	return ctx;
 }
 
-// Detach any trigger so nothing else drives these three LEDs while the
-// service runs. Other LEDs are never touched.
+function trigger(path) {
+	let value = trim(readfile(path + '/trigger') || '');
+	let selected = match(value, /\[([^\]]+)\]/);
+	return selected ? selected[1] : value;
+}
+
+function ours(ctx, i) {
+	return ctx.held[i] && trigger(ctx.paths[i]) == 'none' &&
+		integer(ctx.paths[i] + '/brightness') == ctx.expected[i];
+}
+
+// Refuse an already active trigger, like netled. One externally controlled
+// channel reserves the entire colour group. A lit channel without a trigger
+// is taken: it is what a killed instance leaves behind.
 export function claim(ctx) {
-	let ok = true;
 	for (let path in ctx.paths)
-		if (writefile(path + '/trigger', 'none') == null)
+		if (trigger(path) != 'none') {
+			ctx.yielded = true;
+			return false;
+		}
+	for (let i = 0; i < 3; i++) {
+		if (writefile(ctx.paths[i] + '/trigger', 'none') == null)
+			return false;
+		ctx.held[i] = true;
+		ctx.expected[i] = integer(ctx.paths[i] + '/brightness');
+	}
+	return true;
+}
+
+// Never reset a channel that another controller changed, including direct
+// brightness writes with trigger none. Release the other channels so the
+// old animation does not leave part of the bar lit after a takeover.
+export function off(ctx) {
+	let ok = true;
+	for (let i = 0; i < 3; i++) {
+		if (ours(ctx, i) && writefile(ctx.paths[i] + '/brightness', '0') == null)
 			ok = false;
+		ctx.held[i] = false;
+	}
 	return ok;
 }
 
-// Write only changed channels. A failed channel is not cached, so the next
-// frame retries it.
+// Check all channels even on unchanged static frames. A takeover is sticky
+// until restart; a failed write is not cached and is retried next frame.
 export function show(ctx, rgb) {
+	if (ctx.yielded)
+		return true;
+	for (let i = 0; i < 3; i++)
+		if (!ours(ctx, i)) {
+			ctx.yielded = true;
+			return off(ctx);
+		}
 	let ok = true;
 	for (let i = 0; i < 3; i++) {
 		if (rgb[i] == ctx.last[i])
@@ -266,14 +306,9 @@ export function show(ctx, rgb) {
 			ctx.last[i] = -1;
 			ok = false;
 		} else
-			ctx.last[i] = rgb[i];
+			ctx.expected[i] = ctx.last[i] = rgb[i];
 	}
 	return ok;
-}
-
-export function off(ctx) {
-	ctx.last = [ -1, -1, -1 ];
-	return show(ctx, [ 0, 0, 0 ]);
 }
 
 function scale(rgb, value) {

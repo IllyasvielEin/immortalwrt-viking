@@ -61,7 +61,7 @@ function statusText(service, raw) {
 	if (!info.enabled)
 		return _('Service disabled at boot');
 	if (!info.running)
-		return _('Not running (RGB off, LED missing or system LEDs off)');
+		return _('Not running (RGB off, LED missing, system LEDs off or LED configured in system)');
 
 	let status;
 	try { status = JSON.parse(raw || ''); } catch (e) { status = null; }
@@ -99,7 +99,7 @@ return view.extend({
 		let m, s, o;
 
 		m = new form.Map('rc01_rgb', _('RGB Light'),
-			_('Top RGB light bar. Off by default; the wiring is taken from a public reference and still needs checking colour by colour on the device. This service only drives red/green/blue:ambient, never the system, network, port or SFP LEDs, and never the fan.'));
+			_('Top RGB light bar. Off by default; the wiring is taken from a public reference and still needs checking colour by colour on the device. This service only drives red/green/blue:ambient, never the system, network, port or SFP LEDs, and never the fan. If any ambient channel is configured in System > LED Configuration or changed by another controller, the whole RGB bar is left to that controller until restart.'));
 
 		s = m.section(form.NamedSection, 'main', 'rgb', _('Status'));
 		s.anonymous = true;

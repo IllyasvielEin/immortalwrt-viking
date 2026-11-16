@@ -317,27 +317,45 @@ process.stdout.write(JSON.stringify(results));
         f = self.frames(cfg, [0, 1000], device="missing0")[1]
         self.assertEqual((f["fallback"], f["detail"]), (True, "source unavailable"))
 
-    def test_writes_only_changed_channels_and_retries_failures(self):
+    def test_checks_trigger_and_brightness_before_writing_or_releasing(self):
+        for kind, value in (("trigger", "none [heartbeat]"), ("brightness", "99")):
+            with self.subTest(kind=kind):
+                self.setUp()
+                red = self.root / f"sys/class/leds/red:ambient/{kind}"
+                out = self.uc(f'''import {{ writefile }} from 'fs';
+                    let ctx = rgb.create(root, "wan"); rgb.claim(ctx);
+                    rgb.show(ctx, [10, 20, 30]);
+                    writefile({json.dumps(str(red))}, {json.dumps(value)});
+                    rgb.show(ctx, [11, 21, 31]);
+                    rgb.show(ctx, [12, 22, 32]); rgb.off(ctx);
+                    print(sprintf("%J", ctx.yielded));''')
+                self.assertTrue(out)
+                self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                self.assertEqual(self.leds()[1:], [0, 0])
+                self.assertEqual(self.leds()[0], 10 if kind == "trigger" else 99)
+
+    def test_retries_write_failures_without_losing_ownership(self):
         red = self.root / "sys/class/leds/red:ambient/brightness"
-        out = self.uc(f'''import {{ readfile, writefile }} from 'fs';
-            let ctx = rgb.create(root, "wan"), out = [];
-            push(out, rgb.show(ctx, [10, 20, 30]));
-            writefile({json.dumps(str(red))}, "99\\n");
-            push(out, rgb.show(ctx, [10, 20, 30]), trim(readfile({json.dumps(str(red))})));
-            push(out, rgb.show(ctx, [11, 20, 30]), trim(readfile({json.dumps(str(red))})));
-            print(sprintf("%J", out));''')
-        self.assertEqual(out, [True, True, "99", True, "11"])
         red.chmod(0o444)
         if os.access(red, os.W_OK):
             self.skipTest("running as root; cannot simulate a write failure")
         out = self.uc(f'''import {{ chmod }} from 'fs';
-            let ctx = rgb.create(root, "wan"), out = [];
+            let ctx = rgb.create(root, "wan"), out = []; rgb.claim(ctx);
             push(out, rgb.show(ctx, [5, 5, 5]), [...ctx.last]);
             chmod({json.dumps(str(red))}, 0o644);
             push(out, rgb.show(ctx, [5, 5, 5]), [...ctx.last]);
             print(sprintf("%J", out));''')
         self.assertEqual(out, [False, [-1, 5, 5], True, [5, 5, 5]])
         self.assertEqual(self.leds(), [5, 5, 5])
+
+    def test_claim_preserves_an_existing_controller(self):
+        self.write("sys/class/leds/red:ambient/trigger", "none [heartbeat]")
+        self.write("sys/class/leds/red:ambient/brightness", "17")
+        self.assertFalse(self.uc('''let ctx = rgb.create(root, "wan");
+            let ok = rgb.claim(ctx); rgb.show(ctx, [1, 2, 3]); rgb.off(ctx);
+            print(sprintf("%J", ok));'''))
+        self.assertEqual(self.leds(), [17, 0, 0])
+        self.assertEqual(self.read("sys/class/leds/red:ambient/trigger"), "none [heartbeat]")
 
     def test_missing_led_is_reported_without_touching_others(self):
         shutil.rmtree(self.root / "sys/class/leds/green:ambient")
@@ -437,6 +455,34 @@ class Service(Fixture):
         self.assertEqual(self.leds(), [0, 0, 0])
         self.assert_foreign_untouched()
 
+    def test_takeover_stops_animation_and_stop_or_reload_preserves_user_led(self):
+        for kind, value in (("trigger", "none [heartbeat]"), ("brightness", "199")):
+            with self.subTest(kind=kind):
+                self.setUp()
+                process = self.start({"enabled": "1", "mode": "rainbow", "speed": "10", "brightness": "200"})
+                self.assertTrue(self.wait_for(lambda: self.status() is not None))
+                self.write(f"sys/class/leds/red:ambient/{kind}", value)
+                self.assertTrue(self.wait_for(lambda: self.leds() is not None and self.leds()[1:] == [0, 0]))
+                self.assertTrue(self.wait_for(lambda: self.status() is None))
+                red = self.root / "sys/class/leds/red:ambient/brightness"
+                stamp = red.stat().st_mtime_ns
+                time.sleep(0.3)
+                self.assertEqual(red.stat().st_mtime_ns, stamp)
+                self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                self.assertEqual(self.stop(process, signal.SIGHUP), 0)
+                self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                if kind == "brightness":
+                    # No trigger: a restart takes the bar again (see claim()).
+                    continue
+                # Restart must not reclaim a trigger set by another controller.
+                process = self.start({"enabled": "1", "mode": "static", "brightness": "90"})
+                time.sleep(0.3)
+                self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                self.assertEqual(red.stat().st_mtime_ns, stamp)
+                self.assertEqual(self.stop(process), 0)
+                self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                self.assert_foreign_untouched()
+
     def test_empty_fixture_brightness_is_pending_but_bad_values_fail(self):
         for led in RGB:
             with self.subTest(led=led):
@@ -504,7 +550,9 @@ class Service(Fixture):
 INIT_STUBS = r'''
 uci() { [ "$*" = "-q get system.@system[-1].leds_off" ] && [ -n "$LEDS_OFF" ] && echo "$LEDS_OFF"; }
 logger() { echo "logger $*"; }
-config_load() { [ "$1" = rc01_rgb ]; }
+config_load() { :; }
+config_foreach() { [ -z "$SYSTEM_LED" ] || "$1" fixture; }
+config_get() { eval "$1=\${SYSTEM_LED-}"; }
 config_get_bool() { eval "$1=\${CFG_$3-\$4}"; }
 procd_open_instance() { echo open; }
 procd_set_param() { echo "param $*"; }
@@ -556,6 +604,19 @@ class Init(Fixture):
                 out = self.run_init("start_service", CFG_enabled="1")
                 self.assertNotIn("open", out)
                 self.assertTrue(any("red:ambient not found" in line for line in out))
+
+    def test_system_led_reserves_every_channel_without_touching_sysfs(self):
+        for shell in SHELLS:
+            for led in RGB:
+                with self.subTest(shell=shell, led=led):
+                    self.use(shell)
+                    self.write(f"sys/class/leds/{led}/trigger", "none [heartbeat]")
+                    self.write(f"sys/class/leds/{led}/brightness", "200")
+                    before = {p: p.read_bytes() for p in (self.root / "sys").rglob("*") if p.is_file()}
+                    out = self.run_init("start_service\nservice_stopped\nstart_service", CFG_enabled="1", SYSTEM_LED=led)
+                    self.assertNotIn("open", out)
+                    self.assertTrue(any("configured in system; leaving it alone" in line for line in out))
+                    self.assertEqual(before, {p: p.read_bytes() for p in before})
 
     def test_stopped_turns_only_the_rgb_bar_off(self):
         for shell in SHELLS:
