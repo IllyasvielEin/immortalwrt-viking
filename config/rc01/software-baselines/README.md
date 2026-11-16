@@ -21,8 +21,9 @@ Replay with the same variant still checks every platform input and re-derives
 the recipes from pinned feed objects. A platform change requires a newly
 prepared and reviewed lock; historical locks are deliberately not migrated.
 The build guide documents replay and refresh commands.
-The checked-in lock was planned at `2493984a59` and recorded in `3c00f5adbe`.
-`build_commit` and `resolved_at` describe that original plan; replay preserves
+The lock is committed after the change it binds, so its `build_commit` is the
+parent of the commit that records it. `build_commit` and `resolved_at`
+describe that original plan; replay preserves
 its `source_date_epoch` rather than using the replay checkout's commit time.
 Only the selected `PLATFORM_PATHS` are bound, not the complete source tree
 (in particular, the `luci-app-rc01` status UI is outside this set).
