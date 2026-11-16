@@ -116,23 +116,44 @@ int main(void) {
         ath = Path(SOURCE) / 'drivers/net/wireless/ath/ath12k'
         source = (ath / 'core.c').read_text()
         functions = ''.join(declaration(source, name) for name in (
-            'ath12k_core_qmi_firmware_ready', 'ath12k_core_recovery_error',
+            'ath12k_core_qmi_firmware_ready', 'ath12k_core_recovery_intake',
+            'ath12k_core_recovery_error',
             'ath12k_core_reconfig_complete',
             'ath12k_core_queue_reset', 'ath12k_core_recovery_exiting',
             'ath12k_core_recovery_close', 'ath12k_core_recovery_drain',
             'ath12k_core_recovery_stop', 'ath12k_core_reset', 'ath12k_core_group_close'))
         functions += declaration((ath / 'qmi.c').read_text(), 'ath12k_qmi_detach_mlo_mem')
+        functions += declaration((ath / 'mhi.c').read_text(), 'ath12k_mhi_op_status_cb')
         functions = ('void ath12k_qmi_detach_mlo_mem(struct ath12k_base *ab);\n'
                      + functions)
+        # Pause after the actual final read, while the owner's commit lock is
+        # held; also exercise intake immediately before it and after IDLE.
+        final_read = ('\tspin_lock_irqsave(&ag->recovery_state_lock, flags);\n'
+                      '\tret = READ_ONCE(ag->recovery_error);')
+        self.assertEqual(functions.count(final_read), 1)
+        functions = functions.replace(final_read, '\trecovery_before_commit();\n'
+                                      + final_read + '\n\trecovery_commit_pause();')
+        idle_commit = ('\tag->recovery_state = ATH12K_GROUP_RECOVERY_IDLE;\n'
+                       '\tag->recovery_owner = NULL;\n'
+                       '\tspin_unlock_irqrestore(&ag->recovery_state_lock, flags);')
+        self.assertEqual(functions.count(idle_commit), 1)
+        functions = functions.replace(idle_commit, idle_commit + '\n\trecovery_idle_pause();')
         harness = (Path(__file__).parent / 'wireless_recovery_harness.c').read_text()
         self.compile_run(harness.replace('#include "recovery-functions.inc"', functions),
                          [(case,) for case in ('normal', 'double-crash', 'power-fail',
                           'boot-crash', 'ds-debt', 'remove', 'boot-timeout',
-                          'business-timeout', 'ready-exit')])
+                          'business-timeout', 'ready-exit', 'precommit-crash',
+                          'commit-window', 'idle-crash', 'commit-error', 'idle-error')])
         mutant = functions.replace('\tath12k_core_recovery_close(ag);',
                                    '\t/* negative control: omit group close */', 1)
         self.compile_run(harness.replace('#include "recovery-functions.inc"', mutant),
                          [('normal',)], rejected='events_stopped')
+        # Retain the old read/commit window as a negative control. The callback
+        # trylock must find the owner holding the lock at the pause point.
+        mutant = functions.replace(final_read, final_read.split('\n', 1)[1])
+        mutant = mutant.replace(idle_commit, idle_commit.rsplit('\n', 1)[0])
+        self.compile_run(harness.replace('#include "recovery-functions.inc"', mutant),
+                         [('commit-window',)], rejected='commit lock must exclude crash intake')
 
     def test_qrtr_lookup_instance_generation_duplicate_and_inflight_peer(self):
         source = (Path(SOURCE) / 'drivers/net/wireless/ath/ath12k/qmi.c').read_text()
@@ -165,7 +186,8 @@ int main(void) {
     def test_mhi_irq_admission_close_race_and_boot_crash(self):
         ath = Path(SOURCE) / 'drivers/net/wireless/ath/ath12k'
         functions = ''.join(declaration((ath / 'core.c').read_text(), name) for name in
-                            ('ath12k_core_recovery_error', 'ath12k_core_queue_reset'))
+                            ('ath12k_core_recovery_intake', 'ath12k_core_recovery_error',
+                             'ath12k_core_queue_reset'))
         functions += declaration((ath / 'mhi.c').read_text(), 'ath12k_mhi_op_status_cb')
         harness = (Path(__file__).parent / 'wireless_admission_harness.c').read_text()
         self.compile_run(harness.replace('#include "admission-functions.inc"', functions))

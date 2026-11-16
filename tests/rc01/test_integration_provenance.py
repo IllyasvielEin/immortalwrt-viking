@@ -128,3 +128,28 @@ class MetadataSummary(unittest.TestCase):
                 values = dict(line.split("=", 1) for line in output.splitlines())
                 self.assertEqual(values["dnsmasq"], "2.93-r" + str(release) + "@" + "c" * 40)
                 self.assertNotIn("dnsmasq=", (ROOT / ".github/workflows/build-rc01.yml").read_text())
+
+
+class LocalRepairRegistry(unittest.TestCase):
+    def test_repair_manifest_and_patch_digests_match_the_working_tree(self):
+        sources = json.loads((ROOT / "scripts/rc01-platform-sources.json").read_text())
+        entry = sources["local_repair"]
+        data = (ROOT / entry["manifest"]).read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), entry["sha256"])
+        records = json.loads(data)["patches"]
+        self.assertEqual(len(records), len({item["path"] for item in records}))
+        for item in records:
+            with self.subTest(path=item["path"]):
+                self.assertEqual(hashlib.sha256((ROOT / item["path"]).read_bytes()).hexdigest(),
+                                 item["sha256"])
+
+    def test_wireless_repair_series_has_manifest_and_override_coverage(self):
+        sources = json.loads((ROOT / "scripts/rc01-platform-sources.json").read_text())
+        repair = json.loads((ROOT / sources["local_repair"]["manifest"]).read_text())
+        expected = {str(path.relative_to(ROOT)) for path in
+                    (ROOT / "package/kernel/mac80211/patches/ath12k").glob("92[3-7]*.patch")}
+        self.assertTrue(expected)
+        self.assertLessEqual(expected, {item["path"] for item in repair["patches"]})
+        override = next(item for item in sources["local_overrides"]
+                        if item["id"] == "RC01-WIRELESS-LIFETIME")
+        self.assertLessEqual(expected, set(override["paths"]))

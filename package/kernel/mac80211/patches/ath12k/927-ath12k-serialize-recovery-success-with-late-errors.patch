@@ -1,0 +1,242 @@
+From: RC01 Maintainers <rc01@localhost>
+Subject: [PATCH] wifi: ath12k: serialize recovery success with late errors
+
+A new RDDM or QMI error can arrive after the owner's final error read but
+before BOOT becomes IDLE. The old intake records an error without queuing
+a reset, while the owner reports success and clears RECOVERY.
+
+Serialize error intake and the entire success commit with an IRQ-safe
+group lock. Intake takes the existing device admission lock first: BOOT
+errors fail the current owner, and a crash that arrives once the group is
+IDLE sets the crash flags and queues the next reset. Other errors reported
+in IDLE are not recovery requests and keep their existing paths, as before.
+Route MHI through that same intake after releasing its callback lock, and
+keep remove's admission check in the common path.
+
+State writers retain ag->mutex and briefly nest the group spinlock. No
+base, device or wiphy lock is taken under that spinlock; the success block
+only updates flags/counters and completes waiters. Teardown and transport
+barriers remain outside it.
+
+---
+--- a/drivers/net/wireless/ath/ath12k/core.h
++++ b/drivers/net/wireless/ath/ath12k/core.h
+@@ -959,7 +959,12 @@
+ 	u8 num_hw;
+ 	bool mlo_capable;
+ 	bool teardown_done;
+-	/* ag->mutex selects one reset owner; callbacks only signal atomically. */
++	/* State writes: mutex -> recovery_state_lock. Error intake:
++	 * ab->recovery_lock -> recovery_state_lock (IRQs disabled).
++	 * Never take a device lock or mutex under recovery_state_lock.
++	 * recovery_owner remains protected by mutex.
++	 */
++	spinlock_t recovery_state_lock;
+ 	enum ath12k_group_recovery recovery_state;
+ 	struct ath12k_base *recovery_owner;
+ 	wait_queue_head_t recovery_wait;
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -1754,14 +1754,43 @@
+ 	complete(&ab->driver_recovery);
+ }
+ 
+-void ath12k_core_recovery_error(struct ath12k_base *ab, int error)
++/* Error intake and the owner's success commit exclude each other on
++ * recovery_state_lock. Admission stays closed through remove. Nest only
++ * device -> group; the owner never takes a device lock under the group lock.
++ * A BOOT error fails the current owner. Only a crash (@crash) arriving in
++ * IDLE starts the next recovery; other IDLE errors keep their normal paths.
++ */
++static void ath12k_core_recovery_intake(struct ath12k_base *ab, int error,
++					bool crash)
+ {
+-	struct ath12k_hw_group *ag = READ_ONCE(ab->ag);
++	struct ath12k_hw_group *ag;
++	unsigned long flags;
+ 
+-	if (!ag || READ_ONCE(ag->recovery_state) != ATH12K_GROUP_RECOVERY_BOOT)
+-		return;
+-	cmpxchg(&ag->recovery_error, 0, error);
+-	wake_up_all(&ag->recovery_wait);
++	spin_lock_irqsave(&ab->recovery_lock, flags);
++	ag = ab->ag;
++	if (ab->recovery_stopped || !ag)
++		goto unlock;
++
++	spin_lock(&ag->recovery_state_lock);
++	if (!test_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags)) {
++		if (ag->recovery_state == ATH12K_GROUP_RECOVERY_BOOT) {
++			cmpxchg(&ag->recovery_error, 0, error);
++			wake_up_all(&ag->recovery_wait);
++		} else if (crash &&
++			   ag->recovery_state == ATH12K_GROUP_RECOVERY_IDLE) {
++			set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++			set_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
++			queue_work(ab->workqueue_aux, &ab->reset_work);
++		}
++	}
++	spin_unlock(&ag->recovery_state_lock);
++unlock:
++	spin_unlock_irqrestore(&ab->recovery_lock, flags);
++}
++
++void ath12k_core_recovery_error(struct ath12k_base *ab, int error)
++{
++	ath12k_core_recovery_intake(ab, error, false);
+ }
+ 
+ void ath12k_core_reconfig_complete(struct ath12k_hw *ah)
+@@ -1792,21 +1821,7 @@
+ 
+ void ath12k_core_queue_reset(struct ath12k_base *ab)
+ {
+-	unsigned long flags;
+-
+-	spin_lock_irqsave(&ab->recovery_lock, flags);
+-	if (!ab->recovery_stopped && ab->ag) {
+-		if (READ_ONCE(ab->ag->recovery_state) == ATH12K_GROUP_RECOVERY_BOOT)
+-			ath12k_core_recovery_error(ab, -EIO);
+-		if (READ_ONCE(ab->ag->recovery_state) != ATH12K_GROUP_RECOVERY_IDLE) {
+-			spin_unlock_irqrestore(&ab->recovery_lock, flags);
+-			return;
+-		}
+-		set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+-		set_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
+-		queue_work(ab->workqueue_aux, &ab->reset_work);
+-	}
+-	spin_unlock_irqrestore(&ab->recovery_lock, flags);
++	ath12k_core_recovery_intake(ab, -EIO, true);
+ }
+ 
+ static bool ath12k_core_recovery_exiting(struct ath12k_hw_group *ag)
+@@ -1908,7 +1923,7 @@
+ 	struct ath12k_hw_group *ag = owner->ag;
+ 	struct ath12k_base *ab;
+ 	struct ath12k_hw *ah;
+-	unsigned long deadline, left;
++	unsigned long deadline, left, flags;
+ 	int i, ret = 0, total_vdev;
+ 
+ 	/* Selection comes before ANY wait or destructive operation. Exit's
+@@ -1923,9 +1938,11 @@
+ 			ath12k_core_recovery_error(owner, -EIO);
+ 		goto unlock_return;
+ 	}
++	spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 	ag->recovery_state = ATH12K_GROUP_RECOVERY_DRAIN;
+ 	ag->recovery_owner = owner;
+ 	ag->recovery_error = 0;
++	spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 	ag->boot_ready = false;
+ 	ath12k_core_recovery_close(ag);
+ 	for (i = 0; i < ag->num_devices; i++) {
+@@ -1974,7 +1991,9 @@
+ 		goto failed;
+ 	}
+ 	ath12k_qmi_reset_mlo_mem(ag);
++	spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 	ag->recovery_state = ATH12K_GROUP_RECOVERY_BOOT;
++	spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 	mutex_unlock(&ag->mutex);
+ 	/* One fixed deadline includes stale lookup timeout and normal boot.
+ 	 * Soft transport failure never extends it or becomes reset success.
+@@ -2080,8 +2099,13 @@
+ 	mutex_lock(&ag->mutex);
+ 	if (ath12k_core_recovery_exiting(ag))
+ 		goto unlock_return;
++	/* Error intake and the entire success commit share one IRQ-safe
++	 * boundary. An error either fails this BOOT or queues after IDLE.
++	 */
++	spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 	ret = READ_ONCE(ag->recovery_error);
+ 	if (ret) {
++		spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 		mutex_unlock(&ag->mutex);
+ 		goto failed;
+ 	}
+@@ -2096,6 +2120,7 @@
+ 	}
+ 	ag->recovery_state = ATH12K_GROUP_RECOVERY_IDLE;
+ 	ag->recovery_owner = NULL;
++	spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 	mutex_unlock(&ag->mutex);
+ 	ath12k_info(owner, "group recovery and mac80211 reconfiguration complete\n");
+ 	return;
+@@ -2106,15 +2131,19 @@
+ 	mutex_lock(&ag->mutex);
+ 	if (ath12k_core_recovery_exiting(ag))
+ 		goto unlock_return;
++	spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 	ag->recovery_state = ATH12K_GROUP_RECOVERY_DRAIN;
++	spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 	ath12k_core_recovery_close(ag);
+ 	mutex_unlock(&ag->mutex);
+ 	ath12k_core_recovery_drain(ag);
+ 	if (atomic_read(&ag->reconfig_pending)) {
+ 		mutex_lock(&ag->mutex);
+ 		if (!ath12k_core_recovery_exiting(ag)) {
++			spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 			ag->recovery_state = ATH12K_GROUP_RECOVERY_FAILED;
+ 			ag->recovery_owner = NULL;
++			spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 			ath12k_err(owner, "reconfiguration still owns resources: %d\n", ret);
+ 		}
+ 		mutex_unlock(&ag->mutex);
+@@ -2123,8 +2152,10 @@
+ 	ath12k_core_recovery_stop(ag);
+ 	mutex_lock(&ag->mutex);
+ 	if (!ath12k_core_recovery_exiting(ag)) {
++		spin_lock_irqsave(&ag->recovery_state_lock, flags);
+ 		ag->recovery_state = ATH12K_GROUP_RECOVERY_FAILED;
+ 		ag->recovery_owner = NULL;
++		spin_unlock_irqrestore(&ag->recovery_state_lock, flags);
+ 		ath12k_err(owner, "group recovery failed: %d; resources closed\n", ret);
+ 	}
+ unlock_return:
+@@ -2227,6 +2258,7 @@
+ 	ag->id = count;
+ 	list_add(&ag->list, &ath12k_hw_group_list);
+ 	mutex_init(&ag->mutex);
++	spin_lock_init(&ag->recovery_state_lock);
+ 	init_waitqueue_head(&ag->recovery_wait);
+ 	atomic_set(&ag->reconfig_pending, 0);
+ 	ag->mlo_capable = false;
+--- a/drivers/net/wireless/ath/ath12k/mhi.c
++++ b/drivers/net/wireless/ath/ath12k/mhi.c
+@@ -142,6 +142,7 @@
+ 	struct ath12k_base *ab = dev_get_drvdata(mhi_cntrl->cntrl_dev);
+ 	struct ath12k_pci *ab_pci = ath12k_pci_priv(ab);
+ 	unsigned long flags;
++	bool reset = false;
+ 
+ 	ath12k_dbg(ab, ATH12K_DBG_BOOT, "mhi notify status reason %s\n",
+ 		   ath12k_mhi_op_callback_to_str(cb));
+@@ -160,15 +161,7 @@
+ 			break;
+ 		}
+ 
+-		if (!ab->recovery_stopped && ab->ag) {
+-			if (READ_ONCE(ab->ag->recovery_state) == ATH12K_GROUP_RECOVERY_BOOT)
+-				ath12k_core_recovery_error(ab, -EIO);
+-			if (READ_ONCE(ab->ag->recovery_state) != ATH12K_GROUP_RECOVERY_IDLE)
+-				break;
+-			set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+-			set_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
+-			queue_work(ab->workqueue_aux, &ab->reset_work);
+-		}
++		reset = true;
+ 		break;
+ 	default:
+ 		break;
+@@ -176,6 +169,10 @@
+ 
+ 	ab_pci->mhi_pre_cb = cb;
+ 	spin_unlock_irqrestore(&ab->recovery_lock, flags);
++
++	/* The common intake rechecks admission after the callback lock. */
++	if (reset)
++		ath12k_core_queue_reset(ab);
+ }
+ 
+ static int ath12k_mhi_op_read_reg(struct mhi_controller *mhi_cntrl,

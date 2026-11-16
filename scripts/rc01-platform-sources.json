@@ -118,9 +118,11 @@
         "package/kernel/mac80211/patches/ath12k/924-02-ath12k-serialize-memory-requests-in-event-worker.patch",
         "package/kernel/mac80211/patches/ath12k/924-03-ath12k-close-and-drain-group-before-host-teardown.patch",
         "package/kernel/mac80211/patches/ath12k/924-04-ath12k-recover-all-members-with-one-group-owner.patch",
-        "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch"
+        "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch",
+        "package/kernel/mac80211/patches/ath12k/926-ath12k-close-mgmt-completions-and-limit-regd-dedup.patch",
+        "package/kernel/mac80211/patches/ath12k/927-ath12k-serialize-recovery-success-with-late-errors.patch"
       ],
-      "reason": "每设备MLO借用、唯一组恢复owner、QMI事件所有权和锁外退出屏障；单ab监管门控与sender排空、固定来源和同步等价发布、吸收DOUBT；923替代历史922异步语义",
+      "reason": "每设备MLO借用、唯一组恢复owner、QMI事件所有权和锁外退出屏障；单ab监管门控与sender排空、固定来源和同步等价发布、吸收DOUBT；923替代历史922异步语义；管理帧完成排空、恢复监管发布、IRQ-safe组恢复成功提交与迟到错误接收互斥",
       "exit_condition": "上游具备等价失败态、寿命和监管发布契约并通过对应回归后逐项退出"
     },
     {
@@ -179,6 +181,6 @@
   },
   "local_repair": {
     "manifest": "config/rc01/upstream-audit/local-repair-20261116.json",
-    "sha256": "020cfd1b9d36dd4491a71861a89e67360b71d56031b75781cf2d0a5698531355"
+    "sha256": "56fb9ff53837b9bbb8732836bde1ca9e2c548c4a14d7409183affbf9717c28f8"
   }
 }

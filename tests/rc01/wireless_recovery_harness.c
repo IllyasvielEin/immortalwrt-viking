@@ -22,6 +22,8 @@ static void mutex_unlock(struct mutex *m) { assert(!pthread_mutex_unlock(&m->m))
 #define spin_unlock_bh mutex_unlock
 #define spin_lock_irqsave(m,f) do { f=0; mutex_lock(m); } while(0)
 #define spin_unlock_irqrestore(m,f) do { (void)f; mutex_unlock(m); } while(0)
+static void spin_lock(struct mutex *m);
+#define spin_unlock mutex_unlock
 #define lockdep_assert_held(p) ((void)0)
 #define READ_ONCE(x) __atomic_load_n(&(x),__ATOMIC_ACQUIRE)
 #define WRITE_ONCE(x,v) __atomic_store_n(&(x),(v),__ATOMIC_RELEASE)
@@ -29,7 +31,7 @@ static void mutex_unlock(struct mutex *m) { assert(!pthread_mutex_unlock(&m->m))
 #define WARN_ON(x) (!!(x))
 #define ath12k_dbg(...) ((void)0)
 #define ath12k_warn(...) ((void)0)
-#define ath12k_info(...) ((void)0)
+#define ath12k_info(...) atomic_fetch_add(&successes,1)
 #define ath12k_err(...) ((void)0)
 #define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 typedef atomic_int atomic_t;
@@ -64,6 +66,8 @@ static unsigned long ticks(void) { struct timespec t;clock_gettime(CLOCK_MONOTON
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 enum ath12k_group_recovery { ATH12K_GROUP_RECOVERY_IDLE, ATH12K_GROUP_RECOVERY_DRAIN, ATH12K_GROUP_RECOVERY_BOOT, ATH12K_GROUP_RECOVERY_FAILED };
 struct work_struct { int kind; };
+enum mhi_callback { MHI_CB_SYS_ERROR, MHI_CB_EE_RDDM, MHI_CB_EE_MISSION_MODE };
+struct ath12k_pci { enum mhi_callback mhi_pre_cb; };
 struct ath12k_base;
 struct wiphy { struct mutex lock; };
 struct ieee80211_hw { struct wiphy *wiphy; struct ath12k_hw *ah; };
@@ -75,17 +79,24 @@ struct ath12k_base { struct ath12k_hw_group *ag; struct mutex core_lock,base_loc
  struct work_struct reset_work,restart_work,dump_work; int workqueue_aux; unsigned long dev_flags;
  bool is_reset,powered,core_live,pdev_live,dp_live,recovery_stopped,hw_group_ref,mac_delivery_stopped;int fw_mode;
  int num_radios,free_vdev_stats_id_map; uint64_t free_vdev_map;
- struct ath12k_qmi qmi; atomic_t reset_count,fail_cont_count; int reset_complete; int id; bool hal_live; };
-struct ath12k_hw_group { struct mutex mutex; unsigned long flags; int num_devices,num_hw,num_started;
+ struct ath12k_qmi qmi; atomic_t reset_count,fail_cont_count; int reset_complete; int id; bool hal_live;
+ struct ath12k_pci pci; };
+struct mhi_controller { struct ath12k_base *cntrl_dev; };
+#define dev_get_drvdata(p) (p)
+#define ath12k_pci_priv(p) (&(p)->pci)
+struct ath12k_hw_group { struct mutex mutex,recovery_state_lock; unsigned long flags; int num_devices,num_hw,num_started;
  struct ath12k_base *ab[3];struct ath12k_hw *ah[3];
  enum ath12k_group_recovery recovery_state;struct ath12k_base *recovery_owner;
  int recovery_error,recovery_wait;bool boot_ready;atomic_t reconfig_pending;
  struct { int num_users; } mlo_mem; };
-static struct ath12k_hw_group group={.mutex=MUTEX_INITIALIZER};
+static struct ath12k_hw_group group={.mutex=MUTEX_INITIALIZER,.recovery_state_lock=MUTEX_INITIALIZER};
 static struct ath12k_base bases[3];static struct ath12k_hw hws[3];
 static struct ieee80211_hw ieee[3];static struct wiphy wiphys[3];
 static atomic_int powerups, powerdowns, releases, stopcores, stop_pdevs, clears, reg_drains, ready_sent, business_done;
 static atomic_int paused, resume_owner, owner_done;
+static atomic_int commit_paused, resume_commit, intake_waiting, queued, successes;
+static int commit_window,idle_window,precommit_crash,qmi_error;
+static _Thread_local bool injecting;
 static int fail_power, crash_boot, ds_debt, pause_drain, suppress_ready, slow_business, exit_during_dp;
 static int core_start_calls,ce_deinits;
 static pthread_t fw_thread,business_threads[3]; static int have_fw, business_count;
@@ -94,6 +105,38 @@ static void ath12k_core_reconfig_complete(struct ath12k_hw *);
 static void ath12k_core_queue_reset(struct ath12k_base *);
 static void ath12k_core_group_close(struct ath12k_hw_group *);
 static int ath12k_core_qmi_firmware_ready(struct ath12k_base *);
+static void ath12k_mhi_op_status_cb(struct mhi_controller *,enum mhi_callback);
+static void spin_lock(struct mutex *m) {
+ if(injecting && commit_window && m==&group.recovery_state_lock) {
+  /* Trylock makes the negative control deterministic, without a timing guess. */
+  int ret=pthread_mutex_trylock(&m->m);
+  assert(ret==EBUSY && "commit lock must exclude crash intake");
+  atomic_store(&intake_waiting,1);
+ }
+ mutex_lock(m);
+}
+static void inject_crash(void) {
+ if(qmi_error) ath12k_core_recovery_error(&bases[0],-ENOMEM);
+ else {
+  struct mhi_controller ctrl={.cntrl_dev=&bases[0]};
+  ath12k_mhi_op_status_cb(&ctrl,MHI_CB_EE_RDDM);
+ }
+}
+/* Called only by the Python extractor's host instrumentation, never the driver. */
+static void recovery_before_commit(void) {if(precommit_crash) inject_crash();}
+static void recovery_commit_pause(void) {
+ if(commit_window) {
+  atomic_store(&commit_paused,1);
+  while(!atomic_load(&resume_commit)) usleep(1000);
+ }
+}
+static void recovery_idle_pause(void) {
+ if(idle_window) {
+  atomic_store(&commit_paused,1);
+  while(!atomic_load(&resume_commit)) usleep(1000);
+ }
+}
+static void *crash_callback(void *unused) {(void)unused;injecting=true;inject_crash();return NULL;}
 static void assert_closed(void) { for(int i=0;i<3;i++) assert(group.ab[i]->qmi.events_stopped); }
 static void ath12k_reg_events_close(struct ath12k_base *ab) { (void)ab; }
 static void ath12k_qmi_close(struct ath12k_base *ab) { ab->qmi.events_stopped=true; }
@@ -177,7 +220,13 @@ static void *business(void *arg) {
  wiphy_lock(ah->hw->wiphy);ath12k_core_reconfig_complete(ah);atomic_fetch_add(&business_done,1);wiphy_unlock(ah->hw->wiphy);return NULL;
 }
 static void ieee80211_restart_hw(struct ieee80211_hw *hw) { assert(atomic_load(&ready_sent));assert(!pthread_create(&business_threads[business_count++],NULL,business,hw->ah)); }
-static int queue_work(int q,struct work_struct *w) { (void)q;(void)w;assert(!"BOOT must signal, not enqueue a reset behind itself");return 0; }
+static int queue_work(int q,struct work_struct *w) {
+ (void)q;assert(w==&bases[0].reset_work);
+ assert(group.recovery_state==ATH12K_GROUP_RECOVERY_IDLE && !group.recovery_owner);
+ assert(test_bit(ATH12K_FLAG_RECOVERY,&bases[0].dev_flags));
+ assert(test_bit(ATH12K_FLAG_CRASH_FLUSH,&bases[0].dev_flags));
+ atomic_fetch_add(&queued,1);return 1;
+}
 #include "recovery-functions.inc"
 static void *run_owner(void *arg) { ath12k_core_reset(&((struct ath12k_base *)arg)->reset_work);atomic_store(&owner_done,1);return NULL; }
 int main(int argc,char **argv) {
@@ -186,11 +235,16 @@ int main(int argc,char **argv) {
  crash_boot=!strcmp(scenario,"boot-crash")?2:0;
  ds_debt=!strcmp(scenario,"ds-debt");pause_drain=!strcmp(scenario,"double-crash");
  suppress_ready=!strcmp(scenario,"remove")||!strcmp(scenario,"boot-timeout");slow_business=!strcmp(scenario,"business-timeout");
+ commit_window=!strcmp(scenario,"commit-window")||!strcmp(scenario,"commit-error");
+ idle_window=!strcmp(scenario,"idle-crash")||!strcmp(scenario,"idle-error");
+ precommit_crash=!strcmp(scenario,"precommit-crash");
+ qmi_error=!strcmp(scenario,"commit-error")||!strcmp(scenario,"idle-error");
  group.num_devices=group.num_hw=3;group.num_started=2;group.mlo_mem.num_users=3;
  for(int i=0;i<3;i++) {
   struct ath12k_base *ab=&bases[i];ab->id=i;ab->ag=&group;group.ab[i]=ab;
   pthread_mutex_init(&ab->base_lock.m,NULL);pthread_mutex_init(&ab->core_lock.m,NULL);pthread_mutex_init(&ab->recovery_lock.m,NULL);
   ab->reset_work.kind=1;ab->restart_work.kind=2;ab->dump_work.kind=3;
+  ab->pci.mhi_pre_cb=MHI_CB_EE_MISSION_MODE;
   ab->powered=ab->hal_live=ab->qmi.handle_initialized=true;
   ab->core_live=ab->pdev_live=ab->dp_live=ab->hw_group_ref=i<2;
   ab->qmi.mlo_mem_ref=true;ab->qmi.retained_non_mlo=100+i;
@@ -206,22 +260,46 @@ int main(int argc,char **argv) {
   assert(!bases[0].dp_live && !bases[0].core_live && !core_start_calls && ce_deinits==1);return 0;
  }
  pthread_t owner;assert(!pthread_create(&owner,NULL,run_owner,&bases[0]));
+ if(commit_window || idle_window) {
+  while(!atomic_load(&commit_paused)) usleep(1000);
+  assert(!atomic_load(&owner_done) && !atomic_load(&successes));
+  pthread_t callback;assert(!pthread_create(&callback,NULL,crash_callback,NULL));
+  if(commit_window) {
+   while(!atomic_load(&intake_waiting)) usleep(1000);
+   assert(!group.recovery_error && !atomic_load(&queued));
+   atomic_store(&resume_commit,1);
+   assert(!pthread_join(callback,NULL));
+  } else {
+   assert(!pthread_join(callback,NULL));
+   assert(!group.recovery_owner && atomic_load(&queued)==!qmi_error && !atomic_load(&owner_done));
+   atomic_store(&resume_commit,1);
+  }
+ }
  if(pause_drain) {while(!atomic_load(&paused)) usleep(1000);ath12k_core_reset(&bases[1].reset_work);assert(!atomic_load(&powerdowns));atomic_store(&resume_owner,1);}
  if(!strcmp(scenario,"remove")) {
   while(atomic_load(&powerups)<3) usleep(1000);
   mutex_lock(&group.mutex);ath12k_core_group_close(&group);mutex_unlock(&group.mutex);
  }
  assert(!pthread_join(owner,NULL));if(have_fw) assert(!pthread_join(fw_thread,NULL));
- if(!strcmp(scenario,"normal") || pause_drain) {
+ if(!strcmp(scenario,"normal") || pause_drain || commit_window || idle_window) {
   assert(group.recovery_state==ATH12K_GROUP_RECOVERY_IDLE);
   assert(atomic_load(&business_done)==2 && !atomic_read(&group.reconfig_pending));
   assert(atomic_load(&clears)==1 && atomic_load(&powerdowns)==3 && atomic_load(&releases)==3);
   assert(atomic_load(&powerups)==3 && group.num_started==3 && !group.mlo_mem.num_users);
   for(int i=0;i<3;i++) assert(!bases[i].is_reset && bases[i].powered && bases[i].core_live && bases[i].qmi.target_mem[1].v.addr==(void *)2);
+  assert(atomic_load(&successes)==1 && !group.recovery_error);
+  /* Only a crash that lands after IDLE starts the next recovery. */
+  assert(atomic_load(&queued)==((commit_window || idle_window) && !qmi_error));
+  if((commit_window || idle_window) && !qmi_error) {
+   assert(test_bit(ATH12K_FLAG_RECOVERY,&bases[0].dev_flags));
+   assert(test_bit(ATH12K_FLAG_CRASH_FLUSH,&bases[0].dev_flags));
+  }
  } else if(!strcmp(scenario,"remove")) {
   assert(group.recovery_state==ATH12K_GROUP_RECOVERY_BOOT);assert(atomic_load(&powerdowns)==3);
  } else {
   assert(group.recovery_state==ATH12K_GROUP_RECOVERY_FAILED);
+  assert(!atomic_load(&successes) && !atomic_load(&queued));
+  if(precommit_crash) assert(group.recovery_error==-EIO);
   if(ds_debt) {assert(!atomic_load(&powerups));assert(bases[1].dp_live && bases[1].hal_live);}
   else if(slow_business) {assert(atomic_read(&group.reconfig_pending)==2);assert(bases[0].core_live && bases[0].pdev_live);}
   else for(int i=0;i<3;i++) assert(!bases[i].powered && !bases[i].core_live && !bases[i].dp_live);
