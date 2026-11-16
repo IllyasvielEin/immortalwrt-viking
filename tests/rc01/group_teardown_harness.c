@@ -14,6 +14,12 @@
 
 typedef uint8_t u8;
 typedef uint32_t u32;
+typedef uint64_t u64;
+typedef atomic_int atomic_t;
+#define atomic_set(p,n) atomic_store(p,n)
+#define wake_up_all(p) ((void)(p))
+#define spin_lock_irqsave(p,f) do { f=0;spin_lock(p); } while(0)
+#define spin_unlock_irqrestore(p,f) do { (void)f;spin_unlock(p); } while(0)
 typedef uint64_t dma_addr_t;
 typedef uint64_t phys_addr_t;
 #define __iomem
@@ -107,9 +113,12 @@ struct device_node { bool declared[4]; struct reserved_mem *regions[4]; u32 host
 struct device { struct device_node *of_node; int refs, index; };
 struct reserved_mem { phys_addr_t base; size_t size; };
 enum ath12k_bus { ATH12K_BUS_PCI = 1, ATH12K_BUS_AHB = 2 };
-enum ath12k_qmi_event_type { ATH12K_QMI_EVENT_HOST_CAP = 1 };
-struct ath12k_qmi_driver_event { struct list_head list; enum ath12k_qmi_event_type type; void *data; };
+enum ath12k_qmi_event_type { ATH12K_QMI_EVENT_HOST_CAP = 1, ATH12K_QMI_EVENT_SERVER_ARRIVE, ATH12K_QMI_EVENT_SERVER_EXIT };
+struct sockaddr_qrtr { unsigned sq_family,sq_node,sq_port; };
+struct ath12k_qmi_driver_event { struct list_head list; enum ath12k_qmi_event_type type; void *data; u64 server_gen; };
 struct ath12k_base;
+struct host_hif_ops { void (*quiesce)(struct ath12k_base *); };
+static struct host_hif_ops hif_ops;
 #include "prepared-memory-types.h"
 struct ath12k_hw_group {
 	struct mutex mutex;
@@ -128,10 +137,10 @@ struct ath12k_base {
 	struct ath12k_hw_group *ag;
 	struct mutex core_lock;
 	unsigned long dev_flags;
-	struct { enum ath12k_bus bus; } hif;
+	struct { enum ath12k_bus bus; struct host_hif_ops *ops; } hif;
 	int fw_mode, target_mem_mode, device_id, hw_rev;
 	struct ath12k_wsi_info {int index;} wsi_info;
-	bool single_chip_mlo_support, hw_group_ref;
+	bool single_chip_mlo_support, hw_group_ref, core_live;
 	struct workqueue_struct *workqueue, *workqueue_aux;
 	struct completion driver_recovery, reset_complete, htc_suspend, restart_completed;
 	struct { struct completion wakeup_completed; } wow;
@@ -245,9 +254,17 @@ static void ath12k_core_hw_group_stop(struct ath12k_hw_group *ag)
 static void ath12k_core_stop(struct ath12k_base *ab)
 {
  lockdep_assert_held(&ab->ag->mutex); lockdep_assert_held(&ab->core_lock);
+ if (!ab->core_live) return;
  assert(ab->hw_group_ref); assert(ab->ag->num_started > 0);
  ab->hw_group_ref=false; ab->ag->num_started--;
 }
+static void ath12k_reg_events_close(struct ath12k_base *ab) { (void)ab; }
+static void ath12k_reg_events_drain(struct ath12k_base *ab) { (void)ab;assert_unlocked(); }
+static void ath12k_hif_irq_disable(struct ath12k_base *ab) { (void)ab; }
+static void ath12k_core_mac_delivery_close(struct ath12k_base *ab) { assert_unlocked();cancel_work_sync(&ab->rfkill_work); }
+static bool ath12k_dp_cmn_device_deinit(struct ath12k_base *ab) { (void)ab;return true; }
+static void ath12k_mac_destroy(struct ath12k_hw_group *ag) { lockdep_assert_held(&ag->mutex); }
+static void ath12k_core_recovery_error(struct ath12k_base *ab,int err) { (void)ab;(void)err; }
 static void ath12k_core_to_group_ref_put(struct ath12k_base *ab)
 {
 	lockdep_assert_held(&ab->ag->mutex); core_ref_puts++;
@@ -349,6 +366,7 @@ static void group_setup(int members)
 		devices[i]=(struct device){.of_node=&nodes[i],.refs=1,.index=i};
 		all_ab[i]=ath12k_core_alloc(&devices[i],0,ATH12K_BUS_PCI);assert(all_ab[i]);
 		all_ab[i]->hw_rev=ATH12K_HW_QCN9274_HW20;
+		all_ab[i]->hif.ops=&hif_ops;
 		all_count++;assert(all_ab[i]->qmi.event_work.initialized);
 	}
 }
@@ -409,14 +427,14 @@ static void create_failure(int stage)
 	group_setup(2);fail_device=1;fail_stage=stage;
 	assert(!ath12k_core_init(all_ab[0]));
 	assert(ath12k_core_init(all_ab[1])<0);
-	assert_all_clean();assert(power_downs[0]==1 && !power_downs[1]);
+	assert_all_clean();assert(power_downs[0]==1 && power_downs[1]==(stage==FAIL_POWER?1:0));
 	assert(handle_releases==(stage==FAIL_HANDLE?1:2));
 	assert(debug_create[0]==1 && debug_destroy[0]==1);
 	assert(debug_create[1]==(stage==FAIL_POWER?1:0));
 	assert(debug_destroy[1]==debug_create[1]);
 	/* The earlier successful probe later removes after rollback. */
 	ath12k_core_deinit(all_ab[0]);assert_all_clean();
-	assert(power_downs[0]==1 && !power_downs[1] && !notifiers);free_all();
+	assert(power_downs[0]==1 && power_downs[1]==(stage==FAIL_POWER?1:0) && !notifiers);free_all();
 }
 static void free_resource(void)
 {

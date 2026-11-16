@@ -45,7 +45,8 @@ class GroupTeardown(unittest.TestCase):
         driver = Path(WIRELESS) / "drivers/net/wireless/ath/ath12k"
         core, qmi = (driver / "core.c").read_text(), (driver / "qmi.c").read_text()
         core_h, qmi_h = (driver / "core.h").read_text(), (driver / "qmi.h").read_text()
-        core_names = ("ath12k_core_soc_create", "ath12k_core_soc_destroy",
+        core_names = ("ath12k_core_group_close", "ath12k_core_group_cleanup",
+                      "ath12k_core_soc_create", "ath12k_core_soc_destroy",
                       "ath12k_core_hw_group_destroy", "ath12k_core_hw_group_create",
                       "ath12k_core_hw_group_cleanup", "ath12k_core_hw_group_unassign",
                       "ath12k_core_hw_group_alloc", "ath12k_core_hw_group_find_by_dt",
@@ -53,12 +54,14 @@ class GroupTeardown(unittest.TestCase):
                       "ath12k_core_free_wsi_info", "ath12k_core_get_wsi_index",
                       "ath12k_core_hw_group_create_ready", "ath12k_core_init",
                       "ath12k_core_deinit", "ath12k_core_alloc", "ath12k_core_free")
-        qmi_names = ("ath12k_qmi_init_work", "ath12k_qmi_init_service",
+        qmi_names = ("ath12k_qmi_reopen_service", "ath12k_qmi_close",
+                     "ath12k_qmi_drain", "ath12k_qmi_release",
+                     "ath12k_qmi_driver_event_post_data", "ath12k_qmi_init_work", "ath12k_qmi_init_service",
                      "ath12k_qmi_stop_service", "ath12k_qmi_deinit_service", "ath12k_qmi_free_resource",
                      "ath12k_qmi_driver_event_post")
         core_code = "\n".join(function(core, name) for name in core_names)
         qmi_code = "\n".join(function(qmi, name) for name in qmi_names)
-        declarations = [structure(qmi_h, "target_mem_chunk"), structure(qmi_h, "ath12k_qmi_fixed_mem"),
+        declarations = [structure(qmi, "ath12k_qmi_peer"), structure(qmi_h, "target_mem_chunk"), structure(qmi_h, "ath12k_qmi_fixed_mem"),
                         structure(core_h, "ath12k_mlo_memory"),
                         re.search(r"enum ath12k_qmi_target_mem \{.*?^\};", qmi_h, re.S | re.M)[0]]
         for macro in ("ATH12K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01", "AFC_SLOT_SIZE", "AFC_MAX_SLOT", "AFC_MEM_SIZE"):
@@ -70,9 +73,9 @@ class GroupTeardown(unittest.TestCase):
         memory_end = qmi.index("/* clang stack usage explodes", memory_start)
         memory = qmi[memory_start:memory_end]
         members = []
-        referenced = set(re.findall(r"ab->qmi\.(\w+)", memory + core_code + qmi_code))
+        referenced = set(re.findall(r"(?:ab->qmi\.|qmi->)(\w+)", memory + core_code + qmi_code))
         for name in sorted(referenced):
-            line = re.search(rf"^\t(?:struct \w+|spinlock_t|bool|u32|u8|unsigned int)\s+\*?{name}(?:\[[^\]]+\])?;", qmi_struct, re.M)
+            line = re.search(rf"^\t(?:struct \w+|spinlock_t|bool|u32|u64|u8|unsigned int)\s+\*?{name}(?:\[[^\]]+\])?;", qmi_struct, re.M)
             if line is None:
                 raise AssertionError(f"missing prepared QMI member {name}")
             members.append(line[0])
@@ -86,7 +89,7 @@ class GroupTeardown(unittest.TestCase):
             text = structure(header, name)
             extra = []
             for field in sorted(set(re.findall(rf"{variable}->(\w+)", core_code)) - skip):
-                line = re.search(rf"^\t(?:bool|unsigned int|u32|struct mutex|wait_queue_head_t)\s+{field};", text, re.M)
+                line = re.search(rf"^\t(?:bool|unsigned int|u32|atomic_t|wait_queue_head_t|spinlock_t|struct mutex)\s+{field};", text, re.M)
                 if line is not None:
                     extra.append(line[0])
             (work / output).write_text("\n".join(extra) + "\n")

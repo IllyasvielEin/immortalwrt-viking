@@ -1,3 +1,8 @@
+Subject: [PATCH] ath12k: serialize memory requests on the ordered QMI worker
+
+Copy the indication with its event and let the ordered worker update
+metadata, allocate and respond. Rejection and purge free the one allocation.
+
 --- a/drivers/net/wireless/ath/ath12k/qmi.c
 +++ b/drivers/net/wireless/ath/ath12k/qmi.c
 @@ -4109,18 +4109,21 @@

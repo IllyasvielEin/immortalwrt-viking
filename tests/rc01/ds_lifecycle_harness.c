@@ -140,15 +140,22 @@ struct ath12k_sta { struct ieee80211_sta *sta; bool enable_4addr; };
 struct ath12k_base;
 struct ath12k_pci;
 #include "prepared_enums.inc"
+struct sockaddr_qrtr { unsigned sq_node,sq_port; };
+struct ath12k_qmi_peer { u64 gen; struct sockaddr_qrtr sq; };
+#define U8_MAX 255
+#define complete(p) (++*(p))
 struct ath12k_qmi {
 	struct ath12k_base *ab;
 	struct work_struct event_work;
 	bool events_stopped;
+	u64 server_gen,active_gen;
+	struct sockaddr_qrtr sq;
+	unsigned num_radios;
 	int event_lock;
 	struct list_head event_list;
 };
 struct ath12k_qmi_driver_event {
-	struct list_head list; enum ath12k_qmi_event_type type; void *data;
+	struct list_head list; enum ath12k_qmi_event_type type; void *data; u64 server_gen;
 };
 struct ath12k { struct ath12k_base *ab; };
 struct ath12k_link_vif { struct ath12k_vif *ahvif; struct ath12k *ar; u32 vdev_id; };
@@ -182,13 +189,13 @@ struct reg_layout { u32 tcl1_ring_misc, tcl1_ring_base_lsb, reo1_ring_misc, reo1
 struct ath12k_hal { struct reg_layout *regs; struct hal_srng srng_list[3]; };
 struct ath12k_ds;
 struct ath12k_dp;
-struct ath12k_hw_group { struct { struct ath12k_dp *dp[ATH12K_MAX_DEVICES]; } dp_hw_grp; };
+struct ath12k_hw_group { bool boot_ready; struct { struct ath12k_dp *dp[ATH12K_MAX_DEVICES]; } dp_hw_grp; };
 struct ath12k_base {
 	struct ath12k_hal hal; struct ath12k_hw_group *ag; struct ath12k_dp *dp;
 	unsigned long dev_flags; void *workqueue_aux; unsigned device_id, hw_rev;
 	struct ath12k_pci *pci; struct ath12k_qmi qmi;
 	struct work_struct reset_work, restart_work, dump_work;
-	bool is_reset; void *workqueue;
+	bool is_reset, core_live; void *workqueue; int restart_completed;
 };
 struct ath12k_dp_ops { u32 (*tx_get_vdev_bank_config)(struct ath12k_base *, struct ath12k_link_vif *); };
 struct ath12k_dp {
@@ -351,7 +358,8 @@ static void ath12k_pci_sw_reset(struct ath12k_base *ab, bool poweron)
 }
 static struct ath12k_base *pci_get_drvdata(struct pci_dev *pdev) { return pdev->ab; }
 static void ath12k_pci_set_irq_affinity_hint(struct ath12k_pci *pci, void *hint) { (void)pci; assert(!hint); }
-static void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *group) { (void)group; group_cleanups++; }
+static void host_group_cleanup(void);
+static void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *group) { (void)group; group_cleanups++; host_group_cleanup(); }
 static void ath12k_core_deinit(struct ath12k_base *ab)
 {
 	/* Assert the preconditions at the real PCI remove's teardown boundary. */
@@ -374,6 +382,9 @@ static bool list_empty(struct list_head *head) { return head->next == head; }
 #define list_first_entry(head, type, member) container_of((head)->next, type, member)
 #define spin_lock(x) ((void)(x))
 #define spin_unlock(x) ((void)(x))
+static void ath12k_core_queue_reset(struct ath12k_base *ab) { (void)ab;restart_queues++; }
+static void ath12k_core_recovery_error(struct ath12k_base *ab,int err) { (void)ab;(void)err; }
+static bool ath12k_qmi_generation_current(struct ath12k_qmi *q,u64 gen) { return !q->events_stopped && q->server_gen==gen; }
 static int ath12k_qmi_event_server_arrive(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
 static int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi, const void *payload) { (void)qmi; (void)payload; return 0; }
 static int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
@@ -436,6 +447,12 @@ static void ath12k_dp_ds_quarantine_group(struct ath12k_hw_group *group)
 }
 static struct reg_layout layout = { .tcl1_ring_misc = 0x10, .reo1_ring_misc = 0x20 };
 static struct ath12k_base base;
+static void host_group_cleanup(void) {
+ set_bit(ATH12K_FLAG_UNREGISTERING,&base.dev_flags);base.qmi.events_stopped=true;
+ cancel_work_sync(&base.reset_work);cancel_work_sync(&base.qmi.event_work);
+ cancel_work_sync(&base.restart_work);cancel_work_sync(&base.dump_work);
+}
+
 static struct ath12k_dp dp;
 static struct ath12k_hw_group group;
 static struct qcom_ppe_ds provider;
@@ -689,6 +706,7 @@ static void initialize_mhi(void)
 	controller.irq = malloc(4); assert(controller.irq);
 	base.pci = &mhi_pci; base.qmi.ab = &base; mhi_pci.ab = &base;
 	ath12k_qmi_init_work(&base);
+	base.qmi.events_stopped = false;
 	INIT_WORK(&base.reset_work, ath12k_qmi_driver_event_work);
 	INIT_WORK(&base.restart_work, ath12k_qmi_driver_event_work);
 	INIT_WORK(&base.dump_work, ath12k_qmi_driver_event_work);
@@ -751,8 +769,8 @@ static void pci_remove_case(bool qmi_fail)
 	ath12k_pci_remove(&pdev);
 	assert(core_deinits == 1 && core_frees == 1 && !mhi_pci.mhi_ctrl && controller.freed);
 	assert(!restart_queues && !firmware_ready_calls && list_empty(&base.qmi.event_list));
-	assert(group_cleanups == (qmi_fail ? 0 : 1));
-	assert(pci_wakes == (qmi_fail ? 1 : 0));
+	assert(group_cleanups == 1);
+	assert(pci_wakes == 0);
 }
 static void fw_ready_case(void)
 {
@@ -760,14 +778,14 @@ static void fw_ready_case(void)
 	set_bit(ATH12K_FLAG_QMI_FW_READY_COMPLETE, &base.dev_flags);
 	/* A normal ready event may queue recovery. */
 	event_fw_ready(); ath12k_qmi_driver_event_work(&base.qmi.event_work);
-	assert(restart_queues == 1 && base.restart_work.queued);
+	assert(!restart_queues && firmware_ready_calls == 1 && !base.restart_work.queued);
 	base.restart_work.queued = false;
 	/* Begin remove after the worker's outer check but before FW_READY's
 	 * inner check; actual worker must refuse to queue another restart. */
 	event_fw_ready(); inject_unregister = true; unregister_race_flags = &base.dev_flags;
 	ath12k_qmi_driver_event_work(&base.qmi.event_work); inject_unregister = false;
-	assert(unregister_checks >= 2 && restart_queues == 1 && !base.restart_work.queued);
-	assert(!firmware_ready_calls && list_empty(&base.qmi.event_list));
+	assert(unregister_checks >= 2 && !restart_queues && !base.restart_work.queued);
+	assert(firmware_ready_calls == 1 && list_empty(&base.qmi.event_list));
 	ath12k_mhi_unregister(&mhi_pci);
 }
 int main(int argc, char **argv)

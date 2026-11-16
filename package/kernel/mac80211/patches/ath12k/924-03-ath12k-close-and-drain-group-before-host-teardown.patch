@@ -1,3 +1,10 @@
+Subject: [PATCH] ath12k: close and drain group producers before host teardown
+
+Separate core/pdev/DP obligations from started and borrower references.
+Keep control responses alive through unregister and mode-off, and retain
+HAL pointer DMA when DS refuses DP release. Stop bus callback producers
+before unassign; synchronize CE work and retry timers before ring cleanup.
+
 --- a/drivers/net/wireless/ath/ath12k/ahb.c
 +++ b/drivers/net/wireless/ath/ath12k/ahb.c
 @@ -158,22 +158,31 @@

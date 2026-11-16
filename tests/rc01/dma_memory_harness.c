@@ -24,6 +24,7 @@ typedef uint64_t phys_addr_t;
 #define ath12k_warn(ab, ...) ((void)(ab))
 #define ath12k_info(ab, ...) ((void)(ab))
 #define ath12k_err(ab, ...) ((void)(ab))
+#define WARN_ON(x) (!!(x))
 #define WARN_ON_ONCE(x) (!!(x))
 #define lockdep_assert_held(p) assert(*(p) == 1)
 

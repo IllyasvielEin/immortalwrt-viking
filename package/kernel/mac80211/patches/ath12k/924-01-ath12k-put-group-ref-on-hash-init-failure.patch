@@ -1,3 +1,8 @@
+Subject: [PATCH] ath12k: balance the start reference on hash failure
+
+Return the group start reference before unwinding REO/HIF/WMI. The failed
+hash initializer owns its local allocation and must not be destroyed here.
+
 --- a/drivers/net/wireless/ath/ath12k/core.c
 +++ b/drivers/net/wireless/ath/ath12k/core.c
 @@ -1051,6 +1051,7 @@

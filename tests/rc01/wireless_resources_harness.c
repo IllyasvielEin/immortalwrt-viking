@@ -69,9 +69,11 @@ int main(void) {
   assert(!config_alloc && !rdp_alloc && !wrp_alloc && !keys && !ab.hal.srng_config);
   ath12k_hal_srng_deinit(&ab);
  }
- hal_fail=0; assert(!ath12k_hal_srng_init(&ab));ab.dp_live=true;
- ath12k_hal_srng_deinit(&ab);assert(config_alloc==1 && rdp_alloc==1 && wrp_alloc==1 && keys==1);
- assert(ath12k_hal_srng_init(&ab)==-EBUSY);
- ab.dp_live=false;ath12k_hal_srng_deinit(&ab);ath12k_hal_srng_deinit(&ab);
+ hal_fail=0;assert(!ath12k_hal_srng_init(&ab));
+ ath12k_hal_srng_deinit(&ab);ath12k_hal_srng_deinit(&ab);
  assert(!config_alloc && !rdp_alloc && !wrp_alloc && !keys);
+ assert(!ath12k_hal_srng_init(&ab));ab.dp_live=true;
+ ath12k_hal_srng_deinit(&ab);ath12k_hal_srng_deinit(&ab);
+ assert(!config_alloc && rdp_alloc==1 && wrp_alloc==1 && !keys);
+ assert(ath12k_hal_srng_init(&ab)==-EBUSY);
 }
