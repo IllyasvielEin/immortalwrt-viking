@@ -180,7 +180,9 @@ function ppe_state(root, now) {
 	let debugfs = length(lsdir(root + '/sys/kernel/debug') || []) > 0;
 	let flows = bounded(base + '/active_flows', 256);
 	let counts = flows.status == 'ok' ? ppe_counts(trim(flows.data)) : null;
-	let state = {
+	// ppe/flows and ppe/reason_counters are never opened: their single_open
+	// producers scan complete hardware tables before any read limit applies.
+	return {
 		present,
 		debugfs_accessible: debugfs,
 		sampled_at: now,
@@ -188,16 +190,8 @@ function ppe_state(root, now) {
 		active_flows_source: { source: 'debugfs:ppe/active_flows',
 			status: flows.status != 'ok' ? flows.status : counts == null ? 'malformed' : 'ok' },
 		resources: ppe_resources(base + '/resource_stats'),
-		direct_switch: ppe_direct_switch(base + '/direct_switch'),
-		direct_switch_status_available: stat(base + '/direct_switch') != null
+		direct_switch: ppe_direct_switch(base + '/direct_switch')
 	};
-	// These single_open producers scan complete hardware tables before a
-	// userspace read limit takes effect. Ordinary status calls never open them.
-	state.detail = {
-		flows: { source: 'debugfs:ppe/flows', status: 'not-collected' },
-		reasons: { source: 'debugfs:ppe/reason_counters', status: 'not-collected' }
-	};
-	return state;
 }
 
 // Fan readings follow the guard's own validity rules: a valid NSS sensor
@@ -314,111 +308,6 @@ function fan_protection(root, now, guard) {
 
 function enabled(value) {
 	return value == '1' || value == 'true' || value == 'yes' || value == 'on';
-}
-
-// Band/primary-channel hints compare the configured band and channel with
-// the frequencies the kernel reports for the matching phy. Channel numbers
-// repeat across bands, so the channel is first converted to a frequency with
-// its configured band (as cfg80211 does). Only the primary 20 MHz channel is
-// checked: not width, country, DFS/CAC or whether the radio transmits.
-// Hints only inform; nothing here writes configuration or affects startup.
-function channel_frequency(band, channel) {
-	if (!match(channel, /^[0-9]{1,3}$/)) return null;
-	let ch = int(channel);
-	if (band == '2g') return ch == 14 ? 2484 : ch >= 1 && ch <= 13 ? 2407 + 5 * ch : null;
-	if (band == '5g') return ch >= 182 && ch <= 196 ? 4000 + 5 * ch : ch >= 1 && ch <= 177 ? 5000 + 5 * ch : null;
-	if (band == '6g') return ch == 2 ? 5935 : ch >= 1 && ch <= 233 ? 5950 + 5 * ch : null;
-	if (band == '60g') return ch >= 1 && ch <= 6 ? 56160 + 2160 * ch : null;
-	return null;
-}
-
-// Same band boundaries as wifi-detect.
-function frequency_band(freq) {
-	return freq > 50000 ? '60g' : freq > 5900 ? '6g' : freq > 4000 ? '5g' : freq > 2000 ? '2g' : null;
-}
-
-// nl80211 GET_WIPHY dump -> [ { name, bands: { band: [ { freq, disabled, no_ir, radar } ] } } ]
-function wiphy_capabilities(dump) {
-	let phys = [];
-	for (let phy in dump) {
-		if (type(phy?.wiphy_name) != 'string') continue;
-		let bands = {};
-		for (let band in phy.wiphy_bands || [])
-			for (let f in band?.freqs || []) {
-				let name = frequency_band(f?.freq);
-				if (name == null) continue;
-				bands[name] ??= [];
-				push(bands[name], { freq: f.freq, disabled: !!f.disabled, no_ir: !!f.no_ir, radar: !!f.radar });
-			}
-		push(phys, { name: phy.wiphy_name, bands });
-	}
-	return phys;
-}
-
-// Read-only version of wifi-scripts find_phy(): device path (with +N for
-// the Nth phy below one device), then MAC address, then phy name. It never
-// renames a phy.
-function radio_phy(root, device, names) {
-	let sys = n => root + '/sys/class/ieee80211/' + n;
-	if (type(device.path) == 'string' && length(device.path)) {
-		let parts = split(device.path, '+');
-		let found = filter(names, n => substr(realpath(sys(n) + '/device') || '', -length(parts[0])) == parts[0]);
-		found = sort(found, (a, b) => numeric(sys(a) + '/index') - numeric(sys(b) + '/index'));
-		if (found[int(parts[1] || '0')] != null) return found[int(parts[1] || '0')];
-	}
-	if (type(device.macaddr) == 'string') {
-		let found = filter(names, n => text(sys(n) + '/macaddress') == lc(device.macaddr))[0];
-		if (found != null) return found;
-	}
-	return index(names, device.phy) >= 0 ? device.phy : null;
-}
-
-function channel_hint(root, device, phys) {
-	let hint = { radio: device.name, band: device.band, channel: device.channel,
-		configured_disabled: device.disabled, phy: null, frequency: null, flags: [] };
-	let automatic = device.channel == null || device.channel == '' || device.channel == 'auto' || device.channel == '0';
-	if (device.band == null) { hint.status = 'band-missing'; return hint; }
-	if (index([ '2g', '5g', '6g', '60g' ], device.band) < 0) { hint.status = 'band-invalid'; return hint; }
-	if (!automatic) {
-		hint.frequency = channel_frequency(device.band, device.channel);
-		if (hint.frequency == null) { hint.status = 'channel-invalid'; return hint; }
-	}
-	if (phys == null) { hint.status = 'capability-unavailable'; return hint; }
-	hint.phy = radio_phy(root, device, map(phys, p => p.name));
-	let phy = filter(phys, p => p.name == hint.phy)[0];
-	if (phy == null) { hint.status = 'not-ready'; return hint; }
-	let freqs = phy.bands[device.band];
-	if (!length(freqs)) { hint.status = 'band-unsupported'; hint.supported_bands = sort(keys(phy.bands)); return hint; }
-	if (automatic) {
-		hint.status = length(filter(freqs, f => !f.disabled)) ? 'auto' : 'band-disabled';
-		return hint;
-	}
-	let entry = filter(freqs, f => f.freq == hint.frequency)[0];
-	if (entry == null) { hint.status = 'channel-unsupported'; return hint; }
-	for (let flag in [ 'radar', 'no_ir' ]) if (entry[flag]) push(hint.flags, flag);
-	hint.status = entry.disabled ? 'channel-disabled' : 'ok';
-	return hint;
-}
-
-// Queried on each status call and never cached, so a failed query cannot
-// leave earlier capabilities on display. `query` lets tests inject a dump.
-function wireless_state(root, uci, now, query) {
-	let devices = [];
-	uci?.foreach('wireless', 'wifi-device', s => push(devices, { name: s['.name'], band: s.band, channel: s.channel,
-		disabled: enabled(s.disabled), path: s.path, phy: s.phy, macaddr: s.macaddr }));
-	let status = 'ok', dump = null;
-	if (query == null) {
-		let nl = null;
-		try { nl = require('nl80211'); } catch (e) { }
-		if (nl == null) status = 'module-missing';
-		else dump = nl.request(nl.const.NL80211_CMD_GET_WIPHY, nl.const.NLM_F_DUMP, { split_wiphy_dump: true });
-	}
-	else dump = query();
-	if (status == 'ok' && type(dump) != 'array') status = 'unavailable';
-	let phys = status == 'ok' ? wiphy_capabilities(dump) : null;
-	return { source: 'nl80211 GET_WIPHY', status, sampled_at: now,
-		phys: phys == null ? null : map(phys, p => ({ name: p.name, bands: sort(keys(p.bands)) })),
-		hints: map(devices, d => channel_hint(root, d, phys)) };
 }
 
 // SFP cage state as the kernel sfp driver sees it. The net device existing
@@ -596,12 +485,12 @@ export function connectivity(uci) {
 	return netled_state('', uci, uptime(''), scan_processes(''));
 }
 
-export function collect(root, uci, cache, wiphy_query) {
+export function collect(root, uci, cache) {
 	root = root || '';
 	let now = uptime(root);
 	let read = (c, s, k) => uci?.get(c, s, k);
 	let board = text(root + '/tmp/sysinfo/board_name');
-	let temperatures = [], fans = [], ports = [], processes, radios = [];
+	let temperatures = [], fans = [], ports = [], processes;
 	for (let path in glob(root + '/sys/class/thermal/thermal_zone*') || []) {
 		let milli = numeric(path + '/temp');
 		push(temperatures, { name: text(path + '/type'),
@@ -621,7 +510,6 @@ export function collect(root, uci, cache, wiphy_query) {
 			speed_mbps: numeric(path + '/speed'), duplex: text(path + '/duplex') });
 	}
 	processes = scan_processes(root);
-	uci?.foreach('wireless', 'wifi-device', s => push(radios, { name: s['.name'], disabled: enabled(s.disabled) }));
 	let defaults = [];
 	uci?.foreach('firewall', 'defaults', s => {
 		push(defaults, { available: true, software: enabled(s.flow_offloading), hardware: enabled(s.flow_offloading_hw) });
@@ -652,7 +540,7 @@ export function collect(root, uci, cache, wiphy_query) {
 		kernel: text(root + '/proc/sys/kernel/osrelease'),
 		sampled_at: { uptime: now, unix: time() },
 		physical_acceptance: false,
-		temperatures, fans, fan: fan_state, ports, processes, radios,
+		temperatures, fans, fan: fan_state, ports, processes,
 		storage: { rootfs, environment: env, license, bdata,
 			layout_id: contract?.layout_id, layout_matches: layout_matches(mtd, contract),
 			bad_block_reserve: contract?.nand?.bad_block_reserve_pebs,
@@ -662,7 +550,6 @@ export function collect(root, uci, cache, wiphy_query) {
 			volumes: map([ 0, 1, 2 ], id => text(root + '/sys/class/ubi/ubi0_' + id + '/name')),
 			overlay_available_bytes: overlay ? overlay.bavail * overlay.frsize : null },
 		ppe: ppe_state(root, now),
-		wireless: wireless_state(root, uci, now, wiphy_query),
 		sfp: sfp_state(root, uci, now, filter(ports, p => p.name == 'sfp')[0], processes),
 		connectivity: netled_state(root, uci, now, processes),
 		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,

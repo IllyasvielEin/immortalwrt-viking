@@ -121,9 +121,7 @@ const base = {
     active_flows_source: { source: 'debugfs:ppe/active_flows', status: 'missing' },
     resources: { source: 'debugfs:ppe/resource_stats', status: 'ok', failures: {
       core_role: { enospc: '18446744073709551615', enomem: '9007199254740993', enoent: '0', last_errno: '-28' } } },
-    direct_switch: { source: 'debugfs:ppe/direct_switch', status: 'malformed' },
-    detail: { flows: { source: 'debugfs:ppe/flows', status: 'not-collected' },
-      reasons: { source: 'debugfs:ppe/reason_counters', status: 'not-collected' } } },
+    direct_switch: { source: 'debugfs:ppe/direct_switch', status: 'malformed' } },
   preflight: [{ target: 'hardware', checks: [] }]
 };
 const node = api.render(base);
@@ -132,10 +130,7 @@ assert(text.includes('18,446,744,073,709,551,615'), 'u64 counter rounded');
 assert(text.includes('9,007,199,254,740,993'), '2^53+1 counter rounded');
 assert(text.includes('Not exported by this kernel (debugfs:ppe/active_flows)'));
 assert(text.includes('Unrecognized format; values withheld (debugfs:ppe/direct_switch)'));
-assert(text.includes('Not collected; avoids a full hardware table scan (debugfs:ppe/flows)'));
-assert(text.includes('Not collected; avoids a full hardware table scan (debugfs:ppe/reason_counters)'));
-assert(!text.includes('cumulative since the driver loaded'));
-assert(text.includes('Active counts and resource use are current state'));
+assert(text.includes('not throughput'));
 assert(!text.includes('did not advance'));
 responses.push(JSON.parse(JSON.stringify(base)));
 const old = JSON.parse(JSON.stringify(base)); old.sampled_at.uptime = 250;
@@ -178,10 +173,9 @@ const text = JSON.stringify(api.render({
 }));
 assert(text.includes('Stopped (0 RPM)'), 'stopped fan must not look healthy');
 assert(text.includes('NSS sensor missing'));
-assert(text.includes('Process present'));
+assert(text.includes('Unknown · Process present'), 'process presence shown while the record is unknown');
 assert(text.includes('▁█ ·'), 'gap and missing temperature must stay visible: ' + text.match(/[▁-█· ]{3,}/));
-assert(text.includes('does not prove that fan protection is working'));
-assert(text.includes('not a heartbeat from the fan guard'), 'page sample time must not read as a guard heartbeat');
+assert(text.includes('sampled only while this page is open'), 'page samples must not read as guard heartbeats');
 '''
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -218,85 +212,34 @@ const record = { status: 'current', detail: null, age: 1, sample_age: 3, phase: 
   sample_reason: 'ok', failures: 0, latched: true, latch_reason: 'consecutive-failures:rpm-zero' };
 let r = rows(record);
 assert.strictEqual(r.found['Fan guard record'], 'Current record from the running guard');
-assert.strictEqual(r.found['Guard sample age'], '3 s', 'guard sample age, not the page poll time');
-assert.strictEqual(r.found['Guard sample result'], 'Guard checks passed');
+assert.strictEqual(r.found['Guard sample result'], 'Guard checks passed · 3 s', 'guard sample age, not the page poll time');
+assert(!('Guard event' in r.found), 'a periodic check is the normal case');
 assert.strictEqual(r.found['Consecutive failed checks'], '0');
 assert.strictEqual(r.found['Software full-speed latch'], 'Set; first reason: Three consecutive failed checks: Stopped (0 RPM)',
   'a passing current sample must not hide the latch');
-assert(r.text.includes('does not prove that the PWM write succeeded'));
-assert(r.text.includes('does not prove that fan protection is working'), 'existing process note is kept');
+assert(r.text.includes('does not prove the fan reached full speed'));
 
 r = rows({ ...record, status: 'stale', detail: 'expired', sample_reason: 'fault', failures: 2, latched: false, latch_reason: null });
-assert.strictEqual(r.found['Fan guard record'], 'Last record only; current guard state unknown (not updated within 10 s)');
-assert.strictEqual(r.found['Guard sample result'], 'Last record: Fault flag not 0 or unreadable');
+assert.strictEqual(r.found['Fan guard record'], 'Last record only; current guard state unknown (not updated within 10 s) · Process present');
+assert.strictEqual(r.found['Guard sample result'], 'Last record: Fault flag not 0 or unreadable · 3 s');
 assert.strictEqual(r.found['Consecutive failed checks'], 'Last record: 2');
 assert.strictEqual(r.found['Software full-speed latch'], 'Last record: Not set');
 
 r = rows({ ...record, status: 'exited', event: 'pwm-write-failed', sample_age: null, latch_reason: 'startup:sensor-missing' });
 assert.strictEqual(r.found['Guard event'], 'Last record: Stopped: PWM write failed');
-assert.strictEqual(r.found['Guard sample age'], 'No guard sample in this record');
+assert.strictEqual(r.found['Guard sample result'], 'Last record: Guard checks passed', 'no age without a guard sample');
 assert.strictEqual(r.found['Software full-speed latch'], 'Last record: Set; first reason: Startup check failed: NSS sensor missing');
 
 const unknown = { status: 'unknown', detail: 'missing', age: null, sample_age: null, phase: null, event: null,
   sample_reason: null, failures: null, latched: null, latch_reason: null };
 for (const p of [ unknown, undefined ]) {
   r = rows(p);
-  assert(r.found['Fan guard process'] === 'Process present');
   assert(!r.text.includes('Current record'), 'a running process without a record is not current');
-  for (const k of [ 'Guard sample age', 'Guard sample result', 'Consecutive failed checks', 'Software full-speed latch' ])
+  for (const k of [ 'Guard sample result', 'Consecutive failed checks', 'Software full-speed latch' ])
     assert.strictEqual(r.found[k], 'Unknown', k + ' must be unknown, not zero or false');
 }
-assert.strictEqual(rows(unknown).found['Fan guard record'], 'Unknown (no record)');
+assert.strictEqual(rows(unknown).found['Fan guard record'], 'Unknown (no record) · Process present');
 '''
-        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
-    def test_channel_hints_render_and_failed_capabilities_drop_old_results(self):
-        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
-        program = r"""
-const fs = require('fs');
-const assert = require('assert');
-let refresh, responses = [];
-const rpc = { declare: () => () => Promise.resolve(responses.shift()) };
-const poll = { add: fn => { refresh = fn; } };
-const E = (tag, attrs, children) => ({ tag, attrs, children });
-const dom = { content: (node, children) => { node.children = children; } };
-const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
-const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
-const radios = [ { name: 'radio0', disabled: true }, { name: 'radio1', disabled: false }, { name: 'radio2', disabled: true } ];
-const base = (uptime, wireless) => ({ schema: 1, sampled_at: { uptime }, temperatures: [], fans: [], ports: [], processes: [],
-  radios, storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }], wireless });
-const node = api.render(base(100, { source: 'nl80211 GET_WIPHY', status: 'ok',
-  phys: [ { name: 'phy0', bands: [ '2g' ] }, { name: 'phy1', bands: [ '5g' ] } ],
-  hints: [
-    { radio: 'radio0', band: '2g', channel: '6', frequency: 2437, phy: 'phy0', status: 'ok', flags: [] },
-    { radio: 'radio1', band: '6g', channel: '1', frequency: 5955, phy: 'phy1', status: 'band-unsupported', supported_bands: [ '5g' ], flags: [] },
-    { radio: 'radio2', band: '5g', channel: 'auto', frequency: null, phy: null, status: 'not-ready', flags: [] } ] }));
-let text = JSON.stringify(node);
-assert(text.includes('6 (2437 MHz)'));
-assert(text.includes('Matches: primary channel is in the radio frequency list'));
-assert(text.includes('Mismatch: radio does not support this band (supported: 5g)'));
-assert(text.includes('Cannot determine: radio not detected yet'));
-assert(text.includes('phy1 (5g)'));
-assert(text.includes('DFS/CAC'), 'scope of the check must be stated');
-assert.strictEqual(api.handleSave, null);
-responses.push(base(105, { source: 'nl80211 GET_WIPHY', status: 'unavailable', phys: null, hints: [
-  { radio: 'radio0', band: '2g', channel: '6', frequency: 2437, phy: null, status: 'capability-unavailable', flags: [] } ] }));
-responses.push(base(110, undefined));
-refresh().then(() => {
-  text = JSON.stringify(node);
-  assert(!text.includes('Matches'), 'old match must not survive a failed query');
-  assert(!text.includes('phy1 (5g)'));
-  assert(text.includes('Cannot determine: radio capabilities unavailable'));
-  assert(text.includes('Query failed or wireless driver not loaded'));
-  return refresh();
-}).then(() => {
-  text = JSON.stringify(node);
-  assert(!text.includes('Mismatch:') && !text.includes('Matches:') && !text.includes('Cannot determine'));
-  assert(text.includes('radio1'), 'radios still listed without hint data');
-}).catch(e => { console.error(e); process.exitCode = 1; });
-"""
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -322,20 +265,19 @@ const sfp = (status, detected, carrier, extra) => ({ interface: 'sfp', interface
 const node = api.render(base(100, sfp('link', true, 1)));
 let text = JSON.stringify(node);
 assert(text.includes('Module detected, link up'));
-assert(text.includes('Detected'));
-assert(text.includes('debugfs:sfp/state'));
-assert(text.includes('100 s'));
-assert(text.includes('does not mean a module is inserted'));
+assert(text.includes('"present"'), 'kernel module state shown');
+assert(!text.includes('debugfs:sfp/state'), 'source only shown when detection fails');
 assert(text.includes('cannot prove the cage is empty'));
 assert.strictEqual(api.handleSave, null);
 const steps = [
   [ sfp('detected-no-link', true, 0), [ 'Module detected, no link' ], [ 'link up' ] ],
   [ sfp('not-detected', false, 0, { led: { presence_mode: false, controller: 'absent' } }),
-    [ 'No module detected by the kernel', 'Not detected', 'Disabled (default link/activity LED)' ], [ 'Module detected' ] ],
+    [ 'No module detected by the kernel', 'Disabled (default link/activity LED)' ], [ 'Module detected' ] ],
   [ sfp('unknown', null, 1, { presence: { source: 'debugfs:sfp/state', status: 'missing', detected: null, module_state: null } }),
-    [ 'Unknown: module detection unavailable', 'Kernel debug state not available' ], [ 'No module detected', 'Not detected', 'Module detected' ] ],
-  [ sfp('detected-link-unknown', true, null), [ 'Module detected, link state unreadable', 'Unreadable' ], [ 'link up', 'detected, no link' ] ],
-  [ sfp('interface-missing', true, null), [ 'SFP network device missing', 'sfp: Missing' ], [ 'Module detected,' ] ],
+    [ 'Unknown: module detection unavailable', 'Kernel debug state not available (debugfs:sfp/state)' ], [ 'No module detected', 'Not detected', 'Module detected' ] ],
+  [ sfp('detected-link-unknown', true, null), [ 'Module detected, link state unreadable' ], [ 'link up', 'detected, no link' ] ],
+  [ sfp('interface-missing', true, null), [ 'SFP network device missing' ], [ 'Module detected,' ] ],
+  [ sfp('link', true, 1, { led: { presence_mode: true, controller: 'absent' } }), [ 'Enabled; Not running' ], [] ],
   [ undefined, [], [ 'SFP port', 'Module detected', 'No module detected' ] ]
 ];
 let chain = Promise.resolve();

@@ -167,7 +167,7 @@ api.render([ null, [ { getName: () => 'lan' }, { getName: () => 'wan' }, { getNa
         self.assertEqual(options["ipv6_target"]["deps"], [[{"enabled": "1", "ipv6": "1"}, None]])
         self.assertIsNone(options["enabled"]["default"], "enabled stays as configured (off)")
         description = data["description"]
-        self.assertIn("does not test DNS, web pages or proxies", description)
+        self.assertIn("does not test DNS, web or proxies", description)
         self.assertIn("filter ICMP", description)
         for line in ("White steady", "White blinking", "Amber steady", "Amber blinking", "Both off"):
             self.assertIn(line, data["text"])
@@ -349,9 +349,18 @@ class Translations(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), "duplicate msgid")
         self.assertEqual(len(ids), len(re.findall(r"^msgid ", po, re.M)), "unparsed entry")
         translated = {i.replace('\\"', '"') for i, value in entries if value}
-        strings = set(re.findall(r"_\('((?:[^'\\]|\\.)*)'\)", VIEW.read_text()))
+        strings = set()
+        for view in (VIEW, APP / "htdocs/luci-static/resources/view/status/rc01.js"):
+            strings |= set(re.findall(r"_\('((?:[^'\\]|\\.)*)'\)", view.read_text()))
         menu = json.loads((APP / "root/usr/share/luci/menu.d/luci-app-rc01.json").read_text())
-        strings.add(menu["admin/services/rc01-netled"]["title"])
+        strings |= {entry["title"] for entry in menu.values()}
+        # Preflight messages are translated by the status page with _(c.message).
+        platform = (APP.parent / "rc01-platform/files/platform.uc").read_text()
+        assess = platform[platform.index("export function assess"):platform.index("export function snapshot")]
+        calls = assess.split("check('")[1:]
+        messages = {re.search(r"'((?:[^'\\]|\\.)+)'\);", call).group(1) for call in calls}
+        self.assertEqual(len(calls), 18, "preflight check count changed; review this extraction")
+        strings |= messages
         self.assertEqual(sorted(strings - translated), [])
 
 

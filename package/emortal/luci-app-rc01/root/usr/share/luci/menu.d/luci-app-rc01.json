@@ -2,13 +2,30 @@
   "admin/status/rc01": {
     "title": "RC01 Hardware",
     "order": 95,
-    "action": { "type": "view", "path": "status/rc01" },
-    "depends": { "acl": [ "luci-app-rc01" ] }
+    "action": {
+      "type": "view",
+      "path": "status/rc01"
+    },
+    "depends": {
+      "acl": [
+        "luci-app-rc01"
+      ]
+    }
   },
-  "admin/services/rc01-netled": {
+  "admin/system/rc01-netled": {
     "title": "Connectivity LED",
-    "order": 90,
-    "action": { "type": "view", "path": "rc01/netled" },
-    "depends": { "acl": [ "luci-app-rc01-netled" ], "uci": { "rc01_netled": true } }
+    "order": 62,
+    "action": {
+      "type": "view",
+      "path": "rc01/netled"
+    },
+    "depends": {
+      "acl": [
+        "luci-app-rc01-netled"
+      ],
+      "uci": {
+        "rc01_netled": true
+      }
+    }
   }
 }

@@ -10,9 +10,6 @@ msgstr "未知"
 msgid "Invalid RC01 status response"
 msgstr "RC01 状态响应无效"
 
-msgid "Read-only status. No service, network or fan settings are changed. Preflight does not replace traffic or hardware acceptance."
-msgstr "此页只读，不修改服务、网络或风扇设置。预检不能替代流量测试和硬件验收。"
-
 msgid "Temperature and fan"
 msgstr "温度与风扇"
 
@@ -34,80 +31,11 @@ msgstr "PWM（0–255）"
 msgid "Fault"
 msgstr "故障标记"
 
-msgid "Ethernet ports"
-msgstr "有线端口"
-
-msgid "Port"
-msgstr "端口"
-
-msgid "Device"
-msgstr "设备"
-
-msgid "Link"
-msgstr "链路"
-
-msgid "Speed (Mbps)"
-msgstr "速率（Mbps）"
-
-msgid "Duplex"
-msgstr "双工"
-
-msgid "Present"
-msgstr "存在"
-
-msgid "Missing"
-msgstr "缺失"
-
-msgid "Up"
-msgstr "已连接"
-
-msgid "Down"
-msgstr "未连接"
-
-msgid "Storage and acceleration"
-msgstr "存储与加速"
-
 msgid "Item"
 msgstr "项目"
 
 msgid "Value"
 msgstr "数值"
-
-msgid "Rootfs partition (MiB)"
-msgstr "Rootfs 分区（MiB）"
-
-msgid "Environment map"
-msgstr "环境区映射"
-
-msgid "64 KiB map matches"
-msgstr "符合 64 KiB 映射"
-
-msgid "Mismatch or unavailable"
-msgstr "不匹配或不可读"
-
-msgid "Overlay available (MiB)"
-msgstr "Overlay 可用空间（MiB）"
-
-msgid "PPE active flows"
-msgstr "PPE 活跃流数"
-
-msgid "Kernel BTF"
-msgstr "内核 BTF"
-
-msgid "Environment contents and CRC are not read here. Zero PPE flows can be normal; hardware-forwarded traffic may not appear in packet captures."
-msgstr "此处不读取环境内容或校验 CRC。PPE 活跃流为零可能正常；硬件转发的流量可能不会出现在抓包中。"
-
-msgid "Related service processes"
-msgstr "相关服务进程"
-
-msgid "Process"
-msgstr "进程"
-
-msgid "PID"
-msgstr "PID"
-
-msgid "RSS (KiB)"
-msgstr "常驻内存（KiB）"
 
 msgid "Preflight"
 msgstr "预检"
@@ -121,39 +49,20 @@ msgstr "检查项"
 msgid "RC01 status is unavailable. Previous values are no longer current."
 msgstr "当前无法获取 RC01 状态，原有读数已失效。"
 
-msgid "Wireless configuration"
-msgstr "无线配置"
-
-msgid "Radio"
-msgstr "射频"
-
-msgid "Configured state"
-msgstr "配置状态"
-
 msgid "Disabled"
 msgstr "已禁用"
 
 msgid "Enabled"
 msgstr "已启用"
 
-
-msgid "Not included in this build"
-msgstr "本次构建未选入"
-
 msgid "Requires Xiaomi RC01 / BE10000"
 msgstr "需要小米 RC01 / BE10000"
-
-msgid "Requires the verified 120 MiB NAND layout"
-msgstr "需要已核实的 120 MiB NAND 分区布局"
 
 msgid "Requires the 64 KiB environment map; CRC is checked separately during upgrade"
 msgstr "需要 64 KiB 环境映射；CRC 在升级前单独校验"
 
 msgid "Requires kernel/rootfs/rootfs_data at UBI0 IDs 0/1/2"
 msgstr "UBI0 的 0/1/2 号卷应为 kernel/rootfs/rootfs_data"
-
-msgid "NAND uncorrectable ECC counter"
-msgstr "NAND 不可纠正 ECC 计数"
 
 msgid "Requires one healthy EMC2301 at address 0x2f"
 msgstr "需要唯一且运行正常的 0x2f EMC2301 风扇控制器"
@@ -266,20 +175,11 @@ msgstr "无故障标志"
 msgid "refill failures"
 msgstr "补充失败"
 
-msgid "Flow event source"
-msgstr "流事件来源"
-
-msgid "CPU/drop reason source"
-msgstr "CPU/丢弃原因来源"
-
 msgid "uptime at sample"
 msgstr "采样时运行时间"
 
 msgid "sample time did not advance; values may be stale"
 msgstr "采样时间未前进，数值可能已过时"
-
-msgid "Storage"
-msgstr "存储"
 
 msgid "Normal"
 msgstr "正常"
@@ -344,9 +244,6 @@ msgstr "未找到"
 msgid "NSS temperature"
 msgstr "NSS 温度"
 
-msgid "Fan guard process"
-msgstr "风扇保护进程"
-
 msgid "Process present"
 msgstr "进程存在"
 
@@ -364,99 +261,6 @@ msgstr "转速趋势"
 
 msgid "PWM trend"
 msgstr "PWM 趋势"
-
-msgid "Trend samples are taken only while this page polls, at most every"
-msgstr "趋势仅在本页轮询时采样，最小间隔"
-
-msgid "keeping"
-msgstr "保留"
-
-msgid "samples over"
-msgstr "个样本，时间范围"
-
-msgid "Gaps mark periods without samples. The sample time is when this page read the hardware, not a heartbeat from the fan guard, and a running guard process does not prove that fan protection is working. This page does not change the kernel thermal curve, the 77 PWM floor or the full-speed fault latch."
-msgstr "空白表示该时段没有样本。采样时间是本页读取硬件的时间，不是风扇保护进程的心跳；保护进程存在也不代表风扇保护有效。本页不改变内核温控曲线、77 PWM 下限或故障满速锁定。"
-
-msgid "Not collected; avoids a full hardware table scan"
-msgstr "未采集，以避免扫描完整硬件表"
-
-msgid "Active counts and resource use are current state; software event counters accumulate until reset. A loaded module, an enabled setting or a successful read does not show that traffic is accelerated, and flow counts are not throughput."
-msgstr "活动数量和资源占用是当前状态，软件事件计数在重置前累计。模块已加载、设置已开启或读取成功均不表示流量已被加速；流数不是吞吐量。"
-
-msgid "Matches: primary channel is in the radio frequency list"
-msgstr "匹配：主信道在该无线的频率列表中"
-
-msgid "Automatic channel; band supported by the radio"
-msgstr "自动信道；该无线支持此频段"
-
-msgid "Cannot determine: radio not detected yet"
-msgstr "无法判定：尚未检测到对应无线"
-
-msgid "Cannot determine: radio capabilities unavailable"
-msgstr "无法判定：无线能力不可用"
-
-msgid "Cannot determine: band not configured"
-msgstr "无法判定：未配置频段"
-
-msgid "Mismatch: unknown band value"
-msgstr "不匹配：频段值无法识别"
-
-msgid "Mismatch: channel number does not exist in this band"
-msgstr "不匹配：该频段不存在此信道编号"
-
-msgid "Mismatch: radio does not support this band"
-msgstr "不匹配：该无线不支持此频段"
-
-msgid "Mismatch: all channels of this band are disabled"
-msgstr "不匹配：此频段的信道均被禁用"
-
-msgid "Mismatch: radio does not list this channel"
-msgstr "不匹配：该无线未提供此信道"
-
-msgid "Mismatch: channel disabled by the kernel"
-msgstr "不匹配：内核已禁用此信道"
-
-msgid "Query failed or wireless driver not loaded"
-msgstr "查询失败或无线驱动未加载"
-
-msgid "ucode nl80211 module not installed"
-msgstr "未安装 ucode nl80211 模块"
-
-msgid "radar detection required"
-msgstr "需雷达检测"
-
-msgid "no initiating radiation"
-msgstr "禁止主动发射"
-
-msgid "supported"
-msgstr "支持"
-
-msgid "kernel flags"
-msgstr "内核标记"
-
-msgid "Band"
-msgstr "频段"
-
-msgid "Primary channel"
-msgstr "主信道"
-
-msgid "Phy"
-msgstr "PHY"
-
-msgid "Band/primary channel check"
-msgstr "频段/主信道检查"
-
-msgid "Radio capability source"
-msgstr "无线能力来源"
-
-msgid "Detected phys"
-msgstr "检测到的 PHY"
-
-msgid "None"
-msgstr "无"
-
-msgid "Advisory only: compares the configured band and primary channel with the frequency list the driver reports for the matching phy. Channel width, country, DFS/CAC and transmit legality are not checked, nothing is changed, and radio startup is not blocked. Configured state does not confirm whether a radio is transmitting."
-msgstr "仅作提示：将配置的频段和主信道与驱动为对应 PHY 报告的频率列表比较。不检查信道带宽、国家/地区、DFS/CAC 或发射合法性，不修改任何配置，也不阻止无线启动。配置状态不能确认无线正在发射。"
 
 msgid "Module detected, link up"
 msgstr "已检出模块，链路已连接"
@@ -491,47 +295,17 @@ msgstr "SFP 端口"
 msgid "State"
 msgstr "状态"
 
-msgid "Network device"
-msgstr "网络设备"
-
 msgid "Module detection source"
 msgstr "模块检测来源"
 
-msgid "kernel I2C presence probe"
-msgstr "内核 I2C 在位探测"
-
-msgid "Kernel module detection"
-msgstr "内核模块检测"
-
-msgid "Detected"
-msgstr "已检出"
-
-msgid "Not detected"
-msgstr "未检出"
-
 msgid "Kernel module state"
 msgstr "内核模块状态"
-
-msgid "Link (carrier)"
-msgstr "链路（carrier）"
-
-msgid "Unreadable"
-msgstr "不可读"
-
-msgid "Sampled at uptime"
-msgstr "采样时运行时间"
 
 msgid "LED presence mode"
 msgstr "LED 在位模式"
 
 msgid "Disabled (default link/activity LED)"
 msgstr "未启用（默认链路/活动灯）"
-
-msgid "LED service process"
-msgstr "LED 服务进程"
-
-msgid "A present network device does not mean a module is inserted. RC01 has no module-detect line, so the kernel infers presence from module I2C reads; persistent read failures also show as not detected, so this cannot prove the cage is empty. Module identity, EEPROM and optical diagnostics are not read. With presence mode enabled (system.led_sfp.rc01_presence=1) the LED is off without a detected module, lit with a module but no link, and shows link and activity with link; when detection is unavailable it keeps the link/activity LED."
-msgstr "网络设备存在不代表已插入模块。RC01 没有模块检测线，内核通过读取模块 I2C 推断在位；持续读取失败同样显示为未检出，因此不能据此证明笼位为空。此处不读取模块身份、EEPROM 或光学诊断。启用在位模式（system.led_sfp.rc01_presence=1）后，未检出模块时灯灭，检出模块但无链路时常亮，有链路时显示链路与活动；检测不可用时保留链路/活动灯。"
 
 msgid "Connectivity LED"
 msgstr "出口连通状态灯"
@@ -686,17 +460,11 @@ msgstr "请使用单播 %s 地址（不可为回环、链路本地或组播地�
 msgid "Whole number without leading zeros"
 msgstr "不带前导零的整数"
 
-msgid "Shows ICMP echo reachability from the chosen egress to the configured target addresses on the front network LEDs (white and amber). It does not test DNS, web pages or proxies: networks that filter ICMP can show unreachable while other traffic works, and a lit white LED does not prove that DNS, web or proxy traffic works. System status, RGB, Ethernet port and SFP LEDs are not touched."
-msgstr "用机身 network 指示灯（白色、琥珀色）显示所选出口到配置目标地址的 ICMP echo 可达性。不检测 DNS、网页或代理：过滤 ICMP 的网络可能显示不可达而其他流量正常；白灯亮起也不代表 DNS、网页或代理可用。不改变系统状态灯、RGB、网口灯和 SFP 灯。"
-
 msgid "Settings"
 msgstr "设置"
 
 msgid "Enable"
 msgstr "启用"
-
-msgid "Off by default. While enabled the service drives the white:network and amber:network LEDs unless a System → LED Configuration entry names them. Stopping turns both off again (board default)."
-msgstr "默认关闭。启用后，服务控制 white:network 和 amber:network 指示灯；若“系统 → LED 配置”已设置某灯，则不接管该灯。停止后两灯恢复熄灭（板级默认）。"
 
 msgid "Check %s"
 msgstr "检测 %s"
@@ -866,12 +634,6 @@ msgstr "上次记录"
 msgid "Fan guard record"
 msgstr "风扇守护记录"
 
-msgid "Guard sample age"
-msgstr "守护采样距今"
-
-msgid "No guard sample in this record"
-msgstr "该记录中没有守护采样"
-
 msgid "Guard event"
 msgstr "守护事件"
 
@@ -893,9 +655,6 @@ msgstr "首次原因"
 msgid "Not set"
 msgstr "未设置"
 
-msgid "The guard record is written by the fan guard itself after each protection step. Publishing is best effort and can lag or be skipped, so it is shown as current only for the one running guard instance and only within 10 s; otherwise it is the last record and the current guard state is unknown. The sample age is when the guard last checked the sensors. A set latch is the guard's software decision to hold full speed until it restarts; it does not prove that the PWM write succeeded or that the fan is running at full speed, and passing checks do not replace hardware acceptance."
-msgstr "守护记录由风扇守护进程在每次保护步骤后自行写入。发布为尽力而为，可能滞后或被跳过，因此仅当记录属于唯一运行中的守护实例且在 10 秒内更新时才显示为当前；否则仅为上次记录，当前守护状态未知。采样时长指距守护进程上次检查传感器的时间。锁定为守护进程在重启前保持满速的软件决定，不证明 PWM 写入成功或风扇实际满速运行；检查通过也不能替代硬件验收。"
-
 msgid "Flow directions (IPv4 / IPv6)"
 msgstr "流方向数（IPv4 / IPv6）"
 
@@ -908,5 +667,44 @@ msgstr "隔离规则（规则数 / 槽位预算）"
 msgid "Not reported by this kernel"
 msgstr "此内核未提供"
 
-msgid "A flow direction is one offloaded rule for one traffic direction, so a connection usually needs two. Weighted slots count each IPv6 rule as two hardware slots. Quarantined rules are software records the driver keeps when it cannot confirm their hardware rows are gone; their slot budget is a weighted ownership estimate, not a count of distinct occupied rows. Active slots plus the quarantine budget therefore do not give exact free slots or utilization, and leaving the active count does not mean the hardware row was deleted."
-msgstr "流方向数指单一流量方向的一条卸载规则，一个连接通常需要两条。加权槽位将每条 IPv6 规则计为两个硬件槽位。隔离规则是驱动无法确认其硬件行已清除时保留的软件记录；其槽位预算是按类型加权的所有权估计，不是去重后的实际占用行数。因此活动槽位加隔离预算不能得出精确的剩余槽位或利用率，规则离开活动计数也不代表硬件行已被删除。"
+msgid "Counts are current hardware state, not throughput; zero flows can be normal and a loaded module does not show that traffic is accelerated. An IPv6 rule takes two slots, and active slots plus the quarantine budget do not give exact free slots."
+msgstr "计数为当前硬件状态，不代表吞吐量；流数为零可能正常，模块已加载也不代表流量已被加速。每条 IPv6 规则占两个槽位，活动槽位加隔离预算不能得出准确的空闲槽位。"
+
+msgid "Failed"
+msgstr "未通过"
+
+msgid "Passed"
+msgstr "通过"
+
+msgid "NAND uncorrectable ECC counter must be readable and zero"
+msgstr "NAND 不可纠正 ECC 计数必须可读且为零"
+
+msgid "Requires the identity-preserved NAND layout"
+msgstr "需要保留身份分区的 NAND 布局"
+
+msgid "RC01 has no module-detect line: presence is inferred from module I2C reads, so \"not detected\" cannot prove the cage is empty. Presence LED mode: uci set system.led_sfp.rc01_presence=1."
+msgstr "RC01 没有模块检测线，是否插入由模块 I2C 读取推断，因此“未检测到”不能证明笼子为空。在位指示灯模式：uci set system.led_sfp.rc01_presence=1。"
+
+msgid "The guard record is current only for the one running guard within 10 s. A set latch is a software decision; it does not prove the fan reached full speed."
+msgstr "仅当唯一运行中的守护进程在 10 秒内更新时，守护记录才视为当前记录。满速锁定是软件决定，不能证明风扇已达到满速。"
+
+msgid "Trends are sampled only while this page is open"
+msgstr "趋势仅在本页打开时采样"
+
+msgid "checks OK"
+msgstr "项检查正常"
+
+msgid "every"
+msgstr "间隔"
+
+msgid "Identity partitions require readable ECC and no bad blocks"
+msgstr "身份分区需要 ECC 可读且无坏块"
+
+msgid "Rootfs bad blocks must fit the reserved capacity"
+msgstr "rootfs 坏块数不得超过预留容量"
+
+msgid "Shows ICMP echo reachability from the chosen egress on the front network LEDs (white and amber). It does not test DNS, web or proxies, and networks that filter ICMP show as unreachable. Other LEDs are not touched."
+msgstr "在前面板网络指示灯（白色/琥珀色）上显示从所选出口到目标地址的 ICMP 回显可达性。不检测 DNS、网页或代理，过滤 ICMP 的网络会显示为不可达。不影响其他指示灯。"
+
+msgid "Off by default. Drives white:network and amber:network unless a System → LED Configuration entry names them; stopping turns both off."
+msgstr "默认关闭。启用后驱动 white:network 和 amber:network，除非“系统 → LED 配置”中已有条目使用它们；停止后两者熄灭。"

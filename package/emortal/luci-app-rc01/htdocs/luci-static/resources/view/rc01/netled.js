@@ -161,12 +161,12 @@ return view.extend({
 
 	render([ state, networks ]) {
 		const m = new form.Map('rc01_netled', _('Connectivity LED'),
-			_('Shows ICMP echo reachability from the chosen egress to the configured target addresses on the front network LEDs (white and amber). It does not test DNS, web pages or proxies: networks that filter ICMP can show unreachable while other traffic works, and a lit white LED does not prove that DNS, web or proxy traffic works. System status, RGB, Ethernet port and SFP LEDs are not touched.'));
+			_('Shows ICMP echo reachability from the chosen egress on the front network LEDs (white and amber). It does not test DNS, web or proxies, and networks that filter ICMP show as unreachable. Other LEDs are not touched.'));
 
 		const s = m.section(form.NamedSection, 'main', 'netled', _('Settings'));
 		s.addremove = false;
 		let o = s.option(form.Flag, 'enabled', _('Enable'),
-			_('Off by default. While enabled the service drives the white:network and amber:network LEDs unless a System → LED Configuration entry names them. Stopping turns both off again (board default).'));
+			_('Off by default. Drives white:network and amber:network unless a System → LED Configuration entry names them; stopping turns both off.'));
 		o.rmempty = false;
 		o.validate = validateFamilies;
 
