@@ -111,7 +111,8 @@ RC01_WITH_DAE=true RC01_REPLAY_LOCK=config/rc01/software-baselines/locks/with-da
 运行准备入口，核验新锁并审核差异，再更新该基线。不要只修改平台摘要使旧锁通过。
 不含 dae 的本地锁使用 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=false` 独立生成。
 锁中的 `build_commit`、`resolved_at` 记录最初规划来源时的 HEAD 和 UTC 时间，
-`source_date_epoch` 默认取该 HEAD 的提交时间；重放保留这些值，实际构建 HEAD 另由产物元数据记录。
+`source_date_epoch` 默认取该 HEAD 的提交时间；重放保留这些值，产物元数据另记录实际构建 HEAD 的提交和树对象（`source_commit`、`source_tree`）；
+这只是 HEAD 身份记录，不检查工作树是否有未提交改动，也不约束重放时锁外路径与原构建一致。
 仓库锁在被绑定的改动提交之后生成并另行提交，故其 `build_commit` 是收录提交的父提交；它不要求重放 HEAD 相同，
 但仍逐项严格比较 `platform_inputs`。该清单不覆盖 `luci-app-rc01` 状态 UI，
 不应将通过来源锁校验理解为全部工作树一致。

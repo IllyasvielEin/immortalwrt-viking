@@ -455,6 +455,51 @@ class Service(Fixture):
         self.assertEqual(self.leds(), [0, 0, 0])
         self.assert_foreign_untouched()
 
+    def test_stop_hook_after_the_daemon_keeps_takeovers_and_clears_a_killed_bar(self):
+        """rc.common stop: procd ends the instance, then service_stopped runs."""
+        config = {"enabled": "1", "mode": "static", "color": "#ff8000", "brightness": "255"}
+        for shell in SHELLS:
+            for kind, value in (("brightness", "199"), ("trigger", "none [heartbeat]")):
+                with self.subTest(shell=shell, takeover=kind):
+                    self.setUp()
+                    process = self.start(config)
+                    self.assertTrue(self.wait_for(lambda: self.status() is not None))
+                    self.write(f"sys/class/leds/red:ambient/{kind}", value)
+                    self.assertTrue(self.wait_for(lambda: self.status() is None))
+                    self.assertEqual(self.stop(process), 0)
+                    run_init_hook(self, shell, "service_stopped")
+                    self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                    self.assertEqual(self.leds()[1:], [0, 0])
+                    self.assert_foreign_untouched()
+            with self.subTest(shell=shell, case="normal stop"):
+                self.setUp()
+                process = self.start(config)
+                self.assertTrue(self.wait_for(lambda: self.leds() == [255, 128, 0]))
+                self.assertEqual(self.stop(process), 0)
+                self.write("sys/class/leds/red:ambient/brightness", "55")    # set after the service ended
+                run_init_hook(self, shell, "service_stopped")
+                self.assertEqual(self.leds(), [55, 0, 0])
+            with self.subTest(shell=shell, case="killed"):
+                self.setUp()
+                process = self.start(config)
+                self.assertTrue(self.wait_for(lambda: self.status() is not None))
+                self.assertEqual(self.stop(process, signal.SIGKILL), -signal.SIGKILL)
+                self.assertEqual(self.leds(), [255, 128, 0])
+                run_init_hook(self, shell, "service_stopped")
+                self.assertEqual(self.leds(), [0, 0, 0])
+                self.assertIsNone(self.status())
+                self.assert_foreign_untouched()
+            with self.subTest(shell=shell, case="killed, then a trigger or system section owns it"):
+                for owner in ({"SYSTEM_LED": "green:ambient"}, {}):
+                    self.setUp()
+                    process = self.start(config)
+                    self.assertTrue(self.wait_for(lambda: self.status() is not None))
+                    self.assertEqual(self.stop(process, signal.SIGKILL), -signal.SIGKILL)
+                    if not owner:
+                        self.write("sys/class/leds/blue:ambient/trigger", "none [timer]")
+                    run_init_hook(self, shell, "service_stopped", **owner)
+                    self.assertEqual(self.leds(), [255, 128, 0])
+
     def test_takeover_stops_animation_and_stop_or_reload_preserves_user_led(self):
         for kind, value in (("trigger", "none [heartbeat]"), ("brightness", "199")):
             with self.subTest(kind=kind):
@@ -561,17 +606,23 @@ procd_add_reload_trigger() { echo "reload $*"; }
 '''
 
 
+def run_init_hook(case, shell, action, **values):
+    """Source the real init script with stubbed UCI/procd and run its hooks."""
+    env = {"PATH": os.environ["PATH"], "RC01_SYSFS": str(case.root / "sys"),
+           "RC01_ROOT": str(case.root), **values}
+    script = f'{INIT_STUBS}\n. "{INIT}"\n{action}'
+    result = subprocess.run(SHELL_COMMANDS[shell] + ["-c", script],
+                            env={k: v for k, v in env.items() if v is not None},
+                            capture_output=True, text=True, timeout=10)
+    case.assertEqual(result.returncode, 0, f"{shell}: {result.stderr}")
+    return result.stdout.splitlines()
+
+
 class Init(Fixture):
     shell = SHELLS[0]
 
     def run_init(self, action, **values):
-        env = {"PATH": os.environ["PATH"], "RC01_SYSFS": str(self.root / "sys"), **values}
-        script = f'{INIT_STUBS}\n. "{INIT}"\n{action}'
-        result = subprocess.run(SHELL_COMMANDS[self.shell] + ["-c", script],
-                                env={k: v for k, v in env.items() if v is not None},
-                                capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, f"{self.shell}: {result.stderr}")
-        return result.stdout.splitlines()
+        return run_init_hook(self, self.shell, action, **values)
 
     def use(self, shell):
         """Fresh fixture for one shell's run of a test body."""
@@ -624,10 +675,16 @@ class Init(Fixture):
                 self.use(shell)
                 for led in RGB:
                     self.write(f"sys/class/leds/{led}/brightness", "200")
+                # No status file: no instance was killed while driving the bar.
+                self.run_init("service_stopped")
+                self.assertEqual(self.leds(), [200, 200, 200])
+                self.write("var/run/rc01-rgb.status", "{}")
                 self.run_init("service_stopped")
                 self.assertEqual(self.leds(), [0, 0, 0])
+                self.assertFalse((self.root / "var/run/rc01-rgb.status").exists())
                 self.assert_foreign_untouched()
                 shutil.rmtree(self.root / "sys/class/leds/green:ambient")
+                self.write("var/run/rc01-rgb.status", "{}")
                 self.run_init("service_stopped")          # a missing LED is not an error
 
     def test_shell_syntax(self):

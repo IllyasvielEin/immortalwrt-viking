@@ -3,8 +3,8 @@
 
 # Runs the RGB service only when rc01_rgb.main.enabled=1 (default 0) and
 # system leds_off is not set. It then owns red/green/blue:ambient; no other
-# LED is touched. Disabled, stopped or crashed for good, the bar is off unless
-# a system LED section has taken it over.
+# LED is touched. Stopped or killed, the bar is off unless another controller
+# (a system LED section, a trigger or a direct brightness write) took it over.
 # Starts after /etc/init.d/led (START=96).
 START=97
 STOP=10
@@ -12,6 +12,7 @@ USE_PROCD=1
 
 RC01_RGB_LEDS="red:ambient green:ambient blue:ambient"
 RC01_RGB_SYSFS="${RC01_SYSFS:-/sys}"
+RC01_RGB_STATUS="${RC01_ROOT:-}/var/run/rc01-rgb.status"
 
 # A single system LED declaration reserves the whole colour group.
 rc01_rgb_reserved() {
@@ -28,6 +29,16 @@ rc01_rgb_system_owned() {
 	config_load system
 	config_foreach rc01_rgb_reserved led
 	[ "$RC01_RGB_RESERVED" = 1 ]
+}
+
+# Another controller's active trigger on any channel keeps the whole bar.
+rc01_rgb_triggered() {
+	local led trigger
+	for led in $RC01_RGB_LEDS; do
+		trigger="$(cat "$RC01_RGB_SYSFS/class/leds/$led/trigger" 2>/dev/null)"
+		case "$trigger" in ''|none|*'[none]'*) ;; *) return 0 ;; esac
+	done
+	return 1
 }
 
 rc01_rgb_off() {
@@ -65,10 +76,14 @@ start_service() {
 }
 
 # procd has already asked the instance to stop; it turns off the channels
-# it still owns. This covers an instance that was killed or never came up,
-# so a restart does not find the bar lit. A system LED section keeps its LED.
+# it still owns and removes its status file, as it does when it yields the
+# bar to another controller. A status file left behind therefore means the
+# instance was killed while driving the bar: only then turn it off here,
+# unless a system LED section or an active trigger now owns a channel.
 service_stopped() {
-	rc01_rgb_system_owned || rc01_rgb_off
+	[ -e "$RC01_RGB_STATUS" ] || return 0
+	rm -f "$RC01_RGB_STATUS"
+	rc01_rgb_system_owned || rc01_rgb_triggered || rc01_rgb_off
 }
 
 service_triggers() {
