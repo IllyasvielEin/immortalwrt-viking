@@ -131,7 +131,7 @@ diff --git a/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml b/D
 new file mode 100644
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,222 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -233,8 +233,19 @@ new file mode 100644
 +      - const: ahb
 +
 +  resets:
-+    maxItems: 1
-+    description: XPCS reset
++    minItems: 1
++    maxItems: 3
++    items:
++      - description: XPCS reset
++      - description: UNIPHY system reset
++      - description: UNIPHY soft reset
++
++  reset-names:
++    minItems: 1
++    items:
++      - const: xpcs
++      - const: sys
++      - const: soft
 +
 +  '#clock-cells':
 +    const: 1
@@ -277,6 +288,20 @@ new file mode 100644
 +  - clock-names
 +  - resets
 +  - '#clock-cells'
++
++oneOf:
++  - properties:
++      resets:
++        maxItems: 1
++      reset-names:
++        maxItems: 1
++  - properties:
++      resets:
++        minItems: 3
++      reset-names:
++        minItems: 3
++    required:
++      - reset-names
 +
 +additionalProperties: false
 +
