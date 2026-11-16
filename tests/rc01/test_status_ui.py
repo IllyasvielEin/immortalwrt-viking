@@ -244,6 +244,35 @@ assert.strictEqual(rows(unknown).found['Fan guard record'], 'Unknown (no record)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_preflight_lists_problems_and_hides_uninstalled_proxies(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r'''
+const fs = require('fs');
+const assert = require('assert');
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, { declare: () => () => Promise.resolve({}) }, { add: () => {} }, {}, E, v => v);
+const check = (level, message) => ({ code: message, level, message });
+const text = JSON.stringify(api.render({
+  schema: 1, sampled_at: { uptime: 1 }, temperatures: [], fans: [], fan: {},
+  proxy: { nikki_installed: true, dae_installed: false, daed_installed: false },
+  preflight: [
+    { target: 'hardware', passed: false, checks: [ check('ok', 'Board ok'), check('error', 'Layout broken'), check('warn', 'PPE missing') ] },
+    { target: 'nikki', passed: true, checks: [ check('ok', 'Installed'), check('info', 'Caveat only') ] },
+    { target: 'dae', passed: false, checks: [ check('error', 'Dae core missing') ] },
+    { target: 'daed', passed: false, checks: [ check('error', 'Daed core missing') ] }
+  ]
+}));
+assert(text.includes('hardware: Failed · 1/3 checks OK'));
+assert(text.includes('Layout broken') && text.includes('PPE missing') && !text.includes('Board ok'), 'only problems listed');
+assert(text.includes('nikki: Passed · 2/2 checks OK'), 'info is a caveat, not a failed check');
+assert(text.includes('Caveat only'), 'info caveat stays visible');
+assert(!text.includes('dae:') && !text.includes('Dae core missing') && !text.includes('Daed core missing'), 'uninstalled proxies hidden');
+'''
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
     def test_sfp_states_render_and_unknown_never_shows_an_empty_cage(self):
         source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
         program = r"""

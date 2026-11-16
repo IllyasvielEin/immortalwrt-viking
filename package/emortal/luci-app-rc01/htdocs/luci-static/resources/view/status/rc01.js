@@ -52,12 +52,13 @@ function preflightSection(state) {
 	for (const preflight of state.preflight) {
 		if (preflight.target !== 'hardware' && !state.proxy?.[preflight.target + '_installed'])
 			continue;
-		const issues = preflight.checks.filter(c => c.level !== 'ok');
-		const passed = preflight.checks.length - issues.length;
+		// Info rows are caveats, not failures: listed, but not counted against the checks.
+		const problems = preflight.checks.filter(c => c.level === 'error' || c.level === 'warn').length;
+		const listed = preflight.checks.filter(c => c.level !== 'ok');
 		nodes.push(E('p', {}, `${preflight.target}: ${preflight.passed ? _('Passed') : _('Failed')} · ` +
-			`${passed}/${preflight.checks.length} ${_('checks OK')}`));
-		if (issues.length)
-			nodes.push(table([ _('Result'), _('Check') ], issues.map(c => [ c.level.toUpperCase(), _(c.message) ])));
+			`${preflight.checks.length - problems}/${preflight.checks.length} ${_('checks OK')}`));
+		if (listed.length)
+			nodes.push(table([ _('Result'), _('Check') ], listed.map(c => [ c.level.toUpperCase(), _(c.message) ])));
 	}
 	return nodes;
 }
