@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "mode": "locked",
-  "resolved_at": "2026-11-16T05:52:26.063560+00:00",
+  "resolved_at": "2026-11-16T06:06:33.735673+00:00",
   "feeds": {
     "packages": {
       "url": "https://github.com/immortalwrt/packages.git",
@@ -101,8 +101,8 @@
     "package/emortal/luci-app-router-tool/root/usr/share/router-tool/transaction.uc": "7aafaaf4f50fa94b7c28e9dc36153e14062bb6ef4f8e02441c54e81831a30c10",
     "package/emortal/luci-app-router-tool/root/usr/share/router-tool/wireless.uc": "b8237b96bee870a408b72d72f94022ecc467477d922d59f67e6a7b2d8e7af802",
     "package/emortal/luci-app-router-tool/root/usr/share/rpcd/acl.d/luci-app-router-tool.json": "12080db74e9f633dc39d63e4435e70419ccff72ecd66e603eb665b8de93d50df",
-    "package/emortal/rc01-platform/Makefile": "2333c9de8ed68ea9d2fd98b613efbacb705c52b26c4a8714d6b883cc482e7b4f",
-    "package/emortal/rc01-platform/files/platform.uc": "04720bf8444991a6470e0f912dd0a40fca895b242817bfbcfc249e0b0f041414",
+    "package/emortal/rc01-platform/Makefile": "e0f165244fe66279c6ad3b6874cb6cdd7b4f1c5a81a7068457b0f9aa4cf061fe",
+    "package/emortal/rc01-platform/files/platform.uc": "5a61ca6f38f0352533c07501114ce673226f15961e8ac6db1b8c6bb67ecc1e1b",
     "package/emortal/rc01-platform/files/rc01-check": "44835d235db349a41187f86fbce4b8b5ab8b78496ba318f2ff7817b3bba70526",
     "package/emortal/rc01-platform/files/rc01-fan-guard": "150a22f1a3cb4026eccc2dbd7426545e4fdae967bad7b3c3af6c2234e4528616",
     "package/emortal/rc01-platform/files/rc01-fan.init": "0d0aaec073e4353cf50b35185ea5805f8b4802c85fa3284c1b5a9b55262f0c65",
@@ -1373,8 +1373,8 @@
   },
   "prepared": true,
   "with_dae": true,
-  "source_date_epoch": 1794799381,
-  "build_commit": "e523d13a033ed1539489d841464b6a2d191a234d",
+  "source_date_epoch": 1794809173,
+  "build_commit": "2493984a593d92276aac4e79a3f057f2e56c36ab",
   "inputs": {
     "feeds/packages/lang/golang/golang/Makefile": "5b9310db92444d0afa2792d16c8f9182818afb57610a762ed89aea7484a35243",
     "feeds/packages/lang/golang/golang1.27/Makefile": "9d4924e0a38379dbfc8e1c3abada3219b536f45d23fce88cc46c8824747ce995",
