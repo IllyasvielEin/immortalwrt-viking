@@ -83,6 +83,15 @@ int main(void) {
 '''
         self.compile_run(prefix + definitions + suffix)
 
+    def test_request_mem_payload_owned_once_and_worker_serialized(self):
+        source = (Path(SOURCE) / 'drivers/net/wireless/ath/ath12k/qmi.c').read_text()
+        functions = ''.join(declaration(source, name) for name in
+                            ('ath12k_qmi_driver_event_post_data',
+                             'ath12k_qmi_event_mem_request',
+                             'ath12k_qmi_msg_mem_request_cb'))
+        harness = (Path(__file__).parent / 'wireless_mem_harness.c').read_text()
+        self.compile_run(harness.replace('#include "mem-functions.inc"', functions))
+
 
 if __name__ == '__main__':
     unittest.main()

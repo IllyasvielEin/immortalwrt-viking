@@ -1,0 +1,127 @@
+--- a/drivers/net/wireless/ath/ath12k/qmi.c
++++ b/drivers/net/wireless/ath/ath12k/qmi.c
+@@ -4109,18 +4109,21 @@
+ }
+ 
+ static int
+-ath12k_qmi_driver_event_post(struct ath12k_qmi *qmi,
+-			     enum ath12k_qmi_event_type type,
+-			     void *data)
++ath12k_qmi_driver_event_post_data(struct ath12k_qmi *qmi,
++				 enum ath12k_qmi_event_type type,
++				 const void *data, size_t len)
+ {
+ 	struct ath12k_qmi_driver_event *event;
+ 
+-	event = kzalloc_obj(*event, GFP_ATOMIC);
++	/* The event owns its payload through rejection, execution and purge. */
++	event = kzalloc(sizeof(*event) + len, GFP_ATOMIC);
+ 	if (!event)
+ 		return -ENOMEM;
+ 
+ 	event->type = type;
+-	event->data = data;
++	event->data = len ? event + 1 : NULL;
++	if (len)
++		memcpy(event->data, data, len);
+ 
+ 	spin_lock(&qmi->event_lock);
+ 	if (qmi->events_stopped) {
+@@ -4136,6 +4139,14 @@
+ 	return 0;
+ }
+ 
++static int
++ath12k_qmi_driver_event_post(struct ath12k_qmi *qmi,
++                             enum ath12k_qmi_event_type type, void *data)
++{
++	/* All non-payload events pass NULL. */
++	return ath12k_qmi_driver_event_post_data(qmi, type, data, 0);
++}
++
+ void ath12k_qmi_trigger_host_cap(struct ath12k_base *ab)
+ {
+ 	struct ath12k_qmi *qmi = &ab->qmi;
+@@ -4232,10 +4243,25 @@
+ 
+ /* clang stack usage explodes if this is inlined */
+ static noinline_for_stack
+-int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi)
++int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi,
++		const struct qmi_wlanfw_request_mem_ind_msg_v01 *msg)
+ {
+ 	struct ath12k_base *ab = qmi->ab;
+-	int ret;
++	int i, ret;
++
++	/* Only this ordered worker may change allocation metadata. */
++	qmi->mem_seg_count = msg->mem_seg_len;
++	for (i = 0; i < qmi->mem_seg_count; i++) {
++		qmi->target_mem[i].type = msg->mem_seg[i].type;
++		qmi->target_mem[i].size = msg->mem_seg[i].size;
++	}
++
++	if (test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags))
++		ret = ath12k_qmi_assign_target_mem_chunk(ab);
++	else
++		ret = ath12k_qmi_alloc_target_mem_chunk(ab);
++	if (ret)
++		return ret;
+ 
+ 	ret = ath12k_qmi_respond_fw_mem_request(ab);
+ 	if (ret < 0) {
+@@ -4303,7 +4329,7 @@
+ 	struct ath12k_qmi *qmi = container_of(qmi_hdl, struct ath12k_qmi, handle);
+ 	struct ath12k_base *ab = qmi->ab;
+ 	const struct qmi_wlanfw_request_mem_ind_msg_v01 *msg = data;
+-	int i, ret;
++	int ret;
+ 
+ 	ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi firmware request memory request\n");
+ 
+@@ -4314,32 +4340,10 @@
+ 		return;
+ 	}
+ 
+-	ab->qmi.mem_seg_count = msg->mem_seg_len;
+-
+-	for (i = 0; i < qmi->mem_seg_count ; i++) {
+-		ab->qmi.target_mem[i].type = msg->mem_seg[i].type;
+-		ab->qmi.target_mem[i].size = msg->mem_seg[i].size;
+-		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi mem seg type %d size %d\n",
+-			   msg->mem_seg[i].type, msg->mem_seg[i].size);
+-	}
+-
+-	if (test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags)) {
+-		ret = ath12k_qmi_assign_target_mem_chunk(ab);
+-		if (ret) {
+-			ath12k_warn(ab, "failed to assign qmi target memory: %d\n",
+-				    ret);
+-			return;
+-		}
+-	} else {
+-		ret = ath12k_qmi_alloc_target_mem_chunk(ab);
+-		if (ret) {
+-			ath12k_warn(ab, "qmi failed to alloc target memory: %d\n",
+-				    ret);
+-			return;
+-		}
+-	}
+-
+-	ath12k_qmi_driver_event_post(qmi, ATH12K_QMI_EVENT_REQUEST_MEM, NULL);
++	ret = ath12k_qmi_driver_event_post_data(qmi,
++			ATH12K_QMI_EVENT_REQUEST_MEM, msg, sizeof(*msg));
++	if (ret && ret != -ESHUTDOWN)
++		ath12k_warn(ab, "failed to queue memory request: %d\n", ret);
+ }
+ 
+ static void ath12k_qmi_msg_mem_ready_cb(struct qmi_handle *qmi_hdl,
+@@ -4476,7 +4480,7 @@
+ 			set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+ 			break;
+ 		case ATH12K_QMI_EVENT_REQUEST_MEM:
+-			ret = ath12k_qmi_event_mem_request(qmi);
++			ret = ath12k_qmi_event_mem_request(qmi, event->data);
+ 			if (ret < 0)
+ 				set_bit(ATH12K_FLAG_QMI_FAIL, &ab->dev_flags);
+ 			break;

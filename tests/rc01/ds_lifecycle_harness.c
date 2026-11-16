@@ -375,7 +375,7 @@ static bool list_empty(struct list_head *head) { return head->next == head; }
 #define spin_lock(x) ((void)(x))
 #define spin_unlock(x) ((void)(x))
 static int ath12k_qmi_event_server_arrive(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
-static int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
+static int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi, const void *payload) { (void)qmi; (void)payload; return 0; }
 static int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
 static int ath12k_qmi_event_host_cap(struct ath12k_qmi *qmi) { (void)qmi; return 0; }
 static int ath12k_core_qmi_firmware_ready(struct ath12k_base *ab) { (void)ab; firmware_ready_calls++; return 0; }
