@@ -15,13 +15,13 @@ export YACC='bison -y'
 export LEX=flex
 make -s -C "$kernel_src" O="$obj" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-15 defconfig
 make -s -C "$kernel_src" O="$obj" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-15 -j4 modules_prepare
-# Explicit opt-in: baseline backports MHI header uses the post-6.18 path.
-# This does not modify either source tree and is NOT a production fix.
-if [ "${DFS_MHI_HEADER_BRIDGE:-0}" = 1 ]; then
-    mkdir -p "$obj/dfs-compile-compat/linux/device-id"
-    echo '#include <linux/mod_devicetable.h>' > "$obj/dfs-compile-compat/linux/device-id/mhi.h"
-    export CFLAGS="-I$obj/dfs-compile-compat"
-fi
+# Match package/kernel/mac80211/Makefile Build/Prepare: these vendored
+# headers must not shadow the kernel-provided APIs. Only bp is writable.
+rm -rf "$bp/include/linux/ssb" "$bp/include/linux/bcma" "$bp/include/net/bluetooth"
+rm -f "$bp/include/linux/cordic.h" "$bp/include/linux/crc8.h" \
+    "$bp/include/linux/eeprom_93cx6.h" "$bp/include/linux/wl12xx.h" \
+    "$bp/include/linux/mhi.h" "$bp/include/net/ieee80211.h" \
+    "$bp/backport-include/linux/bcm47xx_nvram.h"
 cat > "$bp/defconfig" <<'EOF'
 CPTCFG_CFG80211=m
 CPTCFG_MAC80211=m
