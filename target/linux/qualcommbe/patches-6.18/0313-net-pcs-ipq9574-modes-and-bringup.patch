@@ -131,7 +131,7 @@ diff --git a/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml b/D
 new file mode 100644
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml
-@@ -0,0 +1,222 @@
+@@ -0,0 +1,221 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -234,7 +234,6 @@ new file mode 100644
 +
 +  resets:
 +    minItems: 1
-+    maxItems: 3
 +    items:
 +      - description: XPCS reset
 +      - description: UNIPHY system reset
