@@ -455,50 +455,62 @@ class Service(Fixture):
         self.assertEqual(self.leds(), [0, 0, 0])
         self.assert_foreign_untouched()
 
-    def test_stop_hook_after_the_daemon_keeps_takeovers_and_clears_a_killed_bar(self):
-        """rc.common stop: procd ends the instance, then service_stopped runs."""
+    def stop_like_rc_common(self, shell, process, before="", sig="TERM", **values):
+        """rc.common stop: procd signals the instance and returns at once, then
+        service_stopped runs in the same shell. Nothing waits in between."""
+        return run_init_hook(self, shell, f'{before}\nkill -{sig} {process.pid}\nservice_stopped',
+                             RC01_RGB_DAEMON=str(DAEMON), **values)
+
+    def test_stop_hook_runs_while_the_instance_is_still_exiting(self):
         config = {"enabled": "1", "mode": "static", "color": "#ff8000", "brightness": "255"}
+        def running():
+            self.setUp()
+            process = self.start(config)
+            self.assertTrue(self.wait_for(lambda: self.status() is not None and self.leds() == [255, 128, 0]))
+            self.assertEqual(self.status()["pid"], process.pid)
+            return process
+
         for shell in SHELLS:
-            for kind, value in (("brightness", "199"), ("trigger", "none [heartbeat]")):
-                with self.subTest(shell=shell, takeover=kind):
-                    self.setUp()
-                    process = self.start(config)
-                    self.assertTrue(self.wait_for(lambda: self.status() is not None))
-                    self.write(f"sys/class/leds/red:ambient/{kind}", value)
-                    self.assertTrue(self.wait_for(lambda: self.status() is None))
-                    self.assertEqual(self.stop(process), 0)
-                    run_init_hook(self, shell, "service_stopped")
-                    self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
-                    self.assertEqual(self.leds()[1:], [0, 0])
-                    self.assert_foreign_untouched()
             with self.subTest(shell=shell, case="normal stop"):
-                self.setUp()
-                process = self.start(config)
-                self.assertTrue(self.wait_for(lambda: self.leds() == [255, 128, 0]))
-                self.assertEqual(self.stop(process), 0)
-                self.write("sys/class/leds/red:ambient/brightness", "55")    # set after the service ended
-                run_init_hook(self, shell, "service_stopped")
-                self.assertEqual(self.leds(), [55, 0, 0])
-            with self.subTest(shell=shell, case="killed"):
-                self.setUp()
-                process = self.start(config)
-                self.assertTrue(self.wait_for(lambda: self.status() is not None))
-                self.assertEqual(self.stop(process, signal.SIGKILL), -signal.SIGKILL)
-                self.assertEqual(self.leds(), [255, 128, 0])
-                run_init_hook(self, shell, "service_stopped")
+                process = running()
+                self.stop_like_rc_common(shell, process)
+                self.assertEqual(process.wait(timeout=5), 0)
                 self.assertEqual(self.leds(), [0, 0, 0])
                 self.assertIsNone(self.status())
                 self.assert_foreign_untouched()
-            with self.subTest(shell=shell, case="killed, then a trigger or system section owns it"):
-                for owner in ({"SYSTEM_LED": "green:ambient"}, {}):
-                    self.setUp()
-                    process = self.start(config)
-                    self.assertTrue(self.wait_for(lambda: self.status() is not None))
-                    self.assertEqual(self.stop(process, signal.SIGKILL), -signal.SIGKILL)
-                    if not owner:
-                        self.write("sys/class/leds/blue:ambient/trigger", "none [timer]")
-                    run_init_hook(self, shell, "service_stopped", **owner)
+            for kind, value in (("brightness", "199"), ("trigger", "none [heartbeat]")):
+                with self.subTest(shell=shell, case=f"{kind} written just before stop"):
+                    process = running()
+                    red = self.root / "sys/class/leds/red:ambient"    # running() made a new fixture
+                    # The instance has not seen the takeover yet when it is signalled.
+                    self.stop_like_rc_common(shell, process, before=f"echo '{value}' > '{red}/{kind}'")
+                    self.assertEqual(process.wait(timeout=5), 0)
+                    self.assertEqual(self.read(f"sys/class/leds/red:ambient/{kind}"), value)
+                    self.assertEqual(self.leds()[1:], [0, 0])
+                    self.assertIsNone(self.status())
+            with self.subTest(shell=shell, case="killed"):
+                process = running()
+                self.stop_like_rc_common(shell, process, sig="KILL")
+                self.assertEqual(process.wait(timeout=5), -signal.SIGKILL)
+                self.assertEqual(self.leds(), [0, 0, 0])
+                self.assertIsNone(self.status())
+                self.assert_foreign_untouched()
+            for owner in ({"SYSTEM_LED": "green:ambient"}, {}):
+                with self.subTest(shell=shell, case="killed, bar owned elsewhere", owner=owner):
+                    process = running()
+                    before = "" if owner else f"echo 'none [timer]' > '{self.root}/sys/class/leds/blue:ambient/trigger'"
+                    self.stop_like_rc_common(shell, process, before=before, sig="KILL", **owner)
                     self.assertEqual(self.leds(), [255, 128, 0])
+            with self.subTest(shell=shell, case="still alive after the wait"):
+                process = running()
+                process.send_signal(signal.SIGSTOP)        # cannot act on SIGTERM yet
+                self.stop_like_rc_common(shell, process, RC01_RGB_WAIT="1")
+                self.assertIsNone(process.poll())
+                self.assertEqual(self.leds(), [255, 128, 0])  # a live instance keeps its LEDs
+                self.assertEqual(self.status()["pid"], process.pid)
+                process.send_signal(signal.SIGCONT)
+                self.assertEqual(process.wait(timeout=5), 0)
+                self.assertEqual(self.leds(), [0, 0, 0])
 
     def test_takeover_stops_animation_and_stop_or_reload_preserves_user_led(self):
         for kind, value in (("trigger", "none [heartbeat]"), ("brightness", "199")):
@@ -643,6 +655,7 @@ class Init(Fixture):
                 out = self.run_init("start_service\nservice_triggers", CFG_enabled="1")
                 self.assertEqual(out.count("open"), 1)
                 self.assertIn("param command /usr/libexec/rc01-rgb", out)
+                self.assertIn("param term_timeout 5", out)
                 self.assertIn("param file /etc/config/rc01_rgb", out)     # config change restarts it
                 self.assertIn("param respawn 3600 5 5", out)
                 self.assertIn("reload rc01_rgb system", out)
@@ -678,13 +691,15 @@ class Init(Fixture):
                 # No status file: no instance was killed while driving the bar.
                 self.run_init("service_stopped")
                 self.assertEqual(self.leds(), [200, 200, 200])
-                self.write("var/run/rc01-rgb.status", "{}")
+                # This test's own PID is alive but is not the daemon (a reused PID).
+                residue = json.dumps({"mode": "static", "pid": os.getpid()})
+                self.write("var/run/rc01-rgb.status", residue)
                 self.run_init("service_stopped")
                 self.assertEqual(self.leds(), [0, 0, 0])
                 self.assertFalse((self.root / "var/run/rc01-rgb.status").exists())
                 self.assert_foreign_untouched()
                 shutil.rmtree(self.root / "sys/class/leds/green:ambient")
-                self.write("var/run/rc01-rgb.status", "{}")
+                self.write("var/run/rc01-rgb.status", residue)
                 self.run_init("service_stopped")          # a missing LED is not an error
 
     def test_shell_syntax(self):

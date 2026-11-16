@@ -13,6 +13,10 @@ USE_PROCD=1
 RC01_RGB_LEDS="red:ambient green:ambient blue:ambient"
 RC01_RGB_SYSFS="${RC01_SYSFS:-/sys}"
 RC01_RGB_STATUS="${RC01_ROOT:-}/var/run/rc01-rgb.status"
+RC01_RGB_DAEMON="${RC01_RGB_DAEMON:-/usr/libexec/rc01-rgb}"
+# procd sends SIGTERM, then SIGKILL after this many seconds.
+RC01_RGB_TERM_TIMEOUT=5
+RC01_RGB_WAIT="${RC01_RGB_WAIT:-$((RC01_RGB_TERM_TIMEOUT + 2))}"
 
 # A single system LED declaration reserves the whole colour group.
 rc01_rgb_reserved() {
@@ -67,7 +71,8 @@ start_service() {
 		}
 	done
 	procd_open_instance
-	procd_set_param command /usr/libexec/rc01-rgb
+	procd_set_param command "$RC01_RGB_DAEMON"
+	procd_set_param term_timeout "$RC01_RGB_TERM_TIMEOUT"
 	# Settings are read at start: a changed config restarts the instance.
 	procd_set_param file /etc/config/rc01_rgb
 	procd_set_param respawn 3600 5 5
@@ -75,13 +80,36 @@ start_service() {
 	procd_close_instance
 }
 
-# procd has already asked the instance to stop; it turns off the channels
-# it still owns and removes its status file, as it does when it yields the
-# bar to another controller. A status file left behind therefore means the
-# instance was killed while driving the bar: only then turn it off here,
-# unless a system LED section or an active trigger now owns a channel.
+rc01_rgb_status_pid() {
+	sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p' "$RC01_RGB_STATUS" 2>/dev/null
+}
+
+# True while that PID is still this service's daemon (not a reused PID).
+rc01_rgb_running() {
+	case "$(tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null)" in
+		*"$RC01_RGB_DAEMON"*) return 0 ;;
+	esac
+	return 1
+}
+
+# rc.common calls this right after procd_kill returns: procd has only sent
+# SIGTERM (SIGKILL follows after term_timeout), so the instance is usually
+# still running here. On a normal exit, and when it yields the bar to another
+# controller, the instance turns off the channels it still owns and removes
+# its status file. Wait for the instance named in that file to exit first.
+# Only a status file that survives its own instance means the bar was left
+# lit by a killed owner; an instance that is still alive keeps its LEDs.
 service_stopped() {
-	[ -e "$RC01_RGB_STATUS" ] || return 0
+	local pid left="$RC01_RGB_WAIT"
+	pid="$(rc01_rgb_status_pid)"
+	[ -n "$pid" ] || return 0
+	while rc01_rgb_running "$pid"; do
+		[ "$left" -gt 0 ] || return 0
+		sleep 1
+		left=$((left - 1))
+	done
+	# Gone. A later instance would have written its own PID.
+	[ "$(rc01_rgb_status_pid)" = "$pid" ] || return 0
 	rm -f "$RC01_RGB_STATUS"
 	rc01_rgb_system_owned || rc01_rgb_triggered || rc01_rgb_off
 }

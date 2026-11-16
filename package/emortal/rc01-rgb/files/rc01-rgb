@@ -5,13 +5,16 @@
 // rc01_rgb.main.enabled=1; configuration changes restart it through procd.
 // It drives red/green/blue:ambient and turns still-owned channels off on
 // SIGTERM/SIGINT/SIGHUP. Status: /var/run/rc01-rgb.status (JSON).
-import { readfile, writefile, rename, unlink } from 'fs';
+import { readfile, readlink, writefile, rename, unlink } from 'fs';
 import * as rgb from 'rc01.rgb';
 
 // Test hooks only: a fixture root and a JSON section instead of UCI.
 const ROOT = getenv('RC01_ROOT') || '';
 const STATUS = ROOT + '/var/run/rc01-rgb.status';
 const TEST_CONFIG = getenv('RC01_RGB_CONFIG');
+// Lets the init script's stop hook wait for this instance before it decides
+// whether the bar was left lit by a killed owner.
+const PID = int(readlink('/proc/self'));
 
 function load() {
 	if (TEST_CONFIG) {
@@ -78,7 +81,7 @@ try {
 		// mode, period, telemetry detail or a write failure.
 		let status = sprintf('%J\n', { mode: f.mode, level: f.level, period: f.period,
 			fallback: f.fallback, detail: f.detail, led_write_failed: write_failed,
-			ignored_options: cfg.problems, rgb: rgb.ANIMATED[f.mode] ? null : f.rgb });
+			ignored_options: cfg.problems, rgb: rgb.ANIMATED[f.mode] ? null : f.rgb, pid: PID });
 		if (status != last_status && writefile(STATUS + '.tmp', status) != null && rename(STATUS + '.tmp', STATUS))
 			last_status = status;
 		if (!stopping)
