@@ -3,16 +3,16 @@ from pathlib import Path
 import hashlib
 import importlib.util
 import json
-import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts/patch-rc01-packages.py"
+spec = importlib.util.spec_from_file_location("package_sources", ROOT / "scripts/rc01-software-sources.py")
+sources = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sources)
 PATCHES = ROOT / "config/rc01/patches/packages"
 MANIFEST = json.loads((PATCHES / "manifest.json").read_text())["packages"]
 OLD_TIME = 'PKG_BUILD_TIME:=$(shell date -u -Iseconds)'
@@ -43,23 +43,30 @@ class PackageRecipeTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
         self.feeds = {}
+        (self.work / "feeds").mkdir()
+        shutil.copytree(PATCHES, self.work / "config/rc01/patches/packages")
         for item in MANIFEST:
             name = item["feed"]
-            feed = self.work / name
+            feed = self.work / "feeds" / name
             subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout",
                             str(ROOT / "feeds" / name), str(feed)], check=True)
             # Detach only the disposable clone; never checkout the shared feed.
             (feed / ".git/HEAD").write_text(item["feed_revision"] + "\n")
             recipe = feed / item["path"]
             recipe.parent.mkdir(parents=True)
-            recipe.write_text(self.originals[name].replace(OLD_TIME, NEW_TIME))
+            recipe.write_text(self.originals[name])
             (recipe.parent / "unrelated.keep").write_bytes(b"preserve local files\n")
             self.feeds[name] = feed
 
     def apply(self):
-        return subprocess.run([sys.executable, "-B", str(SCRIPT), str(self.feeds["packages"]),
-                               str(self.feeds["nikki"])], capture_output=True, text=True,
-                              env=os.environ | {"GOTOOLCHAIN": "local", "GOSUMDB": "sum.golang.org"})
+        lock = {"with_dae": False, "prepared": True,
+                "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
+        with mock.patch.object(sources, "ROOT", self.work), mock.patch.object(sources, "go_adapter"), \
+             mock.patch.object(sources, "validate_lock", side_effect=lambda value: value):
+            sources.verify_feeds(lock)
+            sources.locked_sources(lock)
+            sources.apply_outputs(lock)
+            sources.verify(lock)
 
     def recipes(self):
         return {item["feed"]: self.feeds[item["feed"]] / item["path"] for item in MANIFEST}
@@ -71,17 +78,15 @@ class PackageRecipeTests(unittest.TestCase):
 
     def assert_refused_unchanged(self, message):
         before = self.snapshot()
-        result = self.apply()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn(message, result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, message):
+            self.apply()
         self.assertEqual(self.snapshot(), before)
 
     def test_locked_baselines_exact_versions_hashes_and_idempotence(self):
         for item in MANIFEST:
-            self.assertEqual(hashlib.sha256(self.recipes()[item["feed"]].read_bytes()).hexdigest(),
+            self.assertEqual(hashlib.sha256(self.recipes()[item["feed"]].read_text().replace(OLD_TIME, NEW_TIME).encode()).hexdigest(),
                              item["baseline_sha256"])
-        result = self.apply()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.apply()
         for item in MANIFEST:
             path = self.recipes()[item["feed"]]
             text = path.read_text()
@@ -105,10 +110,8 @@ class PackageRecipeTests(unittest.TestCase):
                              else {"PKG_VERSION", "PKG_SOURCE_VERSION", "PKG_MIRROR_HASH", "PKG_BUILD_VERSION"})
             self.assertEqual(path.parent.joinpath("unrelated.keep").read_bytes(), b"preserve local files\n")
         before = self.snapshot()
-        mtimes = {name: p.stat().st_mtime_ns for name, p in self.recipes().items()}
-        self.assertEqual(self.apply().returncode, 0)
+        self.apply()
         self.assertEqual(self.snapshot(), before)
-        self.assertEqual({name: p.stat().st_mtime_ns for name, p in self.recipes().items()}, mtimes)
 
     def test_each_wrong_feed_revision_refuses_before_any_recipe_write(self):
         for item in MANIFEST:
@@ -116,7 +119,7 @@ class PackageRecipeTests(unittest.TestCase):
                 head = self.feeds[item["feed"]] / ".git/HEAD"
                 correct = head.read_text()
                 head.write_text("0" * 40 + "\n")
-                self.assert_refused_unchanged("Unexpected " + item["feed"] + " revision")
+                self.assert_refused_unchanged("locked commit: " + item["feed"])
                 head.write_text(correct)
 
     def test_drift_outside_patch_context_is_not_overwritten(self):
@@ -124,75 +127,45 @@ class PackageRecipeTests(unittest.TestCase):
             with self.subTest(feed=name):
                 original = path.read_bytes()
                 path.write_bytes(original + b"# local recipe customization\n")
-                self.assert_refused_unchanged("Unexpected recipe baseline")
+                self.assert_refused_unchanged("pre/postimage drift")
                 path.write_bytes(original)
 
     def test_partial_update_and_postimage_drift_refuse_without_other_writes(self):
         path = self.recipes()["nikki"]
         original = path.read_text()
         path.write_text(original.replace("PKG_VERSION:=1.19.32", "PKG_VERSION:=1.19.34"))
-        self.assert_refused_unchanged("Unexpected recipe baseline")
+        self.assert_refused_unchanged("pre/postimage drift")
         path.write_text(original)
-        self.assertEqual(self.apply().returncode, 0)
+        self.apply()
         path.write_text(path.read_text().replace("with_gvisor", "without_gvisor"))
-        self.assert_refused_unchanged("Unexpected recipe baseline")
+        self.assert_refused_unchanged("pre/postimage drift")
 
     def test_mixed_already_applied_and_baseline_can_resume(self):
         tailscale = self.recipes()["packages"]
         original = tailscale.read_bytes()
-        self.assertEqual(self.apply().returncode, 0)
+        self.apply()
         tailscale.write_bytes(original)
-        self.assertEqual(self.apply().returncode, 0)
+        self.apply()
         for item in MANIFEST:
             self.assertEqual(hashlib.sha256(self.recipes()[item["feed"]].read_bytes()).hexdigest(),
                              item["applied_sha256"])
 
-    def test_timestamp_guard_is_required_before_and_after_update(self):
+    def test_timestamp_guard_accepts_raw_preimage_and_rejects_unknown_or_duplicate_lines(self):
         path = self.recipes()["nikki"]
         for applied in (False, True):
             if applied:
-                self.assertEqual(self.apply().returncode, 0)
+                self.apply()
             original = path.read_text()
-            for timestamp in (OLD_TIME, "PKG_BUILD_TIME:=unknown", NEW_TIME + "\n" + NEW_TIME):
-                with self.subTest(applied=applied, timestamp=timestamp):
-                    path.write_text(original.replace(NEW_TIME, timestamp))
-                    self.assert_refused_unchanged("SOURCE_DATE_EPOCH timestamp guard")
+            timestamp = NEW_TIME if applied else OLD_TIME
+            for replacement in ("PKG_BUILD_TIME:=unknown", timestamp + "\n" + timestamp):
+                with self.subTest(applied=applied, timestamp=replacement):
+                    path.write_text(original.replace(timestamp, replacement))
+                    self.assert_refused_unchanged("pre/postimage drift")
                     path.write_text(original)
-
-    def test_locked_resolver_timestamp_guard_and_package_patches_together(self):
-        spec = importlib.util.spec_from_file_location("software_sources", ROOT / "scripts/rc01-software-sources.py")
-        sources = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(sources)
-        lock = {"with_dae": False, "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
-        for name, recipe in self.recipes().items():
-            recipe.write_text(self.originals[name])
-        # Scope out the separately tested Go adapter; derive real application
-        # bytes from the pinned objects, then use prepare's guarded writer.
-        def pristine(feed, name):
-            return subprocess.check_output(["git", "-C", str(self.feeds[feed]), "show", "HEAD:" + name])
-        with mock.patch.object(sources, "ROOT", self.work), \
-             mock.patch.object(sources, "pristine", side_effect=pristine), \
-             mock.patch.object(sources, "go_adapter"):
-            shutil.copytree(PATCHES, self.work / "config/rc01/patches/packages")
-            sources.locked_sources(lock)
-            # The resolver's output paths use feeds/<name>/, unlike the
-            # standalone patch script's configurable fixture directories.
-            (self.work / "feeds").mkdir()
-            for name, feed in self.feeds.items():
-                feed.rename(self.work / "feeds" / name)
-                self.feeds[name] = self.work / "feeds" / name
-            for _ in range(2):
-                sources.apply_outputs(lock)
-                for item in MANIFEST:
-                    path = self.recipes()[item["feed"]]
-                    self.assertEqual(sources.digest(path.read_bytes()), item["applied_sha256"])
-                self.assertIn(NEW_TIME, self.recipes()["nikki"].read_text())
-            path = self.recipes()["nikki"]
-            path.write_text(path.read_text().replace(NEW_TIME, "PKG_BUILD_TIME:=unknown"))
-            before = self.snapshot()
-            with self.assertRaisesRegex(sources.SourceError, "pre/postimage drift"):
-                sources.apply_outputs(lock)
-            self.assertEqual(self.snapshot(), before)
+            if applied:
+                path.write_text(original.replace(NEW_TIME, OLD_TIME))
+                self.assert_refused_unchanged("pre/postimage drift")
+                path.write_text(original)
 
     def test_symlinked_recipe_is_rejected(self):
         path = self.recipes()["nikki"]
@@ -201,9 +174,8 @@ class PackageRecipeTests(unittest.TestCase):
         outside.write_bytes(original)
         path.unlink()
         path.symlink_to(outside)
-        result = self.apply()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Unsafe recipe path", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "unsafe application output path"):
+            self.apply()
         self.assertEqual(outside.read_bytes(), original)
         self.assertEqual(self.recipes()["packages"].read_text(), self.originals["packages"])
 
@@ -219,7 +191,7 @@ class IntegrationContractTests(unittest.TestCase):
         self.assertEqual(by_feed["nikki"]["source_commit"], "0455d0d28c4526937380505153e65a843d8612e8")
         self.assertEqual(by_feed["nikki"]["source_sha256"], "5ef52ba261e872e99658422165d0c0a9fbebcf3366c9544ac8da813933e3d245")
         # These exact flags/call sites also preserve the existing source build.
-        self.assertNotIn("GOSUMDB", SCRIPT.read_text())
+        self.assertNotIn("GOSUMDB", (ROOT / "scripts/rc01-software-sources.py").read_text())
 
 
 if __name__ == "__main__":

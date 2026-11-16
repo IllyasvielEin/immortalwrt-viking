@@ -801,8 +801,8 @@ def replay_sources(lock):
 
 
 def ensure_baseline_objects():
-    # The post-build regression suite exercises the original exact recipe
-    # guards too. A shallow latest-feed clone need not contain those objects;
+    # Post-build tests also use the real pinned recipe objects. A shallow
+    # latest-feed clone need not contain those objects;
     # fetch them without moving the source commit selected for this build.
     for name, item in feed_plan("locked").items():
         if name not in ("packages", "nikki"):
@@ -850,9 +850,10 @@ def prepare():
     validate_lock(lock)
     apply_outputs(lock)
     lock["prepared"] = True
-    write_json(STATE / "lock.json", lock)
-    write_source_artifacts(lock)
+    # Keep the planned lock/phase retryable if validation or sidecars fail.
     verify(lock)
+    write_source_artifacts(lock)
+    write_json(STATE / "lock.json", lock)
     write_preparation_phase(lock, "complete")
 
 

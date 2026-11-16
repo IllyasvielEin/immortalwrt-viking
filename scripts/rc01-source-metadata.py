@@ -35,7 +35,7 @@ def local_patchset():
                                      "package/kernel/mac80211/patches", "target/linux/generic/*-6.18",
                                      "target/linux/qualcommbe", "package/network/config/netifd", "package/network/config/firewall4",
                                      "package/emortal/luci-app-router-tool", "config/rc01/patches/daede",
-                                     "scripts/patch-rc01-daede.sh", "include/netfilter.mk",
+                                     "scripts/rc01-software-sources.py", "include/netfilter.mk",
                                      "package/kernel/linux/modules/netfilter.mk"], cwd=ROOT, text=True).splitlines()
     records = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()
                for p in sorted(set(paths)) if (ROOT / p).is_file()}

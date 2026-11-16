@@ -1,16 +1,20 @@
 """Exercise the shipped dae guard with real child processes, without networking."""
 from pathlib import Path
 import hashlib
+import importlib.util
 import json
-import shutil
 import os
 import signal
 import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location("dae_sources", ROOT / "scripts/rc01-software-sources.py")
+sources = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sources)
 PATCH = ROOT / "config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch"
 
 
@@ -109,16 +113,13 @@ class DaeGuard(unittest.TestCase):
 
 
 class DaeSourceGuard(unittest.TestCase):
-    """Exercise the real replay script against tiny immutable feed fixtures."""
+    """Exercise production locked preparation against tiny immutable feed fixtures."""
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-dae-source-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.feed = self.root / "feeds/daede"
         self.feed.mkdir(parents=True)
-        scripts = self.root / "scripts"
-        scripts.mkdir()
-        shutil.copyfile(ROOT / "scripts/patch-rc01-daede.sh", scripts / "patch-rc01-daede.sh")
         self.patches = self.root / "config/rc01/patches/daede"
         self.patches.mkdir(parents=True)
         self.recipe = self.feed / "dae/Makefile"
@@ -145,60 +146,71 @@ class DaeSourceGuard(unittest.TestCase):
                                "ci/pins.env": {"before": digest(self.pins.read_bytes()),
                                                "after": digest(self.pins.read_bytes())}}}
         (self.patches / "sources.json").write_text(json.dumps(self.lock))
+        packages = self.patches.parent / "packages"
+        packages.mkdir()
+        (packages / "manifest.json").write_text('{"packages": []}')
+        self.baselines = self.root / "baselines"
+        self.baselines.mkdir()
+        closure = {"daede": {"roots": ["dae", "ci/pins.env"], "files": {
+            name: {"sha256": item["before"], "mode": 0o644} for name, item in self.lock["files"].items()}}}
+        (self.baselines / "recipe-closure.json").write_text(json.dumps(closure))
+        self.plan = {"mode": "locked", "with_dae": True, "prepared": False,
+                     "feeds": {"daede": {"commit": revision}}}
+        self.addCleanup(mock.patch.stopall)
+        mock.patch.object(sources, "ROOT", self.root).start()
+        mock.patch.object(sources, "STATE", self.root / ".rc01-sources").start()
+        mock.patch.object(sources, "BASELINES", self.baselines).start()
+        mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock).start()
+        mock.patch.object(sources, "ensure_baseline_objects").start()
+        mock.patch.object(sources, "go_adapter").start()
+        sources.write_json(sources.STATE / "lock.json", self.plan)
+        sources.write_preparation_phase(self.plan, "planned")
 
     def git(self, *arguments):
         return subprocess.run(["git", "-C", str(self.feed), *arguments],
                               capture_output=True, text=True, check=True)
 
     def replay(self):
-        return subprocess.run(["sh", str(self.root / "scripts/patch-rc01-daede.sh"), str(self.feed)],
-                              capture_output=True, text=True)
+        sources.prepare()
 
     def test_exact_preimage_applies_and_replay_is_idempotent(self):
-        first = self.replay()
-        self.assertEqual(first.returncode, 0, first.stderr)
+        self.replay()
         self.assertEqual(self.recipe.read_bytes(), self.after)
         first_diff = self.git("diff", "--no-ext-diff", "--binary", "HEAD").stdout
-        second = self.replay()
-        self.assertEqual(second.returncode, 0, second.stderr)
+        self.replay()
         self.assertEqual(self.git("diff", "--no-ext-diff", "--binary", "HEAD").stdout, first_diff)
 
     def test_other_revision_is_rejected_before_mutating_feed(self):
         self.git("-c", "user.name=RC01 fixture", "-c", "user.email=fixture@example.invalid",
                  "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "other revision")
-        result = self.replay()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Unexpected daede revision", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "locked commit: daede"):
+            self.replay()
         self.assertEqual(self.recipe.read_bytes(), self.before)
 
     def test_same_head_recipe_source_drift_is_rejected(self):
         self.recipe.write_bytes(self.before.replace(b"https://example.invalid/reviewed", b"https://example.invalid/unreviewed"))
         changed = self.recipe.read_bytes()
-        result = self.replay()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("pre/postimage: dae/Makefile", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "pre/postimage drift|differs from build lock"):
+            self.replay()
         self.assertEqual(self.recipe.read_bytes(), changed)
 
     def test_pins_or_patch_bytes_cannot_drift_at_matching_head(self):
         original_pins = self.pins.read_bytes()
         self.pins.write_text("CORE_UPSTREAM_COMMIT=unreviewed\n")
-        result = self.replay()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("pre/postimage: ci/pins.env", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "unrelated local feed changes"):
+            self.replay()
         self.assertEqual(self.recipe.read_bytes(), self.before)
         self.pins.write_bytes(original_pins)
         self.patch.write_text(self.patch.read_text() + "\n# unreviewed patch bytes\n")
-        result = self.replay()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("patch differs from source lock", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "daemon patch differs"):
+            self.replay()
         self.assertEqual(self.recipe.read_bytes(), self.before)
 
     def test_partially_altered_postimage_is_rejected(self):
-        self.assertEqual(self.replay().returncode, 0)
+        self.replay()
         self.recipe.write_bytes(self.after + b"GO_PKG_TAGS:=unreviewed\n")
-        result = self.replay()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("pre/postimage: dae/Makefile", result.stderr)
+        with self.assertRaisesRegex(sources.SourceError, "pre/postimage drift|differs from build lock"):
+            self.replay()
 
 
 if __name__ == "__main__":

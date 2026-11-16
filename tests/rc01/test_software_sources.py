@@ -152,6 +152,28 @@ class BuildLock(unittest.TestCase):
         resolved = sources.feed_plan("locked", lambda _: self.fail("network in locked mode"))
         self.assertEqual({x["commit"] for x in resolved.values()}, {"a"*40})
 
+    def test_plan_exports_head_epoch_and_replay_keeps_original_epoch(self):
+        def git(*args, **kwargs):
+            return "1234" if "--format=%ct" in args else "e" * 40
+        with mock.patch.object(sources, "feed_plan", return_value=self.feeds), \
+             mock.patch.object(sources, "run", side_effect=git), \
+             mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "", "RC01_WITH_DAE": "false"}):
+            sources.plan("latest")
+            lock = sources.load_lock()
+            self.assertEqual(lock["source_date_epoch"], 1234)
+            lock["prepared"] = True
+            lock["source_date_epoch"] = 42
+            replay = self.root / "saved.json"
+            sources.write_json(replay, lock)
+            with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "9999"}):
+                sources.plan("latest", replay)
+            self.assertEqual(sources.load_lock()["source_date_epoch"], 42)
+        result = subprocess.run(["bash", "-euo", "pipefail", "-c",
+                                 '. "$1"; test "$SOURCE_DATE_EPOCH" = 42',
+                                 "test", str(sources.STATE / "environment.sh")],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_fresh_or_incomplete_plan_preserves_unowned_feed_changes(self):
         feed = self.root / "feeds/packages"
         feed.mkdir(parents=True)
@@ -181,6 +203,48 @@ class BuildLock(unittest.TestCase):
         sources.write_source_artifacts({"package_manifest": {"packages": []}})
         self.assertFalse((state / "dae-sources.json").exists())
         self.assertFalse((state / "dae.patch").exists())
+
+    def test_latest_prepare_and_replay_finish_and_reenter_without_reapplying(self):
+        name = "feeds/packages/net/tailscale/Makefile"
+        path = self.root / name
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"reviewed preimage")
+        self.lock["prepared"] = False
+        def go(lock):
+            lock["inputs"] = {}
+            lock["outputs"] = {}
+            lock["go"] = {"version": "1.27.3"}
+        def apps(lock, releases=None):
+            sources.record_output(lock, name, b"reviewed preimage", b"reviewed postimage")
+            lock["package_manifest"] = {"packages": []}
+        def nikki(lock, release=None):
+            lock["nikki"] = {"version": "1.2.3"}
+        # Adapter transforms have separate real-source tests; isolate the
+        # latest/replay orchestration here while retaining the real writer.
+        with mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
+             mock.patch.object(sources, "verify_feeds"), \
+             mock.patch.object(sources, "ensure_baseline_objects"), \
+             mock.patch.object(sources, "go_adapter", side_effect=go) as derive, \
+             mock.patch.object(sources, "apps_adapter", side_effect=apps), \
+             mock.patch.object(sources, "nikki_adapter", side_effect=nikki), \
+             mock.patch.object(sources, "dae_adapter"), \
+             mock.patch.object(sources, "api", side_effect=AssertionError("unexpected network")):
+            lock = self.lock
+            for replay in (False, True):
+                if replay:
+                    lock["replay"] = True
+                sources.write_json(sources.STATE / "lock.json", lock)
+                sources.write_preparation_phase(lock, "planned")
+                sources.prepare()
+                lock = sources.load_lock()
+                self.assertTrue(lock["prepared"])
+                self.assertEqual(sources.preparation_phase(lock), "complete")
+                self.assertEqual(path.read_bytes(), b"reviewed postimage")
+                before = sources.file_snapshot(path)
+                calls = derive.call_count
+                sources.prepare()
+                self.assertEqual(derive.call_count, calls)
+                self.assertEqual(sources.file_snapshot(path), before)
 
     def test_replay_does_not_query_latest_and_rejects_platform_or_variant_drift(self):
         self.lock["prepared"] = True
@@ -676,6 +740,64 @@ class RecipeClosure(unittest.TestCase):
                     target.unlink()
                 else:
                     target.write_bytes(original)
+
+    def test_failed_final_validation_or_sidecar_write_keeps_plan_retryable(self):
+        self.locked_fixture()
+        sources.write_json(sources.STATE / "lock.json", self.lock)
+        sources.write_preparation_phase(self.lock, "planned")
+        paths = [sources.STATE / name for name in ("lock.json", "preparation.json")]
+        before = {path: path.read_bytes() for path in paths}
+        with mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
+             mock.patch.object(sources, "verify_feeds"), \
+             mock.patch.object(sources, "generated_feed_changes"), \
+             mock.patch.object(sources, "ensure_baseline_objects"):
+            for failing_step in ("verify", "write_source_artifacts"):
+                with self.subTest(step=failing_step), \
+                     mock.patch.object(sources, failing_step, side_effect=OSError("injected failure")), \
+                     self.assertRaisesRegex(OSError, "injected failure"):
+                    sources.prepare()
+                self.assertEqual({path: path.read_bytes() for path in paths}, before)
+                self.assertEqual(sources.preparation_phase(sources.load_lock()), "planned")
+            sources.prepare()
+            saved = sources.load_lock()
+            self.assertTrue(saved["prepared"])
+            self.assertEqual(sources.preparation_phase(saved), "complete")
+            sources.verify(saved)
+
+    def test_locked_output_modes_and_bytes_are_independent_of_umask(self):
+        self.locked_fixture()
+        expected = None
+        for mask in (0o022, 0o002, 0o077):
+            lock = copy.deepcopy(self.lock)
+            previous = os.umask(mask)
+            try:
+                sources.locked_sources(lock)
+                sources.apply_outputs(lock)
+            finally:
+                os.umask(previous)
+            if expected is None:
+                expected = lock["outputs"]
+            self.assertEqual(lock["outputs"], expected)
+            for name, item in lock["outputs"].items():
+                self.assertEqual((self.root / name).stat().st_mode & 0o7777, item["mode"])
+            updater = "feeds/daede/luci-app-daede/root/usr/share/luci-app-daede/update-pkg.sh"
+            self.assertEqual(lock["outputs"][updater]["mode"], 0o755)
+            # The recipe installs this data-mode patch addition via INSTALL_BIN.
+            self.assertEqual(lock["outputs"]["feeds/daede/dae/files/dae-guard"]["mode"], 0o644)
+
+    def test_invalid_or_mismatched_phase_refuses_before_any_output_write(self):
+        self.locked_fixture()
+        sources.write_json(sources.STATE / "lock.json", self.lock)
+        sources.write_preparation_phase(self.lock, "planned")
+        path = sources.STATE / "preparation.json"
+        original = json.loads(path.read_text())
+        with mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
+             mock.patch.object(sources, "apply_outputs") as apply:
+            for change in ({"state": "locked-pending"}, {"lock_sha256": "0" * 64}, {"mode": "latest"}):
+                sources.write_json(path, {**original, **change})
+                with self.subTest(change=change), self.assertRaisesRegex(sources.SourceError, "preparation phase"):
+                    sources.prepare()
+            apply.assert_not_called()
 
     def test_completed_prepare_preserves_user_chmod_and_all_peers(self):
         for with_dae in (False, True):

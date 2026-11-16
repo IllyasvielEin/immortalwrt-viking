@@ -20,7 +20,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/rc01-go-bootstrap.py"
-PATCH_SCRIPT = ROOT / "scripts/patch-rc01-golang.sh"
+source_spec = importlib.util.spec_from_file_location("go_sources", ROOT / "scripts/rc01-software-sources.py")
+sources = importlib.util.module_from_spec(source_spec)
+source_spec.loader.exec_module(sources)
 PATCH = ROOT / "config/rc01/patches/golang/100-rc01-local-toolchain.patch"
 FEED_REVISION = "48f609040f2e4beb16c1aa62af6a6aaafd2eb6cd"
 spec = importlib.util.spec_from_file_location("rc01_go_bootstrap", SCRIPT)
@@ -440,7 +442,9 @@ class FeedPatchTests(unittest.TestCase):
                 raise AssertionError("shared packages feed HEAD changed during disposable patch tests")
         cls.addClassCleanup(unchanged)
         cls.originals = {}
-        for name in ("golang-compiler.mk", "golang-host-build.mk", "golang-values.mk"):
+        closure = json.loads((sources.BASELINES / "recipe-closure.json").read_text())["go"]["files"]
+        for path in closure:
+            name = str(Path(path).relative_to("lang/golang"))
             result = subprocess.run(["git", "-C", str(cls.feed), "show", f"{FEED_REVISION}:lang/golang/{name}"],
                                     capture_output=True, text=True)
             if result.returncode:
@@ -451,7 +455,11 @@ class FeedPatchTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="rc01-go-patch-")
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
-        self.checkout = self.work / "packages"
+        (self.work / "feeds").mkdir()
+        patch_dir = self.work / "config/rc01/patches/golang"
+        patch_dir.mkdir(parents=True)
+        shutil.copy2(PATCH, patch_dir / PATCH.name)
+        self.checkout = self.work / "feeds/packages"
         # A shallow feed's clone may omit the separately fetched baseline.
         # Import that exact local object into this disposable repository;
         # never move the shared feed or query its network remote.
@@ -463,14 +471,19 @@ class FeedPatchTests(unittest.TestCase):
         self.golang = self.checkout / "lang/golang"
         self.golang.mkdir(parents=True)
         for name, text in self.originals.items():
-            (self.golang / name).write_text(text)
+            path = self.golang / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
 
-    def apply(self, feed=None):
-        return subprocess.run(["sh", str(PATCH_SCRIPT), str(feed or self.checkout)], capture_output=True, text=True)
+    def apply(self):
+        lock = {"feeds": {"packages": {"commit": FEED_REVISION}}}
+        with mock.patch.object(sources, "ROOT", self.work):
+            sources.verify_feeds(lock)
+            sources.go_adapter(lock)
+            sources.apply_outputs(lock)
 
-    def test_real_patch_is_exact_idempotent_and_local_in_actual_make_calls(self):
-        result = self.apply()
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_real_adapter_patch_is_exact_and_idempotent(self):
+        self.apply()
         expected = dict(self.originals)
         expected["golang-compiler.mk"] = expected["golang-compiler.mk"].replace(
             "\t$(2) $(BASH) make.bash", "\t$(2) GOTOOLCHAIN=local $(BASH) make.bash")
@@ -478,9 +491,11 @@ class FeedPatchTests(unittest.TestCase):
             "\tGOENV=off\n", "\tGOENV=off \\\n\tGOTOOLCHAIN=local\n")
         for name, text in expected.items():
             self.assertEqual((self.golang / name).read_text(), text)
-        self.assertEqual(self.apply().returncode, 0)
+        self.apply()
         subprocess.run(["git", "-C", str(self.checkout), "apply", "--reverse", "--check", str(PATCH)], check=True)
 
+    def test_local_toolchain_in_actual_make_calls(self):
+        self.apply()
         source = self.work / "compiler/src"
         source.mkdir(parents=True)
         (source / "make.bash").write_text(
@@ -509,26 +524,20 @@ all:
         ])
 
     def test_wrong_feed_is_rejected_without_changes(self):
-        wrong = self.work / "wrong"
-        subprocess.run(["git", "init", "--quiet", str(wrong)], check=True)
-        # Use the main repository's real revision as an incorrect feed fixture;
-        # this also works when the packages feed contains only a shallow commit.
         revision = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True)
-        (wrong / ".git/objects/info/alternates").write_text(str(ROOT / ".git/objects") + "\n")
-        (wrong / ".git/HEAD").write_text(revision)
-        marker = wrong / "preserve"
-        marker.write_text("unchanged")
-        result = self.apply(wrong)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Unexpected packages revision", result.stderr)
-        self.assertEqual(marker.read_text(), "unchanged")
-        self.assertEqual({path.name for path in wrong.iterdir()}, {".git", "preserve"})
+        (self.checkout / ".git/objects/info/alternates").write_text(str(ROOT / ".git/objects") + "\n")
+        (self.checkout / ".git/HEAD").write_text(revision)
+        before = {name: (self.golang / name).read_bytes() for name in self.originals}
+        with self.assertRaisesRegex(sources.SourceError, "locked commit: packages"):
+            self.apply()
+        self.assertEqual({name: (self.golang / name).read_bytes() for name in self.originals}, before)
 
     def test_changed_call_site_is_rejected_before_either_file_is_patched(self):
         compiler = self.golang / "golang-compiler.mk"
         compiler.write_text(compiler.read_text().replace("$(BASH) make.bash", "$(BASH) changed.bash"))
         before = {name: (self.golang / name).read_bytes() for name in self.originals}
-        self.assertNotEqual(self.apply().returncode, 0)
+        with self.assertRaises(sources.SourceError):
+            self.apply()
         self.assertEqual({name: (self.golang / name).read_bytes() for name in self.originals}, before)
 
 

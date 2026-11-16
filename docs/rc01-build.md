@@ -55,6 +55,8 @@ APPSBLENV 分区为 512 KiB，擦除块 128 KiB，环境工具搜索范围为两
 来源准备职责集中在 `rc01-software-sources.py`：`plan` 固定 feeds、平台输入、变体和构建时间，
 `prepare` 从固定对象推导并校验配方后统一写入，`verify` 检查已准备来源。
 锁定模式直接使用同一推导和写入路径，不再由 shell 先应用补丁再重建校验。
+原独立的 `patch-rc01-golang.sh`、`patch-rc01-daede.sh`、`patch-rc01-packages.py`
+已移除；固定补丁、完整前后像及权限检查由 Python 适配器统一执行。
 `prepare-rc01.sh` 负责更新和安装 feeds、合并配置并执行配置检查；
 CI 负责选择 bootstrap、下载重放锁、缓存和发布校验。
 `rc01-source-metadata.py` 在构建后再次核验来源锁并记录实际配方及产物元数据。
@@ -108,6 +110,14 @@ RC01_WITH_DAE=true RC01_REPLAY_LOCK=config/rc01/software-baselines/locks/with-da
 平台输入有意变更后，旧锁仍须拒绝；先以 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=true`
 运行准备入口，核验新锁并审核差异，再更新该基线。不要只修改平台摘要使旧锁通过。
 不含 dae 的本地锁使用 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=false` 独立生成。
+锁中的 `build_commit`、`resolved_at` 记录最初规划来源时的 HEAD 和 UTC 时间，
+`source_date_epoch` 默认取该 HEAD 的提交时间；重放保留这些值，实际构建 HEAD 另由产物元数据记录。
+仓库锁在 `2493984a59` 上规划并由 `3c00f5adbe` 收录；它不要求重放 HEAD 相同，
+但仍逐项严格比较 `platform_inputs`。该清单不覆盖 `luci-app-rc01` 状态 UI，
+不应将通过来源锁校验理解为全部工作树一致。
+准备的最终校验或附属文件写入失败时，原计划保留；锁定模式可直接重试 Python `prepare`。
+若进程恰在锁与阶段文件之间中断，阶段摘要仍会拒绝；重新执行准备入口的 `plan`
+会先校验并还原上一次完整记录的生成文件，再建立新计划。
 准备脚本重建 feeds 链接、`feeds.conf`、`.config` 和 RC01 的 `files` 覆盖文件；
 源配置放在 `defconfig/qualcommbe-rc01.config` 与 `config/rc01/`。
 
