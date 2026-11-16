@@ -5,6 +5,7 @@ detach all MLO borrowers, rebuild QMI peers by lookup instance generation,
 and wait for group READY and mac80211 business completion. Keep failed
 DMA and in-flight reconfiguration obligations explicit for final removal.
 
+---
 --- a/drivers/net/wireless/ath/ath12k/ahb.c
 +++ b/drivers/net/wireless/ath/ath12k/ahb.c
 @@ -898,8 +898,7 @@

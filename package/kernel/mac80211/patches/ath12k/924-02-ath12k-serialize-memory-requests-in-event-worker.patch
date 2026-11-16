@@ -1,8 +1,10 @@
 Subject: [PATCH] ath12k: serialize memory requests on the ordered QMI worker
 
 Copy the indication with its event and let the ordered worker update
-metadata, allocate and respond. Rejection and purge free the one allocation.
+metadata, allocate and respond. Rejection and purge free the single
+allocation.
 
+---
 --- a/drivers/net/wireless/ath/ath12k/qmi.c
 +++ b/drivers/net/wireless/ath/ath12k/qmi.c
 @@ -4109,18 +4109,21 @@
@@ -38,7 +40,7 @@ metadata, allocate and respond. Rejection and purge free the one allocation.
  
 +static int
 +ath12k_qmi_driver_event_post(struct ath12k_qmi *qmi,
-+                             enum ath12k_qmi_event_type type, void *data)
++			     enum ath12k_qmi_event_type type, void *data)
 +{
 +	/* All non-payload events pass NULL. */
 +	return ath12k_qmi_driver_event_post_data(qmi, type, data, 0);
