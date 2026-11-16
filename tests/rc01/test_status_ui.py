@@ -85,7 +85,7 @@ const state = {
   fans: [{ hwmon: 'hwmon8', rpm: 960, pwm: 77 }], ports: [], processes: [],
   storage: { rootfs: { size: 241434624 }, environment_map_valid: true },
   ppe: { active_flows: { total: 0 } }, proxy: { btf: false },
-  preflight: [{ target: 'hardware', checks: [{ level: 'ok', message: 'Requires Xiaomi RC01 / BE10000' }] }]
+  preflight: [{ target: 'hardware', passed: true, checks: [{ level: 'ok', message: 'Requires Xiaomi RC01 / BE10000' }] }]
 };
 const node = api.render(state);
 assert(JSON.stringify(node).includes('hwmon8'));
@@ -99,6 +99,60 @@ refresh().then(() => {
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+
+    @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
+    def test_initial_failure_malformed_responses_and_recovery_keep_polling(self):
+        source = APP / "htdocs/luci-static/resources/view/status/rc01.js"
+        program = r'''
+const fs = require('fs');
+const assert = require('assert');
+let refresh, responses = [ Error('offline') ];
+const rpc = { declare: () => () => {
+  const value = responses.shift();
+  return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
+} };
+const poll = { add: fn => { refresh = fn; } };
+const E = (tag, attrs, children) => ({ tag, attrs, children });
+const dom = { content: (node, children) => { node.children = children; } };
+const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
+const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
+const good = uptime => ({ schema: 1, sampled_at: { uptime }, temperatures: [],
+  fans: [{ hwmon: 'hwmon8', rpm: 960, pwm: 77 }],
+  preflight: [{ target: 'hardware', passed: true, checks: [{ level: 'ok', message: 'Board ok' }] }] });
+const text = node => JSON.stringify(node);
+const unavailable = node => {
+  assert(text(node).includes('RC01 status is unavailable'));
+  assert(!text(node).includes('hwmon8'), 'failed refresh must clear previous readings');
+  assert(!text(node).includes('checks OK'), 'invalid response must not look passed');
+};
+(async () => {
+  const node = api.render(await api.load());
+  unavailable(node);
+  assert.strictEqual(typeof refresh, 'function', 'initial RPC failure must still register a poll');
+  responses.push(good(100)); await refresh();
+  assert(text(node).includes('hwmon8'));
+  assert(!text(node).includes('did not advance'));
+  for (const bad of [ Error('offline'), null, {}, { schema: 1, preflight: [] },
+      { ...good(101), preflight: [{ target: 'hardware', passed: true }] },
+      { ...good(101), preflight: [{ target: 'hardware', passed: 'false', checks: [] }] },
+      { ...good(101), preflight: [{ target: 'hardware', passed: true, checks: [{ level: 'bogus', message: 'Unknown check' }] }] } ]) {
+    responses.push(bad); await refresh(); unavailable(node);
+    responses.push(good(100)); await refresh();
+    assert(text(node).includes('did not advance'), 'recovery must compare with the last successful sample');
+  }
+  responses.push(good(110)); await refresh();
+  assert(!text(node).includes('did not advance'), 'new sample must clear the stale warning');
+  for (const bad of [ null, {}, { schema: 1, preflight: [] } ]) {
+    const initial = api.render(bad); unavailable(initial);
+    responses.push(good(120)); await refresh();
+    assert(text(initial).includes('hwmon8'), 'malformed initial response must recover');
+  }
+  for (const time of [ null, '130', -1, NaN, Infinity ])
+    assert(text(api.render(good(time))).includes('did not advance'), 'invalid timestamp must not look fresh');
+})().catch(e => { console.error(e); process.exitCode = 1; });
+'''
+        result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(NODE, "Node.js is required for the LuCI view regression")
     def test_large_counters_render_exactly_and_repeated_samples_are_stale(self):
@@ -122,7 +176,7 @@ const base = {
     resources: { source: 'debugfs:ppe/resource_stats', status: 'ok', failures: {
       core_role: { enospc: '18446744073709551615', enomem: '9007199254740993', enoent: '0', last_errno: '-28' } } },
     direct_switch: { source: 'debugfs:ppe/direct_switch', status: 'malformed' } },
-  preflight: [{ target: 'hardware', checks: [] }]
+  preflight: [{ target: 'hardware', passed: true, checks: [] }]
 };
 const node = api.render(base);
 const text = JSON.stringify(node);
@@ -131,6 +185,7 @@ assert(text.includes('9,007,199,254,740,993'), '2^53+1 counter rounded');
 assert(text.includes('Not exported by this kernel (debugfs:ppe/active_flows)'));
 assert(text.includes('Unrecognized format; values withheld (debugfs:ppe/direct_switch)'));
 assert(text.includes('not throughput'));
+assert(text.includes('failure counters accumulate until reset'), 'historical failures must not read as current faults');
 assert(!text.includes('did not advance'));
 responses.push(JSON.parse(JSON.stringify(base)));
 const old = JSON.parse(JSON.stringify(base)); old.sampled_at.uptime = 250;
@@ -169,7 +224,7 @@ const text = JSON.stringify(api.render({
   fans: [{ hwmon: 'hwmon8', rpm: 0, pwm: 255, fault: 0, fault_available: true, health: 'stopped' }],
   fan: { controller: 'found', temperature: { status: 'missing', celsius: null }, guard_process: 'running',
     trend: { interval: 10, capacity: 90, window: 900, samples } },
-  storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }]
+  storage: {}, proxy: {}, preflight: [{ target: 'hardware', passed: true, checks: [] }]
 }));
 assert(text.includes('Stopped (0 RPM)'), 'stopped fan must not look healthy');
 assert(text.includes('NSS sensor missing'));
@@ -196,7 +251,7 @@ function rows(protection) {
     fans: [{ hwmon: 'hwmon8', rpm: 960, pwm: 255, fault: 0, fault_available: true, health: 'ok' }],
     fan: { controller: 'found', temperature: { status: 'ok', celsius: 45 }, guard_process: 'running',
       trend: { interval: 10, capacity: 90, window: 900, samples: [] }, protection },
-    storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }]
+    storage: {}, proxy: {}, preflight: [{ target: 'hardware', passed: true, checks: [] }]
   });
   const found = {};
   (function walk(n) {
@@ -286,7 +341,7 @@ const dom = { content: (node, children) => { node.children = children; } };
 const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
 const api = factory({ extend: v => v }, rpc, poll, dom, E, v => v);
 const base = (uptime, sfp) => ({ schema: 1, sampled_at: { uptime }, temperatures: [], fans: [], ports: [], processes: [],
-  radios: [], storage: {}, proxy: {}, preflight: [{ target: 'hardware', checks: [] }], sfp });
+  radios: [], storage: {}, proxy: {}, preflight: [{ target: 'hardware', passed: true, checks: [] }], sfp });
 const sfp = (status, detected, carrier, extra) => ({ interface: 'sfp', interface_present: status !== 'interface-missing',
   sampled_at: 100, status, carrier, carrier_status: carrier == null ? 'unreadable' : 'ok',
   presence: { source: 'debugfs:sfp/state', method: 'i2c-inferred', status: 'ok', detected, module_state: detected ? 'present' : 'empty' },

@@ -232,7 +232,7 @@ function ppeSection(ppe) {
 	return [
 		E('h3', {}, _('Acceleration diagnostics')),
 		table([ _('Item'), _('Value') ], rows),
-		E('p', {}, _('Counts are current hardware state, not throughput; zero flows can be normal and a loaded module does not show that traffic is accelerated. An IPv6 rule takes two slots, and active slots plus the quarantine budget do not give exact free slots.'))
+		E('p', {}, _('Active counts are current state; failure counters accumulate until reset. Flow counts are not throughput; zero flows can be normal and a loaded module does not show that traffic is accelerated. An IPv6 rule takes two slots, and active slots plus the quarantine budget do not give exact free slots.'))
 	];
 }
 
@@ -274,11 +274,16 @@ function sfpSection(sfp) {
 }
 
 function contents(state, previous) {
-	if (state.schema !== 1 || !Array.isArray(state.preflight) || !state.preflight.some(p => p.target === 'hardware'))
+	if (state?.schema !== 1 || !Array.isArray(state.preflight) ||
+		!state.preflight.every(p => p && typeof p.target === 'string' && typeof p.passed === 'boolean' &&
+			Array.isArray(p.checks) && p.checks.every(c => c &&
+				[ 'ok', 'info', 'warn', 'error' ].includes(c.level) && typeof c.message === 'string')) ||
+		!state.preflight.some(p => p.target === 'hardware'))
 		throw new Error(_('Invalid RC01 status response'));
 	// A sample that does not advance since the previous refresh is stale.
 	const now = state.sampled_at?.uptime;
-	const stale = now == null || (previous?.sampled_at?.uptime != null && now <= previous.sampled_at.uptime);
+	const stale = !Number.isFinite(now) || now < 0 ||
+		(previous?.sampled_at?.uptime != null && now <= previous.sampled_at.uptime);
 	return [
 		E('h2', {}, _('RC01 Hardware')),
 		E('p', {}, `${display(state.board)} · Linux ${display(state.kernel)} · ${_('uptime at sample')} ${seconds(now)}` +
@@ -291,17 +296,25 @@ function contents(state, previous) {
 }
 
 return view.extend({
-	load() { return callStatus(); },
+	load() { return callStatus().catch(() => null); },
 	render(state) {
-		let previous = state;
-		const wrapper = E('div', {}, contents(state, null));
+		let previous = null, nodes;
+		const unavailable = () => E('p', { 'class': 'alert-message warning' }, _('RC01 status is unavailable. Previous values are no longer current.'));
+		try {
+			nodes = contents(state, null);
+			previous = state;
+		}
+		catch (e) {
+			nodes = unavailable();
+		}
+		const wrapper = E('div', {}, nodes);
 		poll.add(() => callStatus().then(next => {
 			dom.content(wrapper, contents(next, previous));
 			previous = next;
 		}).catch(() => {
 			// Never keep showing readings that can no longer be refreshed.
-			previous = null;
-			dom.content(wrapper, E('p', { 'class': 'alert-message warning' }, _('RC01 status is unavailable. Previous values are no longer current.')));
+			// Retain the last successful timestamp to detect replay after recovery.
+			dom.content(wrapper, unavailable());
 		}), 5);
 		return wrapper;
 	},

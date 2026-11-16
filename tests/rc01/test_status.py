@@ -347,7 +347,12 @@ class AccelerationDiagnostics(StatusFixture):
         return self.run_status()["state"]["ppe"]
 
     def test_native_counters_keep_64_bit_precision_and_sources(self):
-        ppe = self.ppe()
+        paths = [self.root / 'sys/kernel/debug/ppe' / name for name in ('resource_stats', 'direct_switch')]
+        before = [path.read_bytes() for path in paths]
+        result = self.run_status()
+        ppe = result['state']['ppe']
+        self.assertTrue(result['result']['passed'], 'PPE event counters alone must not fail hardware preflight')
+        self.assertEqual(before, [path.read_bytes() for path in paths], 'status must not reset diagnostic counters')
         self.assertEqual(ppe["sampled_at"], 1000.0)
         self.assertEqual(ppe["resources"]["status"], "ok")
         self.assertEqual(ppe["resources"]["failures"]["core_role"]["enospc"], "18446744073709551615")
@@ -791,7 +796,9 @@ class SfpStatus(StatusFixture):
         for moddef0, carrier, status in ((0, 0, "not-detected"), (1, 0, "detected-no-link"), (1, 1, "link")):
             with self.subTest(status=status):
                 self.module(moddef0, carrier)
-                state = self.run_status()["state"]
+                result = self.run_status()
+                self.assertTrue(result['result']['passed'], 'SFP module/link state must not fail hardware preflight')
+                state = result["state"]
                 sfp = state["sfp"]
                 self.assertEqual(sfp["status"], status)
                 self.assertEqual(sfp["presence"]["status"], "ok")
@@ -858,7 +865,9 @@ class SfpStatus(StatusFixture):
     def test_missing_interface_is_distinct(self):
         self.module(1, 1)
         shutil.rmtree(self.root / "sys/class/net/sfp")
-        sfp = self.sfp()
+        result = self.run_status()
+        self.assertEqual(self.levels(result)['ports'], 'error')
+        sfp = result['state']['sfp']
         self.assertEqual((sfp["status"], sfp["interface_present"], sfp["carrier_status"]),
                          ("interface-missing", False, "interface-missing"))
         self.assertTrue(sfp["presence"]["detected"])

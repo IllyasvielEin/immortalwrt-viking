@@ -667,8 +667,8 @@ msgstr "隔离规则（规则数 / 槽位预算）"
 msgid "Not reported by this kernel"
 msgstr "此内核未提供"
 
-msgid "Counts are current hardware state, not throughput; zero flows can be normal and a loaded module does not show that traffic is accelerated. An IPv6 rule takes two slots, and active slots plus the quarantine budget do not give exact free slots."
-msgstr "计数为当前硬件状态，不代表吞吐量；流数为零可能正常，模块已加载也不代表流量已被加速。每条 IPv6 规则占两个槽位，活动槽位加隔离预算不能得出准确的空闲槽位。"
+msgid "Active counts are current state; failure counters accumulate until reset. Flow counts are not throughput; zero flows can be normal and a loaded module does not show that traffic is accelerated. An IPv6 rule takes two slots, and active slots plus the quarantine budget do not give exact free slots."
+msgstr "活动计数为当前状态，失败计数会累积直至重置。流数不代表吞吐量；流数为零可能正常，模块已加载也不代表流量已被加速。每条 IPv6 规则占两个槽位，活动槽位加隔离预算不能得出准确的空闲槽位。"
 
 msgid "Failed"
 msgstr "未通过"
