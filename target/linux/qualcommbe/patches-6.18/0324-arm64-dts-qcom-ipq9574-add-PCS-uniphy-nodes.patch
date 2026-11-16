@@ -105,7 +105,7 @@ Signed-off-by: Alexandru Gagniuc <mr.nuke.me@gmail.com>
 +			resets = <&gcc GCC_UNIPHY1_XPCS_RESET>;
 +			#clock-cells = <1>;
 +
-+			pcs1_ch0: uniphy-ch@0 {
++			pcs1_ch0: pcs-mii@0 {
 +				reg = <0>;
 +				clocks = <&nsscc NSS_CC_UNIPHY_PORT5_RX_CLK>,
 +					 <&nsscc NSS_CC_UNIPHY_PORT5_TX_CLK>;

@@ -41,7 +41,7 @@ Signed-off-by: Kenneth Kasilag <kenneth@kasilag.me>
 +				      "soft";
  			#clock-cells = <1>;
  
- 			pcs1_ch0: uniphy-ch@0 {
+ 			pcs1_ch0: pcs-mii@0 {
 @@ -1560,7 +1570,12 @@
  				 <&gcc GCC_UNIPHY2_AHB_CLK>;
  			clock-names = "sys",
