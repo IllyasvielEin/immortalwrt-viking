@@ -35,7 +35,7 @@ class WirelessRepair(unittest.TestCase):
 struct ath12k_hw_group { int mutex, num_started, id; };
 struct params { bool single_pdev_only; };
 struct ath12k_base { struct ath12k_hw_group *ag; bool hw_group_ref;
- int core_lock, htc; const struct params *hw_params; };
+ bool core_live; int core_lock, htc; const struct params *hw_params; };
 static int hash_result, reo, hif, wmi;
 #define lockdep_assert_held(...) ((void)0)
 #define ath12k_dbg(...) ((void)0)
@@ -91,6 +91,19 @@ int main(void) {
                              'ath12k_qmi_msg_mem_request_cb'))
         harness = (Path(__file__).parent / 'wireless_mem_harness.c').read_text()
         self.compile_run(harness.replace('#include "mem-functions.inc"', functions))
+
+    def test_ce_partial_failure_irq_depth_and_hal_dma_debt(self):
+        ath = Path(SOURCE) / 'drivers/net/wireless/ath/ath12k'
+        functions = ''
+        for file, names in (
+                ('ce.c', ('ath12k_ce_deinit_pipes', 'ath12k_ce_init_pipes')),
+                ('ahb.c', ('ath12k_ahb_ext_grp_disable',
+                           '__ath12k_ahb_ext_irq_disable', 'ath12k_ahb_ext_grp_enable')),
+                ('hal.c', ('ath12k_hal_srng_init', 'ath12k_hal_srng_deinit'))):
+            source = (ath / file).read_text()
+            functions += ''.join(declaration(source, name) for name in names)
+        harness = (Path(__file__).parent / 'wireless_resources_harness.c').read_text()
+        self.compile_run(harness.replace('#include "resources-functions.inc"', functions))
 
 
 if __name__ == '__main__':
