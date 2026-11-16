@@ -1,0 +1,1247 @@
+Subject: [PATCH] wifi: ath12k: serialize regulatory lifetime and synchronous publication
+
+Supersede the final asynchronous 922 behavior, keeping init once per wiphy.
+The group owner must close every member, then drain without ag/core/RTNL/
+wiphy/hw_mutex held, before unregister or WMI teardown.
+READY opens reception before core_start. Recovery retains is_reset until
+all members are ready, then clears it under base_lock and repeats open to
+publish latest rules.
+These call sites and the unregister cancel migration belong to series 924.
+
+USER_ONLY is an attempt cache. Absorbing DOUBT causes repeated same-country
+WMI requests until wiphy destruction; it is not a firmware ACK.
+
+---
+diff --git a/drivers/net/wireless/ath/ath12k/core.h b/drivers/net/wireless/ath/ath12k/core.h
+--- a/drivers/net/wireless/ath/ath12k/core.h
++++ b/drivers/net/wireless/ath/ath12k/core.h
+@@ -732,6 +732,7 @@
+ 	struct completion bss_survey_done;
+ 
+ 	struct work_struct regd_update_work;
++	bool reg_work_initialized;
+ 	struct work_struct regd_channel_update_work;
+ 	struct list_head regd_channel_update_queue;
+ 
+@@ -806,8 +807,10 @@
+ 	spinlock_t survey_lock;
+ 	struct survey_info survey[ATH12K_NUM_CHANS];
+ 
+-	bool regd_updated;
+-	bool use_6ghz_regd;
++	/* wiphy lock serializes init submission; never reset on recovery. */
++	bool regd_init_done;
++	/* UNSET=0, USER_ONLY=0x10000|alpha2, absorbing DOUBT=-1. */
++	atomic_t reg_user_country;
+ 	bool host_alloc_ml_id;
+ 	struct completion peer_ml_id_done;
+ 
+@@ -1073,6 +1076,10 @@
+ 	 */
+ 	struct ieee80211_regdomain *new_regd[MAX_RADIOS];
+ 
++	/* All regulatory containers, admission and queue decisions: base_lock. */
++	bool reg_events_stopped;
++	unsigned int reg_senders;
++	wait_queue_head_t reg_senders_wait;
+ 	struct ath12k_reg_info *reg_info[MAX_RADIOS];
+ 
+ 	/* Current DFS Regulatory */
+diff --git a/drivers/net/wireless/ath/ath12k/core.c b/drivers/net/wireless/ath/ath12k/core.c
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -1560,7 +1560,6 @@
+ 	ath12k_mac_scan_finish(ar);
+ 	ath12k_mac_peer_cleanup_all(ar);
+ 	cancel_delayed_work_sync(&ar->scan.timeout);
+-	cancel_work_sync(&ar->regd_update_work);
+ 	cancel_work_sync(&ar->regd_channel_update_work);
+ 	cancel_work_sync(&ab->rfkill_work);
+ 	cancel_work_sync(&ab->update_11d_work);
+@@ -1656,6 +1655,9 @@
+ 	struct wmi_set_current_country_arg arg = {};
+ 	int ret, i;
+ 
++	if (!ath12k_reg_sender_get(ab))
++		return;
++	ath12k_reg_doubt(ab);
+ 	spin_lock_bh(&ab->base_lock);
+ 	memcpy(&arg.alpha2, &ab->new_alpha2, 2);
+ 	spin_unlock_bh(&ab->base_lock);
+@@ -1666,8 +1668,12 @@
+ 	for (i = 0; i < ab->num_radios; i++) {
+ 		pdev = &ab->pdevs[i];
+ 		ar = pdev->ar;
+-
++		if (!ar || !ar->reg_work_initialized)
++			continue;
++
++		spin_lock_bh(&ab->base_lock);
+ 		memcpy(&ar->alpha2, &arg.alpha2, 2);
++		spin_unlock_bh(&ab->base_lock);
+ 
+ 		reinit_completion(&ar->regd_update_completed);
+ 
+@@ -1677,6 +1683,7 @@
+ 				    "pdev id %d failed set current country code: %d\n",
+ 				    i, ret);
+ 	}
++	ath12k_reg_sender_put(ab);
+ }
+ 
+ static void ath12k_core_post_reconfigure_recovery(struct ath12k_base *ab)
+@@ -2513,6 +2520,9 @@
+ 
+ 	mutex_init(&ab->core_lock);
+ 	spin_lock_init(&ab->base_lock);
++	ab->reg_events_stopped = true;
++	ab->reg_senders = 0;
++	init_waitqueue_head(&ab->reg_senders_wait);
+ 	init_completion(&ab->reset_complete);
+ 
+ 	init_waitqueue_head(&ab->peer_mapping_wq);
+diff --git a/drivers/net/wireless/ath/ath12k/reg.h b/drivers/net/wireless/ath/ath12k/reg.h
+--- a/drivers/net/wireless/ath/ath12k/reg.h
++++ b/drivers/net/wireless/ath/ath12k/reg.h
+@@ -101,6 +101,17 @@
+ };
+ 
+ void ath12k_reg_init(struct ieee80211_hw *hw);
++void ath12k_reg_events_close(struct ath12k_base *ab);
++void ath12k_reg_events_drain(struct ath12k_base *ab);
++int ath12k_reg_events_open(struct ath12k_base *ab);
++bool ath12k_reg_sender_get(struct ath12k_base *ab);
++void ath12k_reg_sender_put(struct ath12k_base *ab);
++void ath12k_reg_doubt(struct ath12k_base *ab);
++void ath12k_reg_doubt_locked(struct ath12k_base *ab);
++int ath12k_reg_rebuild(struct ath12k_hw *ah, enum wmi_vdev_type type,
++		       enum ieee80211_ap_reg_power power);
++int ath12k_reg_restore_country(struct ath12k *ar);
++int ath12k_reg_register_country(struct ath12k *ar);
+ void ath12k_reg_free(struct ath12k_base *ab);
+ void ath12k_regd_update_work(struct work_struct *work);
+ struct ieee80211_regdomain *ath12k_reg_build_regd(struct ath12k_base *ab,
+@@ -114,7 +125,8 @@
+ int ath12k_reg_handle_chan_list(struct ath12k_base *ab,
+ 				struct ath12k_reg_info *reg_info,
+ 				enum wmi_vdev_type vdev_type,
+-				enum ieee80211_ap_reg_power power_type);
++				enum ieee80211_ap_reg_power power_type,
++				struct ieee80211_regdomain **old_regd);
+ void ath12k_regd_update_chan_list_work(struct work_struct *work);
+ enum wmi_reg_6g_ap_type
+ ath12k_reg_ap_pwr_convert(enum ieee80211_ap_reg_power power_type);
+diff --git a/drivers/net/wireless/ath/ath12k/reg.c b/drivers/net/wireless/ath/ath12k/reg.c
+--- a/drivers/net/wireless/ath/ath12k/reg.c
++++ b/drivers/net/wireless/ath/ath12k/reg.c
+@@ -29,19 +29,152 @@
+ 	}
+ };
+ 
+-static bool ath12k_regdom_changes(struct ieee80211_hw *hw, char *alpha2)
+-{
+-	const struct ieee80211_regdomain *regd;
+-
+-	regd = rcu_dereference_rtnl(hw->wiphy->regd);
+-	/* This can happen during wiphy registration where the previous
+-	 * user request is received before we update the regd received
+-	 * from firmware.
++/* This is an attempt cache, never a firmware acknowledgment. */
++#define ATH12K_REG_DOUBT (-1)
++#define ATH12K_REG_USER_ONLY 0x10000
++
++void ath12k_reg_doubt_locked(struct ath12k_base *ab)
++{
++	struct ath12k *ar;
++	int i;
++
++	lockdep_assert_held(&ab->base_lock);
++	if (ab->reg_events_stopped)
++		return;
++	for (i = 0; i < ab->num_radios; i++) {
++		ar = ab->pdevs[i].ar;
++		if (ar && ar->ah)
++			atomic_set(&ar->ah->reg_user_country, ATH12K_REG_DOUBT);
++	}
++}
++
++void ath12k_reg_doubt(struct ath12k_base *ab)
++{
++	spin_lock_bh(&ab->base_lock);
++	ath12k_reg_doubt_locked(ab);
++	spin_unlock_bh(&ab->base_lock);
++}
++
++static bool ath12k_reg_user_skip(struct ath12k_hw *ah, const char *alpha2)
++{
++	int old, next = ATH12K_REG_USER_ONLY |
++			(u8)alpha2[0] << 8 | (u8)alpha2[1];
++
++	old = atomic_read(&ah->reg_user_country);
++	for (;;) {
++		if (old == ATH12K_REG_DOUBT)
++			return false;
++		/* Even a same-value hit must lose to concurrent DOUBT. */
++		if (atomic_try_cmpxchg(&ah->reg_user_country, &old, next))
++			return old == next;
++	}
++}
++
++bool ath12k_reg_sender_get(struct ath12k_base *ab)
++{
++	bool admitted;
++
++	spin_lock_bh(&ab->base_lock);
++	admitted = !ab->reg_events_stopped;
++	if (admitted)
++		ab->reg_senders++;
++	spin_unlock_bh(&ab->base_lock);
++	return admitted;
++}
++
++void ath12k_reg_sender_put(struct ath12k_base *ab)
++{
++	spin_lock_bh(&ab->base_lock);
++	if (WARN_ON(!ab->reg_senders)) {
++		spin_unlock_bh(&ab->base_lock);
++		return;
++	}
++	if (!--ab->reg_senders)
++		wake_up_all(&ab->reg_senders_wait);
++	spin_unlock_bh(&ab->base_lock);
++}
++
++static bool ath12k_reg_senders_idle(struct ath12k_base *ab)
++{
++	bool idle;
++
++	spin_lock_bh(&ab->base_lock);
++	idle = !ab->reg_senders;
++	spin_unlock_bh(&ab->base_lock);
++	return idle;
++}
++
++static struct ath12k *ath12k_reg_source(struct ath12k_hw *ah)
++{
++	struct ath12k *ar;
++	int i;
++
++	if (!ah->num_radio)
++		return NULL;
++	for_each_ar(ah, ar, i)
++		if (ar->supports_6ghz)
++			return ar;
++	return ath12k_ah_to_ar(ah, 0);
++}
++
++void ath12k_reg_events_close(struct ath12k_base *ab)
++{
++	spin_lock_bh(&ab->base_lock);
++	ath12k_reg_doubt_locked(ab);
++	ab->reg_events_stopped = true;
++	spin_unlock_bh(&ab->base_lock);
++}
++
++/* The owner must close ALL members before draining ANY, and fix their lifetime.
++ * No ag/core/RTNL/wiphy/hw_mutex/base_lock may be held by the caller.
++ */
++void ath12k_reg_events_drain(struct ath12k_base *ab)
++{
++	struct ath12k_wmi_scan_chan_list_arg *arg, *tmp;
++	struct ath12k *ar;
++	LIST_HEAD(discard);
++	int i;
++
++	cancel_work_sync(&ab->update_11d_work);
++	wait_event(ab->reg_senders_wait, ath12k_reg_senders_idle(ab));
++	for (i = 0; i < ab->num_radios; i++) {
++		ar = ab->pdevs[i].ar;
++		if (!ar || !ar->reg_work_initialized)
++			continue;
++		cancel_work_sync(&ar->regd_update_work);
++		cancel_work_sync(&ar->regd_channel_update_work);
++		spin_lock_bh(&ar->data_lock);
++		list_splice_tail_init(&ar->regd_channel_update_queue, &discard);
++		spin_unlock_bh(&ar->data_lock);
++		list_for_each_entry_safe(arg, tmp, &discard, list) {
++			list_del(&arg->list);
++			kfree(arg);
++		}
++	}
++}
++
++int ath12k_reg_events_open(struct ath12k_base *ab)
++{
++	struct ath12k *ar;
++	int i;
++
++	spin_lock_bh(&ab->base_lock);
++	if (test_bit(ATH12K_FLAG_UNREGISTERING, &ab->dev_flags)) {
++		spin_unlock_bh(&ab->base_lock);
++		return -ESHUTDOWN;
++	}
++	ab->reg_events_stopped = false;
++	/* Recovery BOOT installs new_regd, READY repeats open after clearing
++	 * is_reset under this lock. Neither open resets init nor DOUBT.
+ 	 */
+-	if (!regd)
+-		return true;
+-
+-	return memcmp(regd->alpha2, alpha2, 2) != 0;
++	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags) && !ab->is_reset)
++		for (i = 0; i < ab->num_radios; i++) {
++			ar = ab->pdevs[i].ar;
++			if (ar && ar->reg_work_initialized && ab->new_regd[i])
++				queue_work(system_unbound_wq, &ar->regd_update_work);
++		}
++	spin_unlock_bh(&ab->base_lock);
++	return 0;
+ }
+ 
+ static void
+@@ -92,21 +225,24 @@
+ 		return;
+ 	}
+ 
+-	if (!ath12k_regdom_changes(hw, request->alpha2)) {
++	if (ath12k_reg_user_skip(ah, request->alpha2)) {
+ 		ath12k_dbg(ar->ab, ATH12K_DBG_REG, "Country is already set\n");
+ 		return;
+ 	}
+ 
+-	/* Allow fresh updates to wiphy regd */
+-	ah->regd_updated = false;
+-
+ 	/* Send the reg change request to all the radios */
+ 	for_each_ar(ah, ar, i) {
++		if (!ath12k_reg_sender_get(ar->ab)) {
++			atomic_set(&ah->reg_user_country, ATH12K_REG_DOUBT);
++			continue;
++		}
+ 		reinit_completion(&ar->regd_update_completed);
+ 
+ 		if (ar->ab->hw_params->current_cc_support) {
+ 			memcpy(&current_arg.alpha2, request->alpha2, 2);
++			spin_lock_bh(&ar->ab->base_lock);
+ 			memcpy(&ar->alpha2, &current_arg.alpha2, 2);
++			spin_unlock_bh(&ar->ab->base_lock);
+ 			ret = ath12k_wmi_send_set_current_country_cmd(ar, &current_arg);
+ 			if (ret)
+ 				ath12k_warn(ar->ab,
+@@ -126,11 +262,14 @@
+ 		ath12k_mac_11d_scan_stop(ar);
+ 		wiphy_unlock(wiphy);
+ 
++		if (ret)
++			atomic_set(&ah->reg_user_country, ATH12K_REG_DOUBT);
+ 		ar->regdom_set_by_user = true;
+-	}
+-}
+-
+-int ath12k_reg_update_chan_list(struct ath12k *ar, bool wait)
++		ath12k_reg_sender_put(ar->ab);
++	}
++}
++
++static int ath12k_reg_update_chan_list_admitted(struct ath12k *ar, bool wait)
+ {
+ 	struct ieee80211_supported_band **bands;
+ 	struct ath12k_wmi_scan_chan_list_arg *arg;
+@@ -238,11 +377,18 @@
+ 	}
+ 
+ 	if (wait) {
++		spin_lock_bh(&ar->ab->base_lock);
++		if (ar->ab->reg_events_stopped) {
++			spin_unlock_bh(&ar->ab->base_lock);
++			kfree(arg);
++			return -ESHUTDOWN;
++		}
+ 		spin_lock_bh(&ar->data_lock);
+ 		list_add_tail(&arg->list, &ar->regd_channel_update_queue);
+ 		spin_unlock_bh(&ar->data_lock);
+ 
+ 		queue_work(ar->ab->workqueue, &ar->regd_channel_update_work);
++		spin_unlock_bh(&ar->ab->base_lock);
+ 
+ 		return 0;
+ 	}
+@@ -250,6 +396,19 @@
+ 	ret = ath12k_wmi_send_scan_chan_list_cmd(ar, arg);
+ 	kfree(arg);
+ 
++	return ret;
++}
++
++int ath12k_reg_update_chan_list(struct ath12k *ar, bool wait)
++{
++	int ret;
++
++	if (!ath12k_reg_sender_get(ar->ab))
++		return -ESHUTDOWN;
++	ret = ath12k_reg_update_chan_list_admitted(ar, wait);
++	if (ret && ret != -ESHUTDOWN)
++		ath12k_reg_doubt(ar->ab);
++	ath12k_reg_sender_put(ar->ab);
+ 	return ret;
+ }
+ 
+@@ -264,6 +423,46 @@
+ 	for (i = 0; i < regd_orig->n_reg_rules; i++)
+ 		memcpy(&regd_copy->reg_rules[i], &regd_orig->reg_rules[i],
+ 		       sizeof(struct ieee80211_reg_rule));
++}
++
++static bool ath12k_reg_wmm_equal(const struct ieee80211_wmm_ac *a,
++				 const struct ieee80211_wmm_ac *b)
++{
++	return a->cw_min == b->cw_min && a->cw_max == b->cw_max &&
++	       a->cot == b->cot && a->aifsn == b->aifsn;
++}
++
++static bool ath12k_reg_equal(const struct ieee80211_regdomain *a,
++			     const struct ieee80211_regdomain *b)
++{
++	const struct ieee80211_reg_rule *x, *y;
++	u32 i;
++	int ac;
++
++	if (!a || a->n_reg_rules != b->n_reg_rules ||
++	    memcmp(a->alpha2, b->alpha2, 2) || a->dfs_region != b->dfs_region)
++		return false;
++	for (i = 0; i < a->n_reg_rules; i++) {
++		x = &a->reg_rules[i];
++		y = &b->reg_rules[i];
++		if (x->freq_range.start_freq_khz != y->freq_range.start_freq_khz ||
++		    x->freq_range.end_freq_khz != y->freq_range.end_freq_khz ||
++		    x->freq_range.max_bandwidth_khz != y->freq_range.max_bandwidth_khz ||
++		    x->power_rule.max_antenna_gain != y->power_rule.max_antenna_gain ||
++		    x->power_rule.max_eirp != y->power_rule.max_eirp ||
++		    x->flags != y->flags || x->dfs_cac_ms != y->dfs_cac_ms ||
++		    x->has_wmm != y->has_wmm || x->psd != y->psd)
++			return false;
++		if (!x->has_wmm)
++			continue;
++		for (ac = 0; ac < IEEE80211_NUM_ACS; ac++)
++			if (!ath12k_reg_wmm_equal(&x->wmm_rule.client[ac],
++						  &y->wmm_rule.client[ac]) ||
++			    !ath12k_reg_wmm_equal(&x->wmm_rule.ap[ac],
++						  &y->wmm_rule.ap[ac]))
++				return false;
++	}
++	return true;
+ }
+ 
+ int ath12k_regd_update(struct ath12k *ar, bool init)
+@@ -278,16 +477,27 @@
+ 	long time_left;
+ 
+ 	ab = ar->ab;
++	if (!ath12k_reg_sender_get(ab))
++		return -ESHUTDOWN;
+ 
+ 	time_left = wait_for_completion_timeout(&ar->regd_update_completed,
+ 						ATH12K_REG_UPDATE_TIMEOUT_HZ);
+ 	if (time_left == 0) {
++		ath12k_reg_doubt(ab);
+ 		ath12k_warn(ab, "Timeout while waiting for regulatory update");
+ 		/* Even though timeout has occurred, still continue since at least boot
+ 		 * time data would be there to process
+ 		 */
+ 	}
+ 
++	rtnl_lock();
++	wiphy_lock(hw->wiphy);
++	spin_lock_bh(&ab->base_lock);
++	if (ab->reg_events_stopped || (!init && ab->is_reset)) {
++		ret = -ESHUTDOWN;
++		spin_unlock_bh(&ab->base_lock);
++		goto err;
++	}
+ 	supported_bands = ar->pdev->cap.supported_bands;
+ 	reg_cap = &ab->hal_reg_cap[ar->pdev_idx];
+ 
+@@ -331,28 +541,17 @@
+ 		ath12k_mac_update_freq_range(ar, freq_low, freq_high);
+ 	}
+ 
+-	/* If one of the radios within ah has already updated the regd for
+-	 * the wiphy, then avoid setting regd again
+-	 */
+-	if (ah->regd_updated)
+-		return 0;
+-
+-	/* firmware provides reg rules which are similar for 2 GHz and 5 GHz
+-	 * pdev but 6 GHz pdev has superset of all rules including rules for
+-	 * all bands, we prefer 6 GHz pdev's rules to be used for setup of
+-	 * the wiphy regd.
+-	 * If 6 GHz pdev was part of the ath12k_hw, wait for the 6 GHz pdev,
+-	 * else pick the first pdev which calls this function and use its
+-	 * regd to update global hw regd.
+-	 * The regd_updated flag set at the end will not allow any further
+-	 * updates.
+-	 */
+-	if (ah->use_6ghz_regd && !ar->supports_6ghz)
+-		return 0;
+-
++	if (ar != ath12k_reg_source(ah)) {
++		spin_unlock_bh(&ab->base_lock);
++		ret = 0;
++		goto done;
++	}
+ 	pdev_id = ar->pdev_idx;
+-
+-	spin_lock_bh(&ab->base_lock);
++	if (init && ah->regd_init_done) {
++		spin_unlock_bh(&ab->base_lock);
++		ret = -EALREADY;
++		goto err;
++	}
+ 
+ 	if (init) {
+ 		/* Apply the regd received during init through
+@@ -391,23 +590,32 @@
+ 		goto err;
+ 	}
+ 
+-	ret = regulatory_set_wiphy_regd(hw->wiphy, regd_copy);
++	regd_copy->alpha2[2] = 0;
++	if (init) {
++		ret = regulatory_set_wiphy_regd(hw->wiphy, regd_copy);
++		if (!ret)
++			ah->regd_init_done = true;
++	} else if (ath12k_reg_equal(rcu_dereference_protected(hw->wiphy->regd,
++					lockdep_is_held(&hw->wiphy->mtx)), regd_copy)) {
++		ret = 0;
++	} else {
++		ret = regulatory_set_wiphy_regd_sync(hw->wiphy, regd_copy);
++	}
+ 
+ 	kfree(regd_copy);
+ 
+ 	if (ret)
+ 		goto err;
+ 
+-	if (ah->state != ATH12K_HW_STATE_ON)
+-		goto skip;
+-
+-	ah->regd_updated = true;
+-
+-skip:
+-	return 0;
++done:
++	wiphy_unlock(hw->wiphy);
++	rtnl_unlock();
++	ath12k_reg_sender_put(ab);
++	return ret;
+ err:
++	ath12k_reg_doubt(ab);
+ 	ath12k_warn(ab, "failed to perform regd update : %d\n", ret);
+-	return ret;
++	goto done;
+ }
+ 
+ static enum nl80211_dfs_regions
+@@ -655,6 +863,7 @@
+ 	u16 max_bw;
+ 	char alpha2[3];
+ 
++	lockdep_assert_held(&ab->base_lock);
+ 	num_rules = reg_info->num_5g_reg_rules + reg_info->num_2g_reg_rules;
+ 
+ 	if (reg_info->is_ext_reg_event) {
+@@ -701,7 +910,8 @@
+ 	if (!new_regd)
+ 		goto ret;
+ 
+-	memcpy(new_regd->alpha2, reg_info->alpha2, REG_ALPHA2_LEN + 1);
++	memcpy(new_regd->alpha2, reg_info->alpha2, REG_ALPHA2_LEN);
++	new_regd->alpha2[2] = 0;
+ 	memcpy(alpha2, reg_info->alpha2, REG_ALPHA2_LEN + 1);
+ 	alpha2[2] = '\0';
+ 	new_regd->dfs_region = ath12k_map_fw_dfs_region(reg_info->dfs_region);
+@@ -846,7 +1056,11 @@
+ 				   "reg hw scan wait left time %d\n", left);
+ 		}
+ 
+-		ath12k_wmi_send_scan_chan_list_cmd(ar, arg);
++		if (ath12k_reg_sender_get(ar->ab)) {
++			if (ath12k_wmi_send_scan_chan_list_cmd(ar, arg))
++				ath12k_reg_doubt(ar->ab);
++			ath12k_reg_sender_put(ar->ab);
++		}
+ 		list_del(&arg->list);
+ 		kfree(arg);
+ 	}
+@@ -894,6 +1108,7 @@
+ {
+ 	int pdev_idx = reg_info->phy_id;
+ 
++	lockdep_assert_held(&ab->base_lock);
+ 	if (reg_info->status_code != REG_SET_CC_STATUS_PASS) {
+ 		/* In case of failure to set the requested country,
+ 		 * firmware retains the current regd. We print a failure info
+@@ -915,57 +1130,122 @@
+ 			return ATH12K_REG_STATUS_FALLBACK;
+ 	}
+ 
+-	/* Avoid multiple overwrites to default regd, during core
+-	 * stop-start after mac registration.
+-	 */
+-	if (ab->default_regd[pdev_idx] && !ab->new_regd[pdev_idx] &&
+-	    !memcmp(ab->default_regd[pdev_idx]->alpha2,
+-		    reg_info->alpha2, 2))
+-		return ATH12K_REG_STATUS_DROP;
+-
+ 	return ATH12K_REG_STATUS_VALID;
+ }
+ 
+ int ath12k_reg_handle_chan_list(struct ath12k_base *ab,
+ 				struct ath12k_reg_info *reg_info,
+ 				enum wmi_vdev_type vdev_type,
+-				enum ieee80211_ap_reg_power power_type)
+-{
+-	struct ieee80211_regdomain *regd = NULL;
++				enum ieee80211_ap_reg_power power_type,
++				struct ieee80211_regdomain **old_regd)
++{
++	struct ieee80211_regdomain *regd;
+ 	int pdev_idx = reg_info->phy_id;
+ 	struct ath12k *ar;
+ 
++	lockdep_assert_held(&ab->base_lock);
++	if (ab->reg_events_stopped)
++		return -ESHUTDOWN;
+ 	regd = ath12k_reg_build_regd(ab, reg_info, vdev_type, power_type);
+-	if (!regd)
+-		return -EINVAL;
+-
++	if (!regd) {
++		ath12k_reg_doubt_locked(ab);
++		return -ENOMEM;
++	}
++	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags)) {
++		*old_regd = ab->new_regd[pdev_idx];
++		ab->new_regd[pdev_idx] = regd;
++		ar = ab->pdevs[pdev_idx].ar;
++		if (!ab->is_reset && ar && ar->reg_work_initialized)
++			queue_work(system_unbound_wq, &ar->regd_update_work);
++	} else {
++		*old_regd = ab->default_regd[pdev_idx];
++		ab->default_regd[pdev_idx] = regd;
++	}
++	ab->dfs_region = reg_info->dfs_region;
++	return 0;
++}
++
++int ath12k_reg_rebuild(struct ath12k_hw *ah, enum wmi_vdev_type type,
++		       enum ieee80211_ap_reg_power power)
++{
++	struct ath12k *source = ath12k_reg_source(ah);
++	struct ath12k_base *ab;
++	struct ieee80211_regdomain *old = NULL;
++	struct ath12k_reg_info *info;
++	int ret = 0;
++
++	if (!source)
++		return -ENODEV;
++	ab = source->ab;
+ 	spin_lock_bh(&ab->base_lock);
+-	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags)) {
+-		/* Once mac is registered, ar is valid and all CC events from
+-		 * firmware is considered to be received due to user requests
+-		 * currently.
+-		 * Free previously built regd before assigning the newly
+-		 * generated regd to ar. NULL pointer handling will be
+-		 * taken care by kfree itself.
+-		 */
+-		ar = ab->pdevs[pdev_idx].ar;
+-		kfree(ab->new_regd[pdev_idx]);
+-		ab->new_regd[pdev_idx] = regd;
+-		queue_work(ab->workqueue, &ar->regd_update_work);
+-	} else {
+-		/* Multiple events for the same *ar is not expected. But we
+-		 * can still clear any previously stored default_regd if we
+-		 * are receiving this event for the same radio by mistake.
+-		 * NULL pointer handling will be taken care by kfree itself.
+-		 */
+-		kfree(ab->default_regd[pdev_idx]);
+-		/* This regd would be applied during mac registration */
+-		ab->default_regd[pdev_idx] = regd;
+-	}
+-	ab->dfs_region = reg_info->dfs_region;
++	if (ab->reg_events_stopped) {
++		ret = -ESHUTDOWN;
++		goto out;
++	}
++	/* A 6 GHz source without EXT cannot supply AP/client rules. Never
++	 * silently select a different radio with a different rule set.
++	 */
++	if (!source->supports_6ghz)
++		goto out;
++	info = ab->reg_info[source->pdev_idx];
++	if (!ath12k_wmi_supports_6ghz_cc_ext(source) || !info ||
++	    !info->is_ext_reg_event) {
++		ath12k_reg_doubt_locked(ab);
++		ret = -EOPNOTSUPP;
++		goto out;
++	}
++	ret = ath12k_reg_handle_chan_list(ab, info, type, power, &old);
++out:
+ 	spin_unlock_bh(&ab->base_lock);
+-
+-	return 0;
++	kfree(old);
++	return ret;
++}
++
++int ath12k_reg_register_country(struct ath12k *ar)
++{
++	struct ath12k_base *ab = ar->ab;
++	struct wmi_set_current_country_arg arg = {};
++	const struct ieee80211_regdomain *def;
++	int ret = 0;
++	bool send;
++
++	if (!ath12k_reg_sender_get(ab))
++		return -ESHUTDOWN;
++	spin_lock_bh(&ab->base_lock);
++	memcpy(arg.alpha2, ab->new_alpha2, 2);
++	def = ab->default_regd[ar->pdev_idx];
++	send = arg.alpha2[0] && (!def || memcmp(def->alpha2, arg.alpha2, 2));
++	if (send) {
++		ath12k_reg_doubt_locked(ab);
++		memcpy(ar->alpha2, arg.alpha2, 2);
++	}
++	spin_unlock_bh(&ab->base_lock);
++	if (send) {
++		reinit_completion(&ar->regd_update_completed);
++		ret = ath12k_wmi_send_set_current_country_cmd(ar, &arg);
++	}
++	ath12k_reg_sender_put(ab);
++	return ret;
++}
++
++/* External country sends invalidate the cache before any command can escape. */
++int ath12k_reg_restore_country(struct ath12k *ar)
++{
++	struct wmi_set_current_country_arg arg = {};
++	int ret = 0;
++
++	if (!ath12k_reg_sender_get(ar->ab))
++		return -ESHUTDOWN;
++	ath12k_reg_doubt(ar->ab);
++	spin_lock_bh(&ar->ab->base_lock);
++	memcpy(arg.alpha2, ar->alpha2, 2);
++	spin_unlock_bh(&ar->ab->base_lock);
++	if (ar->ab->hw_params->current_cc_support && arg.alpha2[0] && arg.alpha2[1]) {
++		reinit_completion(&ar->regd_update_completed);
++		ret = ath12k_wmi_send_set_current_country_cmd(ar, &arg);
++	}
++	ath12k_reg_sender_put(ar->ab);
++	return ret;
+ }
+ 
+ void ath12k_reg_init(struct ieee80211_hw *hw)
+@@ -977,20 +1257,26 @@
+ 
+ void ath12k_reg_free(struct ath12k_base *ab)
+ {
++	struct ath12k_reg_info *info[MAX_RADIOS];
++	struct ieee80211_regdomain *def[MAX_RADIOS], *new[MAX_RADIOS];
+ 	int i;
+ 
+-	mutex_lock(&ab->core_lock);
++	/* Owner has closed/drained the group and synchronized callbacks. */
++	spin_lock_bh(&ab->base_lock);
++	WARN_ON(!ab->reg_events_stopped || ab->reg_senders);
+ 	for (i = 0; i < MAX_RADIOS; i++) {
+-		ath12k_reg_reset_reg_info(ab->reg_info[i]);
+-		kfree(ab->reg_info[i]);
++		info[i] = ab->reg_info[i];
++		def[i] = ab->default_regd[i];
++		new[i] = ab->new_regd[i];
+ 		ab->reg_info[i] = NULL;
+-	}
+-
+-	for (i = 0; i < ab->hw_params->max_radios; i++) {
+-		kfree(ab->default_regd[i]);
+-		kfree(ab->new_regd[i]);
+ 		ab->default_regd[i] = NULL;
+ 		ab->new_regd[i] = NULL;
+ 	}
+-	mutex_unlock(&ab->core_lock);
+-}
++	spin_unlock_bh(&ab->base_lock);
++	for (i = 0; i < MAX_RADIOS; i++) {
++		ath12k_reg_reset_reg_info(info[i]);
++		kfree(info[i]);
++		kfree(def[i]);
++		kfree(new[i]);
++	}
++}
+diff --git a/drivers/net/wireless/ath/ath12k/wmi.c b/drivers/net/wireless/ath/ath12k/wmi.c
+--- a/drivers/net/wireless/ath/ath12k/wmi.c
++++ b/drivers/net/wireless/ath/ath12k/wmi.c
+@@ -7016,6 +7016,7 @@
+ 	tb = ath12k_wmi_tlv_parse(ab, skb);
+ 	if (IS_ERR(tb)) {
+ 		ret = PTR_ERR(tb);
++		ath12k_reg_doubt(ab);
+ 		ath12k_warn(ab, "failed to parse tlv: %d\n", ret);
+ 		return ret;
+ 	}
+@@ -7023,12 +7024,19 @@
+ 	ev = tb[WMI_TAG_11D_NEW_COUNTRY_EVENT];
+ 	if (!ev) {
+ 		ath12k_warn(ab, "failed to fetch 11d new cc ev");
++		kfree(tb);
++		ath12k_reg_doubt(ab);
+ 		return -EPROTO;
+ 	}
+ 
+ 	spin_lock_bh(&ab->base_lock);
++	if (ab->reg_events_stopped) {
++		spin_unlock_bh(&ab->base_lock);
++		kfree(tb);
++		return -ESHUTDOWN;
++	}
++	ath12k_reg_doubt_locked(ab);
+ 	memcpy(&ab->new_alpha2, &ev->new_alpha2, REG_ALPHA2_LEN);
+-	spin_unlock_bh(&ab->base_lock);
+ 
+ 	ath12k_dbg(ab, ATH12K_DBG_WMI, "wmi 11d new cc %c%c\n",
+ 		   ab->new_alpha2[0],
+@@ -7037,12 +7045,15 @@
+ 	for (i = 0; i < ab->num_radios; i++) {
+ 		pdev = &ab->pdevs[i];
+ 		ar = pdev->ar;
++		if (!ar || !ar->reg_work_initialized)
++			continue;
+ 		ar->state_11d = ATH12K_11D_IDLE;
+-		ar->ah->regd_updated = false;
+ 		complete(&ar->completed_11d_scan);
+ 	}
+ 
+ 	queue_work(ab->workqueue, &ab->update_11d_work);
++	spin_unlock_bh(&ab->base_lock);
++	kfree(tb);
+ 
+ 	return 0;
+ }
+@@ -7055,96 +7066,63 @@
+ 
+ static int ath12k_reg_chan_list_event(struct ath12k_base *ab, struct sk_buff *skb)
+ {
+-	struct ath12k_reg_info *reg_info;
+-	struct ath12k *ar = NULL;
+-	u8 pdev_idx = 255;
+-	int ret;
+-
+-	reg_info = kzalloc_obj(*reg_info, GFP_ATOMIC);
+-	if (!reg_info) {
+-		ret = -ENOMEM;
+-		goto fallback;
+-	}
+-
+-	ret = ath12k_pull_reg_chan_list_ext_update_ev(ab, skb, reg_info);
+-	if (ret) {
+-		ath12k_warn(ab, "failed to extract regulatory info from received event\n");
+-		goto mem_free;
+-	}
+-
+-	/*
+-	 * Set the valid pdev_idx before validating so that, even when the
+-	 * event is dropped or falls back, the completion the caller in
+-	 * ath12k_mac_hw_register() may be waiting on is still signalled at
+-	 * the end and it does not time out.
+-	 */
+-	pdev_idx = reg_info->phy_id;
+-
+-	ret = ath12k_reg_validate_reg_info(ab, reg_info);
+-	if (ret == ATH12K_REG_STATUS_FALLBACK) {
+-		ath12k_warn(ab, "failed to validate reg info %d\n", ret);
+-		/* firmware has successfully switches to new regd but host can not
+-		 * continue, so free reginfo and fallback to old regd
+-		 */
+-		goto mem_free;
+-	} else if (ret == ATH12K_REG_STATUS_DROP) {
+-		/* reg info is valid but we will not store it and
+-		 * not going to create new regd for it
+-		 */
+-		ret = ATH12K_REG_STATUS_VALID;
+-		goto mem_free;
+-	}
+-
+-	/* free old reg_info if it exist */
+-	if (ab->reg_info[pdev_idx]) {
+-		ath12k_reg_reset_reg_info(ab->reg_info[pdev_idx]);
+-		kfree(ab->reg_info[pdev_idx]);
+-	}
+-	/* reg_info is valid, we store it for later use
+-	 * even below regd build failed
+-	 */
+-	ab->reg_info[pdev_idx] = reg_info;
+-
+-	ret = ath12k_reg_handle_chan_list(ab, reg_info, WMI_VDEV_TYPE_UNSPEC,
+-					  IEEE80211_REG_UNSET_AP);
+-	if (ret) {
+-		ath12k_warn(ab, "failed to handle chan list %d\n", ret);
+-		goto fallback;
+-	}
+-
+-	goto out;
+-
+-mem_free:
+-	ath12k_reg_reset_reg_info(reg_info);
+-	kfree(reg_info);
+-
+-	if (ret == ATH12K_REG_STATUS_VALID)
+-		goto out;
+-
+-fallback:
+-	/* Fallback to older reg (by sending previous country setting
+-	 * again if fw has succeeded and we failed to process here.
+-	 * The Regdomain should be uniform across driver and fw. Since the
+-	 * FW has processed the command and sent a success status, we expect
+-	 * this function to succeed as well. If it doesn't, CTRY needs to be
+-	 * reverted at the fw and the old SCAN_CHAN_LIST cmd needs to be sent.
+-	 */
+-	/* TODO: This is rare, but still should also be handled */
+-	WARN_ON(1);
+-
+-out:
+-	/* In some error cases, even a valid pdev_idx might not be available */
+-	if (pdev_idx < ab->num_radios)
+-		ar = ab->pdevs[pdev_idx].ar;
+-
+-	/* During the boot-time update, 'ar' might not be allocated,
+-	 * so the completion cannot be marked at that point.
+-	 * This boot-time update is handled in ath12k_mac_hw_register()
+-	 * before registering the hardware.
+-	 */
+-	if (ar)
+-		complete_all(&ar->regd_update_completed);
+-
++	struct ath12k_reg_info *info, *old = NULL;
++	struct ieee80211_regdomain *old_regd = NULL;
++	struct ath12k *ar;
++	int ret, idx = 255;
++
++	info = kzalloc_obj(*info, GFP_ATOMIC);
++	if (!info) {
++		ath12k_reg_doubt(ab);
++		return -ENOMEM;
++	}
++	/* Parsing owns private storage; close may win before the commit. */
++	ret = ath12k_pull_reg_chan_list_ext_update_ev(ab, skb, info);
++	spin_lock_bh(&ab->base_lock);
++	if (ab->reg_events_stopped) {
++		ret = -ESHUTDOWN;
++		goto unlock;
++	}
++	if (ret)
++		goto failed;
++	idx = info->phy_id;
++	ret = ath12k_reg_validate_reg_info(ab, info);
++	if (ret != ATH12K_REG_STATUS_VALID) {
++		if (info->status_code != REG_SET_CC_STATUS_PASS ||
++		    ret == ATH12K_REG_STATUS_FALLBACK) {
++			ret = -EINVAL;
++			goto failed;
++		}
++		ret = 0;
++		goto complete;
++	}
++	old = ab->reg_info[idx];
++	ab->reg_info[idx] = info;
++	ret = ath12k_reg_handle_chan_list(ab, info, WMI_VDEV_TYPE_UNSPEC,
++					  IEEE80211_REG_UNSET_AP, &old_regd);
++	info = NULL; /* container owns it even if the builder failed */
++	if (ret)
++		goto failed;
++	goto complete;
++failed:
++	/* Exported helper takes base_lock, so perform invalidation outside. */
++	if (info)
++		idx = info->phy_id;
++complete:
++	if (idx < ab->num_radios) {
++		ar = ab->pdevs[idx].ar;
++		if (ar && ar->reg_work_initialized)
++			complete_all(&ar->regd_update_completed);
++	}
++unlock:
++	spin_unlock_bh(&ab->base_lock);
++	if (ret && ret != -ESHUTDOWN)
++		ath12k_reg_doubt(ab);
++	ath12k_reg_reset_reg_info(old);
++	kfree(old);
++	ath12k_reg_reset_reg_info(info);
++	kfree(info);
++	kfree(old_regd);
+ 	return ret;
+ }
+ 
+diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/ath12k/mac.c
+--- a/drivers/net/wireless/ath/ath12k/mac.c
++++ b/drivers/net/wireless/ath/ath12k/mac.c
+@@ -7472,7 +7472,6 @@
+ 	struct ieee80211_sta *sta = ath12k_ahsta_to_sta(arsta->ahsta);
+ 	struct ieee80211_bss_conf *link_conf;
+ 	struct ath12k *ar = arvif->ar;
+-	struct ath12k_reg_info *reg_info;
+ 	struct ath12k_base *ab = ar->ab;
+ 	int ret = 0;
+ 
+@@ -7545,14 +7544,12 @@
+ 				ath12k_warn(ab, "Direct Switch peer setup unavailable: %d\n", ds_ret);
+ 		}
+ 
+-		if (ath12k_wmi_supports_6ghz_cc_ext(ar) &&
+-		    arvif->ahvif->vdev_type == WMI_VDEV_TYPE_STA) {
++		if (arvif->ahvif->vdev_type == WMI_VDEV_TYPE_STA) {
+ 			link_conf = ath12k_mac_get_link_bss_conf(arvif);
+-			reg_info = ab->reg_info[ar->pdev_idx];
+-			ath12k_dbg(ab, ATH12K_DBG_MAC, "connection done, update reg rules\n");
+-			ath12k_hw_to_ah(hw)->regd_updated = false;
+-			ath12k_reg_handle_chan_list(ab, reg_info, arvif->ahvif->vdev_type,
+-						    link_conf->power_type);
++			ret = ath12k_reg_rebuild(ar->ah, arvif->ahvif->vdev_type,
++						 link_conf->power_type);
++			if (ret)
++				goto exit;
+ 		}
+ 
+ 	/* IEEE80211_STA_AUTHORIZED -> IEEE80211_STA_ASSOC: station may be in removal,
+@@ -10245,7 +10242,6 @@
+ 	cancel_delayed_work_sync(&ar->scan.timeout);
+ 	wiphy_work_cancel(ath12k_ar_to_hw(ar)->wiphy, &ar->scan.vdev_clean_wk);
+ 	cancel_work_sync(&ar->regd_channel_update_work);
+-	cancel_work_sync(&ar->regd_update_work);
+ 	cancel_work_sync(&ar->ab->rfkill_work);
+ 	cancel_work_sync(&ar->ab->update_11d_work);
+ 	ar->state_11d = ATH12K_11D_IDLE;
+@@ -10540,6 +10536,9 @@
+ 
+ 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
+ 
++	if (!ath12k_reg_sender_get(ar->ab))
++		return;
++
+ 	if (ar->regdom_set_by_user)
+ 		goto fin;
+ 
+@@ -10559,6 +10558,7 @@
+ 	ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+ 		   "mac start 11d scan for vdev %d\n", vdev_id);
+ 
++	ath12k_reg_doubt(ar->ab);
+ 	ret = ath12k_wmi_send_11d_scan_start_cmd(ar, &arg);
+ 	if (ret) {
+ 		ath12k_warn(ar->ab, "failed to start 11d scan vdev %d ret: %d\n",
+@@ -10574,6 +10574,7 @@
+ 		ar->state_11d = ATH12K_11D_IDLE;
+ 		complete(&ar->completed_11d_scan);
+ 	}
++	ath12k_reg_sender_put(ar->ab);
+ }
+ 
+ void ath12k_mac_11d_scan_stop(struct ath12k *ar)
+@@ -11104,10 +11105,7 @@
+ {
+ 	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
+ 	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
+-	struct ath12k_reg_info *reg_info;
+ 	struct ath12k_link_vif *arvif;
+-	struct ath12k_base *ab;
+-	struct ath12k *ar;
+ 	int i;
+ 
+ 	lockdep_assert_wiphy(hw->wiphy);
+@@ -11129,23 +11127,8 @@
+ 
+ 	ath12k_mac_determine_vdev_type(vif, ahvif);
+ 
+-	for_each_ar(ah, ar, i) {
+-		if (!ath12k_wmi_supports_6ghz_cc_ext(ar))
+-			continue;
+-
+-		ab = ar->ab;
+-		reg_info = ab->reg_info[ar->pdev_idx];
+-		ath12k_dbg(ab, ATH12K_DBG_MAC, "interface added to change reg rules\n");
+-		ah->regd_updated = false;
+-		ath12k_reg_handle_chan_list(ab, reg_info, ahvif->vdev_type,
+-					    IEEE80211_REG_UNSET_AP);
+-		break;
+-	}
+-
+-	/* Defer vdev creation until assign_chanctx or hw_scan is initiated as driver
+-	 * will not know if this interface is an ML vif at this point.
+-	 */
+-	return 0;
++	return ath12k_reg_rebuild(ah, ahvif->vdev_type,
++				  IEEE80211_REG_UNSET_AP);
+ }
+ EXPORT_SYMBOL(ath12k_mac_op_add_interface);
+ 
+@@ -11689,7 +11672,7 @@
+ 		arg.passive = arg.chan_radar;
+ 
+ 		spin_lock_bh(&ab->base_lock);
+-		arg.regdomain = ar->ab->dfs_region;
++		arg.regdomain = ab->dfs_region;
+ 		spin_unlock_bh(&ab->base_lock);
+ 
+ 		/* TODO: Notify if secondary 80Mhz also needs radar detection */
+@@ -12518,8 +12501,15 @@
+ 	bool psd_valid, non_psd_valid;
+ 	int i;
+ 
++	spin_lock_bh(&ab->base_lock);
+ 	reg_info = ab->reg_info[ar->pdev_idx];
++	if (ab->reg_events_stopped || !reg_info ||
++	    reg_info->client_type >= WMI_REG_MAX_CLIENT_TYPE) {
++		spin_unlock_bh(&ab->base_lock);
++		return;
++	}
+ 	client_type = reg_info->client_type;
++	spin_unlock_bh(&ab->base_lock);
+ 
+ 	local_psd = &tpe->psd_local[client_type];
+ 	reg_psd = &tpe->psd_reg_client[client_type];
+@@ -13880,14 +13870,8 @@
+ 				   "complete recovery while pdev %d is stopped\n",
+ 				   ar->pdev->pdev_id);
+ 
+-		if (hw_restarted && ar->ab->hw_params->current_cc_support &&
+-		    ar->alpha2[0] != 0 && ar->alpha2[1] != 0) {
+-			struct wmi_set_current_country_arg arg = {};
+-
+-			memcpy(&arg.alpha2, ar->alpha2, 2);
+-			reinit_completion(&ar->regd_update_completed);
+-			ath12k_wmi_send_set_current_country_cmd(ar, &arg);
+-		}
++		if (hw_restarted && ath12k_reg_restore_country(ar))
++			ath12k_warn(ab, "failed to restore country after recovery\n");
+ 
+ 		if (ab->is_reset) {
+ 			recovery_count = atomic_inc_return(&ab->recovery_count);
+@@ -14563,7 +14547,7 @@
+ 	struct ath12k_wmi_hal_reg_capabilities_ext_arg *reg_cap;
+ 	struct ath12k_base *ab = ar->ab;
+ 	u32 phy_id, freq_low, freq_high;
+-	struct ath12k_hw *ah = ar->ah;
++	struct ath12k_reg_freq reg_2g, reg_5g, reg_6g;
+ 	void *channels;
+ 	int ret;
+ 
+@@ -14572,6 +14556,11 @@
+ 		      ARRAY_SIZE(ath12k_6ghz_channels)) !=
+ 		     ATH12K_NUM_CHANS);
+ 
++	spin_lock_bh(&ab->base_lock);
++	reg_2g = ab->reg_freq_2ghz;
++	reg_5g = ab->reg_freq_5ghz;
++	reg_6g = ab->reg_freq_6ghz;
++	spin_unlock_bh(&ab->base_lock);
+ 	reg_cap = &ab->hal_reg_cap[ar->pdev_idx];
+ 
+ 	if (supported_bands & WMI_HOST_WLAN_2GHZ_CAP) {
+@@ -14594,9 +14583,9 @@
+ 		}
+ 
+ 		freq_low = max(reg_cap->low_2ghz_chan,
+-			       ab->reg_freq_2ghz.start_freq);
++			       reg_2g.start_freq);
+ 		freq_high = min(reg_cap->high_2ghz_chan,
+-				ab->reg_freq_2ghz.end_freq);
++				reg_2g.end_freq);
+ 
+ 		ath12k_mac_update_ch_list(ar, band,
+ 					  reg_cap->low_2ghz_chan,
+@@ -14639,16 +14628,15 @@
+ 			band->bitrates = ath12k_a_rates;
+ 
+ 			freq_low = max(reg_cap->low_5ghz_chan,
+-				       ab->reg_freq_6ghz.start_freq);
++				       reg_6g.start_freq);
+ 			freq_high = min(reg_cap->high_5ghz_chan,
+-					ab->reg_freq_6ghz.end_freq);
++					reg_6g.end_freq);
+ 
+ 			ath12k_mac_update_ch_list(ar, band,
+ 						  reg_cap->low_5ghz_chan,
+ 						  reg_cap->high_5ghz_chan);
+ 
+ 			ath12k_mac_update_freq_range(ar, freq_low, freq_high);
+-			ah->use_6ghz_regd = true;
+ 
+ 			if (!bands[NL80211_BAND_6GHZ]) {
+ 				bands[NL80211_BAND_6GHZ] = band;
+@@ -14696,9 +14684,9 @@
+ 			}
+ 
+ 			freq_low = max(reg_cap->low_5ghz_chan,
+-				       ab->reg_freq_5ghz.start_freq);
++				       reg_5g.start_freq);
+ 			freq_high = min(reg_cap->high_5ghz_chan,
+-					ab->reg_freq_5ghz.end_freq);
++					reg_5g.end_freq);
+ 
+ 			ath12k_mac_update_ch_list(ar, band,
+ 						  reg_cap->low_5ghz_chan,
+@@ -15394,39 +15382,11 @@
+ 		}
+ 
+ 		if (this_ab->hw_params->current_cc_support) {
+-			struct wmi_set_current_country_arg current_cc = {};
+-			struct ieee80211_regdomain *default_regd;
+-			bool same_cc = false;
+-
+-			spin_lock_bh(&this_ab->base_lock);
+-			memcpy(&current_cc.alpha2, this_ab->new_alpha2, 2);
+-			spin_unlock_bh(&this_ab->base_lock);
+-
+-			if (!current_cc.alpha2[0])
+-				goto fw_stats_init;
+-
+-			memcpy(&ar->alpha2, current_cc.alpha2, 2);
+-
+-			spin_lock_bh(&this_ab->base_lock);
+-			default_regd = this_ab->default_regd[ar->pdev_idx];
+-			if (default_regd)
+-				same_cc = !memcmp(default_regd->alpha2,
+-						  current_cc.alpha2, 2);
+-			spin_unlock_bh(&this_ab->base_lock);
+-
+-			if (same_cc)
+-				goto fw_stats_init;
+-
+-			reinit_completion(&ar->regd_update_completed);
+-
+-			ret = ath12k_wmi_send_set_current_country_cmd(ar, &current_cc);
++			ret = ath12k_reg_register_country(ar);
+ 			if (ret)
+-				ath12k_warn(this_ab,
+-					    "failed set cc code for mac register: %d\n",
+-					    ret);
+-		}
+-
+-fw_stats_init:
++				ath12k_warn(this_ab, "failed set cc for mac register: %d\n", ret);
++		}
++
+ 		ath12k_fw_stats_init(ar);
+ 		ath12k_debugfs_register(ar);
+ 	}
+@@ -15506,6 +15466,9 @@
+ 	INIT_WORK(&ar->regd_channel_update_work, ath12k_regd_update_chan_list_work);
+ 	INIT_LIST_HEAD(&ar->regd_channel_update_queue);
+ 	INIT_WORK(&ar->regd_update_work, ath12k_regd_update_work);
++	spin_lock_bh(&ab->base_lock);
++	ar->reg_work_initialized = true;
++	spin_unlock_bh(&ab->base_lock);
+ 
+ 	wiphy_work_init(&ar->wmi_mgmt_tx_work, ath12k_mgmt_over_wmi_tx_work);
+ 	skb_queue_head_init(&ar->wmi_mgmt_tx_queue);

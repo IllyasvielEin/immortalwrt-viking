@@ -86,7 +86,7 @@ class GroupTeardown(unittest.TestCase):
             text = structure(header, name)
             extra = []
             for field in sorted(set(re.findall(rf"{variable}->(\w+)", core_code)) - skip):
-                line = re.search(rf"^\t(?:bool|unsigned int|u32|struct mutex)\s+{field};", text, re.M)
+                line = re.search(rf"^\t(?:bool|unsigned int|u32|struct mutex|wait_queue_head_t)\s+{field};", text, re.M)
                 if line is not None:
                     extra.append(line[0])
             (work / output).write_text("\n".join(extra) + "\n")
