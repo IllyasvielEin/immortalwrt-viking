@@ -1648,8 +1648,8 @@ new file mode 100644
 +		return dev_err_probe(dev, PTR_ERR(clk),
 +				     "Failed to enable AHB clock\n");
 +
-+	qpcs->xpcs_rstc = devm_reset_control_get_optional(dev, NULL);
-+	if (IS_ERR_OR_NULL(qpcs->xpcs_rstc))
++	qpcs->xpcs_rstc = devm_reset_control_get_exclusive(dev, NULL);
++	if (IS_ERR(qpcs->xpcs_rstc))
 +		return dev_err_probe(dev, PTR_ERR(qpcs->xpcs_rstc),
 +				     "Failed to get XPCS reset\n");
 +
