@@ -109,6 +109,7 @@ class DFSLifetime(unittest.TestCase):
     def test_wmi_replacement_waits_for_real_builder_borrow(self): self.run_case('ownership')
     def test_running_pending_requeue_drained(self): self.run_case('running')
     def test_close_during_private_parse(self): self.run_case('parse')
+    def test_late_initial_boot_rule_published_without_second_init(self): self.run_case('initial-late')
     def test_queue_close_and_recovery_boot_open(self): self.run_case('boot')
     def test_real_11d_event_before_send_and_user_batches(self): self.run_case('11d')
     def test_direct_and_queued_channel_sender_gate(self): self.run_case('channel')

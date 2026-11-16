@@ -280,6 +280,12 @@ int main(int argc,char **argv){assert(argc==2);setup();const char *which=argv[1]
   assert(!w->pending && !w->running && !f.ab.reg_senders && !f.w.regd);
  }else if(!strcmp(which,"parse")){
   pthread_t t;struct sk_buff skb={.info={.phy_id=0,.alpha2="BB",.num_2g_reg_rules=1,.max_bw_2g=40}};atomic_store(&parse_pause,1);pthread_create(&t,NULL,parser,&skb);while(!atomic_load(&parse_entered)){};ath12k_reg_events_close(&f.ab);ath12k_reg_events_drain(&f.ab);atomic_store(&parse_release,1);void *r;pthread_join(t,&r);assert(*(int *)r==-ESHUTDOWN);free(r);assert(!f.ab.reg_info[0] && !f.ar[0].regd_update_work.pending);
+ }else if(!strcmp(which,"initial-late")){
+  f.ab.default_regd[0]=rd('A');assert(ath12k_regd_update(&f.ar[0],true)==0);consume();
+  /* Registration country command can return its event before group_start
+   * marks REGISTERED; retain default-only BOOT routing, then republish it. */
+  struct sk_buff skb={.info={.phy_id=0,.alpha2="BB",.num_2g_reg_rules=1,.max_bw_2g=40}};assert(ath12k_reg_chan_list_event(&f.ab,&skb)==0);assert(!f.ab.new_regd[0] && !f.ar[0].regd_update_work.pending);
+  f.ab.dev_flags=1;assert(ath12k_reg_events_open(&f.ab)==0 && f.ar[0].regd_update_work.pending);assert(ath12k_regd_update(&f.ar[0],false)==0);assert(f.w.regd->alpha2[0]=='B' && init_submissions==1);
  }else if(!strcmp(which,"boot")){
   struct sk_buff skb={.info={.phy_id=0,.alpha2="BB",.num_2g_reg_rules=1,.max_bw_2g=40}};f.ab.dev_flags=1;f.ab.is_reset=true;assert(ath12k_reg_chan_list_event(&f.ab,&skb)==0);assert(f.ab.new_regd[0] && !f.ar[0].regd_update_work.pending);assert(ath12k_reg_events_open(&f.ab)==0);assert(!f.ar[0].regd_update_work.pending);
   spin_lock_bh(&f.ab.base_lock);f.ab.is_reset=false;spin_unlock_bh(&f.ab.base_lock);assert(ath12k_reg_events_open(&f.ab)==0);assert(f.ar[0].regd_update_work.pending);ath12k_reg_events_close(&f.ab);ath12k_reg_events_drain(&f.ab);assert(!f.ar[0].regd_update_work.pending);assert(ath12k_reg_chan_list_event(&f.ab,&skb)==-ESHUTDOWN);f.ab.dev_flags|=2;assert(ath12k_reg_events_open(&f.ab)==-ESHUTDOWN && f.ab.reg_events_stopped);
