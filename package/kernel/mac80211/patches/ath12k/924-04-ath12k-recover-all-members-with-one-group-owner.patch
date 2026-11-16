@@ -1,3 +1,10 @@
+Subject: [PATCH] ath12k: recover the full group with one reset owner
+
+Close every member before draining old producers. Retain non-MLO memory,
+detach all MLO borrowers, rebuild QMI peers by lookup instance generation,
+and wait for group READY and mac80211 business completion. Keep failed
+DMA and in-flight reconfiguration obligations explicit for final removal.
+
 --- a/drivers/net/wireless/ath/ath12k/ahb.c
 +++ b/drivers/net/wireless/ath/ath12k/ahb.c
 @@ -898,8 +898,7 @@
@@ -75,7 +82,18 @@
  	return 0;
  
  err:
-@@ -1406,6 +1421,9 @@
+@@ -1360,6 +1375,10 @@
+ 
+ void ath12k_fw_stats_init(struct ath12k *ar)
+ {
++	if (ar->fw_stats_initialized)
++		return;
++	ar->fw_stats_initialized = true;
++
+ 	INIT_LIST_HEAD(&ar->fw_stats.vdevs);
+ 	INIT_LIST_HEAD(&ar->fw_stats.pdevs);
+ 	INIT_LIST_HEAD(&ar->fw_stats.bcn);
+@@ -1406,6 +1425,9 @@
  	struct ath12k_hw_group *ag = ath12k_ab_to_ag(ab);
  	int ret, i;
  
@@ -85,7 +103,7 @@
  	ret = ath12k_core_start_firmware(ab, ab->fw_mode);
  	if (ret) {
  		ath12k_err(ab, "failed to start firmware: %d\n", ret);
-@@ -1434,6 +1452,10 @@
+@@ -1434,6 +1456,10 @@
  		ret = -ESHUTDOWN;
  		goto err_deinit;
  	}
@@ -96,7 +114,7 @@
  	ret = ath12k_reg_events_open(ab);
  	if (ret)
  		goto err_deinit;
-@@ -1450,6 +1472,10 @@
+@@ -1450,6 +1476,10 @@
  	}
  
  	mutex_unlock(&ab->core_lock);
@@ -107,7 +125,7 @@
  
  	if (ath12k_core_hw_group_start_ready(ag)) {
  		ret = ath12k_core_hw_group_start(ag);
-@@ -1460,6 +1486,8 @@
+@@ -1460,6 +1490,8 @@
  		for (i = 0; i < ag->num_devices; i++)
  			if (ag->ab[i])
  				WRITE_ONCE(ag->ab[i]->mac_delivery_stopped, false);
@@ -116,7 +134,7 @@
  		ath12k_dbg(ab, ATH12K_DBG_BOOT, "group %d started\n", ag->id);
  	} else {
  		ath12k_core_trigger_partner(ab);
-@@ -1493,43 +1521,8 @@
+@@ -1493,43 +1525,8 @@
  
  static int ath12k_core_reconfigure_on_crash(struct ath12k_base *ab)
  {
@@ -162,7 +180,7 @@
  }
  
  static void ath12k_rfkill_work(struct work_struct *work)
-@@ -1748,49 +1741,39 @@
+@@ -1748,49 +1745,39 @@
  	complete(&ab->driver_recovery);
  }
  
@@ -241,7 +259,7 @@
  	complete(&ab->restart_completed);
  }
  
-@@ -1799,7 +1782,13 @@
+@@ -1799,7 +1786,13 @@
  	unsigned long flags;
  
  	spin_lock_irqsave(&ab->recovery_lock, flags);
@@ -256,7 +274,7 @@
  		set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
  		set_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
  		queue_work(ab->workqueue_aux, &ab->reset_work);
-@@ -1807,99 +1796,322 @@
+@@ -1807,99 +1800,322 @@
  	spin_unlock_irqrestore(&ab->recovery_lock, flags);
  }
  
@@ -668,7 +686,7 @@
  	mutex_unlock(&ag->mutex);
  }
  
-@@ -1999,6 +2211,8 @@
+@@ -1999,6 +2215,8 @@
  	ag->id = count;
  	list_add(&ag->list, &ath12k_hw_group_list);
  	mutex_init(&ag->mutex);
@@ -677,7 +695,7 @@
  	ag->mlo_capable = false;
  
  	return ag;
-@@ -2304,6 +2518,7 @@
+@@ -2304,6 +2522,7 @@
  
  	lockdep_assert_held(&ag->mutex);
  	set_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags);
@@ -687,7 +705,15 @@
  		if (!ab)
 --- a/drivers/net/wireless/ath/ath12k/core.h
 +++ b/drivers/net/wireless/ath/ath12k/core.h
-@@ -774,6 +774,7 @@
+@@ -632,6 +632,7 @@
+ #define ATH12K_VDEV_DELETE_TIMEOUT_HZ (5 * HZ)
+ 
+ struct ath12k {
++	bool fw_stats_initialized;
+ 	struct ath12k_base *ab;
+ 	struct ath12k_pdev *pdev;
+ 	struct ath12k_hw *ah;
+@@ -774,6 +775,7 @@
  	struct completion fw_stats_done;
  
  	struct completion mlo_setup_done;
@@ -695,7 +721,7 @@
  	u32 mlo_setup_status;
  	struct completion mlo_teardown_done;
  	u32 mlo_teardown_status;
-@@ -798,6 +799,7 @@
+@@ -798,6 +800,7 @@
  
  struct ath12k_hw {
  	bool registered;
@@ -703,7 +729,7 @@
  	struct ieee80211_hw *hw;
  	struct device *dev;
  
-@@ -919,6 +921,13 @@
+@@ -919,6 +922,13 @@
  /* Holds info on the group of devices that are registered as a single
   * wiphy, protected with struct ath12k_hw_group::mutex.
   */
@@ -717,7 +743,7 @@
  struct ath12k_hw_group {
  	/* Keep dp_hw_grp as the first member to allow efficient
  	 * usage of cache lines for DP fields
-@@ -946,6 +955,13 @@
+@@ -946,6 +956,13 @@
  	u8 num_hw;
  	bool mlo_capable;
  	bool teardown_done;
@@ -731,7 +757,7 @@
  	struct device_node *wsi_node[ATH12K_MAX_DEVICES];
  	struct ath12k_mlo_memory mlo_mem;
  	bool hw_link_id_init_done;
-@@ -989,6 +1005,7 @@
+@@ -989,6 +1006,7 @@
  	struct ath12k_qmi qmi;
  	/* Protected by ag->mutex; set only after successful HIF power-up. */
  	bool soc_created;
@@ -739,7 +765,7 @@
  	/* Resource obligations, independent of group started/borrower refs. */
  	bool core_live;
  	bool pdev_live;
-@@ -1324,6 +1341,8 @@
+@@ -1324,6 +1342,8 @@
  int ath12k_core_qmi_firmware_ready(struct ath12k_base *ab);
  void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *ag);
  void ath12k_core_queue_reset(struct ath12k_base *ab);
@@ -843,7 +869,27 @@
  }
  EXPORT_SYMBOL(ath12k_mac_op_reconfig_complete);
  
-@@ -15062,8 +15057,11 @@
+@@ -14891,6 +14886,8 @@
+ static
+ void ath12k_mac_cleanup_iface_comb(const struct ieee80211_iface_combination *iface_comb)
+ {
++	if (!iface_comb)
++		return;
+ 	kfree(iface_comb[0].limits);
+ 	kfree(iface_comb);
+ }
+@@ -14910,6 +14907,10 @@
+ 	}
+ 
+ 	ath12k_mac_cleanup_iface_comb(wiphy->iface_combinations);
++	wiphy->radio = NULL;
++	wiphy->n_radio = 0;
++	wiphy->iface_combinations = NULL;
++	wiphy->n_iface_combinations = 0;
+ }
+ 
+ static int ath12k_mac_setup_iface_combinations(struct ath12k_hw *ah)
+@@ -15062,8 +15063,11 @@
  	idr_destroy(&ar->txmgmt_idr);
  
  	kfree(ar->mac.sbands[NL80211_BAND_2GHZ].channels);
@@ -855,19 +901,87 @@
  }
  
  static void ath12k_mac_hw_unregister(struct ath12k_hw *ah)
-@@ -15103,8 +15101,10 @@
- 	ret = ath12k_mac_setup_channels_rates(ar,
- 					      cap->supported_bands,
- 					      bands);
--	if (ret)
-+	if (ret) {
-+		ath12k_mac_cleanup_unregister(ar);
- 		return ret;
+@@ -15077,7 +15081,10 @@
+ 		ath12k_fw_stats_reset(ar);
+ 	}
+ 
+-	ieee80211_unregister_hw(hw);
++	if (ah->registered) {
++		ieee80211_unregister_hw(hw);
++		ah->registered = false;
 +	}
  
- 	ath12k_mac_setup_ht_vht_cap(ar, cap, ht_cap);
- 	ath12k_mac_setup_sband_iftype_data(ar, cap);
-@@ -15580,17 +15580,16 @@
+ 	for_each_ar(ah, ar, i)
+ 		ath12k_mac_cleanup_unregister(ar);
+@@ -15094,9 +15101,6 @@
+ 	struct ath12k_pdev_cap *cap = &ar->pdev->cap;
+ 	int ret;
+ 
+-	init_waitqueue_head(&ar->txmgmt_empty_waitq);
+-	idr_init(&ar->txmgmt_idr);
+-	spin_lock_init(&ar->txmgmt_idr_lock);
+ 
+ 	ath12k_pdev_caps_update(ar);
+ 
+@@ -15140,7 +15144,7 @@
+ 		WLAN_CIPHER_SUITE_GCMP_256,
+ 		WLAN_CIPHER_SUITE_CCMP_256,
+ 	};
+-	int ret, i, j;
++	int ret, i;
+ 	u32 ht_cap = U32_MAX, antennas_rx = 0, antennas_tx = 0;
+ 	bool is_6ghz = false, is_raw_mode = false, is_monitor_disable = false;
+ 	u8 *mac_addr = NULL;
+@@ -15373,6 +15377,7 @@
+ 		goto err_cleanup_if_combs;
+ 	}
+ 
++	ah->registered = true;
+ 	if (is_monitor_disable)
+ 		/* There's a race between calling ieee80211_register_hw()
+ 		 * and here where the monitor mode is enabled for a little
+@@ -15432,25 +15437,12 @@
+ 	return 0;
+ 
+ err_unregister_hw:
+-	for_each_ar(ah, ar, i)
+-		ath12k_debugfs_unregister(ar);
+-
+-	ieee80211_unregister_hw(hw);
+-
+ err_cleanup_if_combs:
+-	ath12k_mac_cleanup_iface_combinations(ah);
+-
+ err_complete_cleanup_unregister:
+-	i = ah->num_radio;
+-
+ err_cleanup_unregister:
+-	for (j = 0; j < i; j++) {
+-		ar = ath12k_ah_to_ar(ah, j);
+-		ath12k_mac_cleanup_unregister(ar);
+-	}
+-
+-	SET_IEEE80211_DEV(hw, NULL);
+-
++	/* All published ar, channel/IDR and successfully registered hw remain
++	 * owned by the group until close/drain has run outside these locks.
++	 */
+ 	return ret;
+ }
+ 
+@@ -15459,6 +15451,11 @@
+ 	struct ath12k_base *ab = ar->ab;
+ 	struct ath12k_pdev *pdev = ar->pdev;
+ 	u8 pdev_idx = ar->pdev_idx;
++
++	init_waitqueue_head(&ar->txmgmt_empty_waitq);
++	idr_init(&ar->txmgmt_idr);
++	spin_lock_init(&ar->txmgmt_idr_lock);
++	ath12k_fw_stats_init(ar);
+ 
+ 	ar->lmac_id = ath12k_hw_get_mac_from_pdev_id(ab->hw_params, pdev_idx);
+ 
+@@ -15580,17 +15577,16 @@
  
  	ath12k_dbg(ab, ATH12K_DBG_MAC, "mlo setup done for pdev %d\n", ar->pdev_idx);
  
@@ -887,7 +1001,7 @@
  
  	num_link = ath12k_get_num_partner_link(ar);
  
-@@ -15624,6 +15623,14 @@
+@@ -15624,6 +15620,14 @@
  		ah = ag->ah[i];
  		if (!ah)
  			continue;
@@ -902,7 +1016,7 @@
  
  		for_each_ar(ah, ar, j) {
  			ar = &ah->radio[j];
-@@ -15638,20 +15645,7 @@
+@@ -15638,20 +15642,7 @@
  	return 0;
  
  err_setup:
@@ -924,7 +1038,7 @@
  	return ret;
  }
  
-@@ -15672,6 +15666,11 @@
+@@ -15672,6 +15663,11 @@
  			continue;
  
  		for_each_ar(ah, ar, j) {
@@ -936,7 +1050,16 @@
  			WRITE_ONCE(ar->mlo_teardown_pending, false);
  			ret = __ath12k_mac_mlo_teardown(ar);
  			if (ret)
-@@ -15774,13 +15773,15 @@
+@@ -15721,7 +15717,7 @@
+ 
+ 	for (i = ag->num_hw - 1; i >= 0; i--) {
+ 		ah = ath12k_ag_to_ah(ag, i);
+-		if (!ah || !ah->registered)
++		if (!ah)
+ 			continue;
+ 		ath12k_mac_hw_unregister(ah);
+ 		ah->registered = false;
+@@ -15774,13 +15770,15 @@
  		ar->pdev = pdev;
  		ar->pdev_idx = pdev_idx;
  		ar->radio_idx = i;
@@ -953,7 +1076,7 @@
  	}
  
  	return ah;
-@@ -15802,7 +15803,9 @@
+@@ -15802,7 +15800,9 @@
  			pdev = &ab->pdevs[j];
  			if (!pdev->ar)
  				continue;
@@ -963,7 +1086,7 @@
  		}
  	}
  
-@@ -15921,15 +15924,9 @@
+@@ -15921,15 +15921,9 @@
  	return 0;
  
  err:

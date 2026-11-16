@@ -178,6 +178,14 @@ int main(void) {
         harness = (Path(__file__).parent / 'wireless_mlo_harness.c').read_text()
         self.compile_run(harness.replace('#include "mlo-functions.inc"', functions))
 
+    def test_mac_partial_channels_wait_for_group_owner_cleanup(self):
+        source = (Path(SOURCE) / 'drivers/net/wireless/ath/ath12k/mac.c').read_text()
+        functions = ''.join(declaration(source, name) for name in
+                            ('ath12k_mac_cleanup_unregister', 'ath12k_mac_hw_unregister',
+                             'ath12k_mac_setup_register'))
+        harness = (Path(__file__).parent / 'wireless_mac_resources_harness.c').read_text()
+        self.compile_run(harness.replace('#include "mac-resources-functions.inc"', functions))
+
 
 if __name__ == '__main__':
     unittest.main()
