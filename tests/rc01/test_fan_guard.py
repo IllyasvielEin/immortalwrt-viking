@@ -54,8 +54,8 @@ if [ -f "$TICKS/settle" ]; then
 	i=0
 	while [ $i -lt 300 ]; do
 		if "$BUSYBOX" grep -q "\"updated_uptime\":$up.00," "$RC01_FAN_STATE" 2>/dev/null && ! live_children; then
-			"$BUSYBOX" cp "$RC01_FAN_STATE" "$TICKS/snap.$n"
-			"$BUSYBOX" cp "$HW/pwm1" "$TICKS/pwm.$n"; break
+			"$BUSYBOX" env -u LD_PRELOAD "$BUSYBOX" cp "$RC01_FAN_STATE" "$TICKS/snap.$n"
+			"$BUSYBOX" env -u LD_PRELOAD "$BUSYBOX" cp "$HW/pwm1" "$TICKS/pwm.$n"; break
 		fi
 		"$BUSYBOX" usleep 10000; i=$((i + 1))
 	done
