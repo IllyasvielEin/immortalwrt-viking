@@ -17,6 +17,28 @@ BUSYBOX = os.environ.get("BUSYBOX") or shutil.which("busybox")
 DTC, FDTGET = shutil.which("dtc"), shutil.which("fdtget")
 
 
+# Expected map semantics shared with the ucode collector comparison.
+ENV_MAP_CASES = [
+    ("canonical", "/dev/mtd12 0x0 0x10000 0x20000 2", True),
+    ("bare-hex", "/dev/mtd12 0 10000 20000 2", True),
+    ("uppercase", "/dev/mtd12 0X0 0X10000 0X20000 0X2", True),
+    ("decimal-looking-size-is-hex", "/dev/mtd12 0 65536 131072 2", False),
+    ("wrong-device", "/dev/mtd13 0 0x10000 0x20000 2", False),
+    ("wrong-offset", "/dev/mtd12 1 0x10000 0x20000 2", False),
+    ("wrong-size", "/dev/mtd12 0 0x40000 0x20000 2", False),
+    ("wrong-erase", "/dev/mtd12 0 0x10000 0x40000 2", False),
+    ("wrong-range", "/dev/mtd12 0 0x10000 0x20000 3", False),
+    ("partial-number", "/dev/mtd12 0 0x10000junk 0x20000 2", False),
+    ("overflow-size", "/dev/mtd12 0 0x10000000000010000 0x20000 2", False),
+    ("overflow-offset", "/dev/mtd12 18446744073709551616 0x10000 0x20000 2", False),
+    ("attached-comment", "/dev/mtd12 0 0x10000 0x20000 2#comment", True),
+    ("comment-before-fields", "/dev/mtd12#comment 0 0x10000 0x20000 2", False),
+    ("missing-number", "/dev/mtd12 0 0x10000 0x20000", False),
+    ("redundant", "/dev/mtd12 0 0x10000 0x20000 2\n/dev/mtd12 0 0x10000 0x20000 2", False),
+    ("split-entry", "/dev/mtd12 0 0x10000\n0x20000 2", False),
+]
+
+
 class Runtime(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-runtime-test-")
@@ -33,8 +55,8 @@ class Runtime(unittest.TestCase):
         path.write_text(str(value) + "\n")
         return path
 
-    def shell(self, library, command):
-        return subprocess.run(["sh", "-c", f'. "{FILES / library}"; {command}'], env=self.env,
+    def shell(self, library, command, shell=None):
+        return subprocess.run((shell or ["sh"]) + ["-c", f'. "{FILES / library}"; {command}'], env=self.env,
                               capture_output=True, text=True)
 
     def fan(self):
@@ -62,12 +84,12 @@ class Runtime(unittest.TestCase):
         self.write("sys/class/ubi/ubi0_2/name", "rootfs_data")
         self.write("fw_env.config", "/dev/mtd12 0x0 0x10000 0x20000 2")
 
-    def preflight(self, crc=True):
+    def preflight(self, crc=True, shell=None):
         mock = '''fw_printenv() {
             [ "$FW_ENV_STRICT_CRC" = 1 ] || return 1
             case "$2" in machid) printf '8050301\\n';; config_name) return 1;; esac
         }; ''' if crc else 'fw_printenv() { return 1; }; '
-        return self.shell("rc01.sh", mock + "rc01_check_layout")
+        return self.shell("rc01.sh", mock + "rc01_check_layout", shell=shell)
 
     def test_fan_discovery_does_not_depend_on_bus_or_hwmon_number(self):
         self.fan()
@@ -101,6 +123,17 @@ class Runtime(unittest.TestCase):
         self.layout()
         result = self.preflight()
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_environment_map_comments_and_tool_numeric_semantics(self):
+        self.layout()
+        shells = [["sh"]] + ([[BUSYBOX, "sh"]] if BUSYBOX else [])
+        for name, entry, expected in ENV_MAP_CASES:
+            for comment in ("", " # verified map"):
+                for shell in shells:
+                    with self.subTest(case=name, comment=comment, shell=shell):
+                        self.write("fw_env.config", "# header\n\n" + entry + comment)
+                        result = self.preflight(shell=shell)
+                        self.assertEqual(result.returncode == 0, expected, result.stderr)
 
     def test_wrong_environment_size_is_rejected(self):
         self.layout(); self.write("fw_env.config", "/dev/mtd12 0x0 0x40000 0x20000 2")

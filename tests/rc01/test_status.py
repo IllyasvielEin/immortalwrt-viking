@@ -102,6 +102,23 @@ class Status(StatusFixture):
         self.assertIsNone(result["state"]["ports"][0]["speed_mbps"])
         self.assertFalse(result["state"]["storage"]["environment_crc_checked"])
 
+    def test_environment_map_agrees_with_shell_with_and_without_inline_comments(self):
+        from test_runtime import ENV_MAP_CASES, Runtime, BUSYBOX
+        runtime = Runtime()
+        runtime.setUp()
+        self.addCleanup(runtime.doCleanups)
+        runtime.layout()
+        for name, entry, expected in ENV_MAP_CASES:
+            for comment in ("", " # verified map"):
+                with self.subTest(case=name, comment=comment):
+                    mapping = "# header\n\n" + entry + comment
+                    self.write("etc/fw_env.config", mapping)
+                    runtime.write("fw_env.config", mapping)
+                    collected = self.levels(self.run_status())["environment-map"] != "error"
+                    shell = runtime.preflight(shell=[BUSYBOX, "sh"] if BUSYBOX else None)
+                    self.assertEqual(collected, expected)
+                    self.assertEqual(shell.returncode == 0, collected, shell.stderr)
+
     def test_wrong_environment_length_fails(self):
         self.write("etc/fw_env.config", "/dev/mtd12 0 0x40000 0x20000 2")
         self.assertEqual(self.levels(self.run_status())["environment-map"], "error")

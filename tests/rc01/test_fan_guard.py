@@ -1,5 +1,7 @@
-"""Trace rc01-fan-guard protection I/O on fresh fixtures and check its status export.
+"""Check rc01-fan-guard decisions and trace protection I/O on fresh fixtures.
 
+FanGuardBehavior uses PWM and status snapshots without a compiler. The
+separate FanGuardTrace class builds its C preload tracer in setUpClass.
 The guard runs under BusyBox ash with PATH limited to a stub directory, so a
 missing stub never falls back to a host tool. An LD_PRELOAD tracer records
 sysfs reads and every PWM write together with the writing process, so the
@@ -52,7 +54,8 @@ if [ -f "$TICKS/settle" ]; then
 	i=0
 	while [ $i -lt 300 ]; do
 		if "$BUSYBOX" grep -q "\"updated_uptime\":$up.00," "$RC01_FAN_STATE" 2>/dev/null && ! live_children; then
-			"$BUSYBOX" cp "$RC01_FAN_STATE" "$TICKS/snap.$n"; break
+			"$BUSYBOX" cp "$RC01_FAN_STATE" "$TICKS/snap.$n"
+			"$BUSYBOX" cp "$HW/pwm1" "$TICKS/pwm.$n"; break
 		fi
 		"$BUSYBOX" usleep 10000; i=$((i + 1))
 	done
@@ -83,8 +86,9 @@ SCENARIOS = {
     "one-two-failures-then-success-clears": dict(ticks={2: RPM0, 4: RPM_OK, 5: RPM0, 7: RPM_OK}, last=8),
     "third-failure-latches-and-recovery-keeps-it": dict(ticks={2: RPM0, 5: RPM_OK}, last=6),
     "over-temperature-boundary": dict(ticks={2: temp(74999), 3: temp(75000), 4: temp(45000)}, last=4),
-    "startup-at-threshold-writes-floor-first": dict(setup=temp(75000), last=2),
-    "hot-with-invalid-rpm-counts-failure": dict(ticks={2: temp(80000) + "; echo x > \"$HW/fan1_input\""}, last=3),
+    "startup-at-threshold-keeps-full-speed": dict(setup=temp(75000), last=2),
+    "startup-hot-invalid-rpm": dict(setup=temp(80000) + "; " + RPM0, last=2),
+    "hot-with-invalid-rpm-latches": dict(ticks={2: temp(80000) + "; echo x > \"$HW/fan1_input\""}, last=3),
     "latched-startup-then-failures": dict(setup=RPM0, last=4),
     "controller-missing": dict(setup='"$BUSYBOX" rm -r "$RC01_SYSFS/class/hwmon/hwmon8"', last=2),
     "controller-ambiguous": dict(setup='"$BUSYBOX" mkdir -p "$RC01_SYSFS/class/hwmon/hwmon9" && echo emc2305 > '
@@ -125,33 +129,9 @@ REASONS = [
 ]
 
 
-@unittest.skipUnless(BUSYBOX and CC and os.geteuid() != 0, "BusyBox, a host C compiler and a non-root user are required")
-class FanGuardTrace(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # Ash builtins can bypass PATH even with standalone/applets disabled.
-        with tempfile.TemporaryDirectory(prefix="rc01-fan-path-probe-") as directory:
-            for name in ("sleep", "mv"):
-                stub = Path(directory) / name
-                stub.write_text(f"#!{BUSYBOX} sh\nprintf 'fixture-{name}\\n'\n")
-                stub.chmod(0o755)
-            result = subprocess.run(
-                [BUSYBOX, "sh", "-c", 'sleep 0; mv "$1" "$2"', "probe",
-                 str(Path(directory) / "from"), str(Path(directory) / "to")],
-                env={"PATH": directory}, capture_output=True, text=True, timeout=5)
-            if result.returncode or result.stdout.splitlines() != ["fixture-sleep", "fixture-mv"]:
-                raise AssertionError(
-                    "BusyBox must execute PATH sleep/mv fixtures; use "
-                    "scripts/rc01-verify-inputs.sh --busybox-only. "
-                    f"stdout={result.stdout!r}, stderr={result.stderr!r}")
-        cls.build = tempfile.TemporaryDirectory(prefix="rc01-fan-trace-build-")
-        cls.preload = Path(cls.build.name) / "trace.so"
-        subprocess.run([CC, "-shared", "-fPIC", "-O2", "-o", str(cls.preload),
-                        str(Path(__file__).with_name("fan_trace_preload.c")), "-ldl"], check=True)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.build.cleanup()
+class FanGuardFixture(unittest.TestCase):
+    """Shared shell fixtures; no compiler or preload required."""
+    preload = None
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="rc01-fan-guard-test-")
@@ -249,7 +229,7 @@ class FanGuardTrace(unittest.TestCase):
         wrapper = (f'"$BUSYBOX" mkdir -p "$RC01_PROC/$$" && '
                    f'printf "%s (rc01-fan-guard) S 1 {stat_tail}\\n" "$$" > "$RC01_PROC/$$/stat"; . "$1"')
         process = subprocess.Popen([BUSYBOX, "sh", "-c", wrapper, "rc01-fan-guard", str(guard)],
-                                   env=self.env | {"LD_PRELOAD": str(self.preload)},
+                                   env=self.env | ({"LD_PRELOAD": str(self.preload)} if self.preload else {}),
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                    start_new_session=True)
         self.guard_groups.add(process.pid)
@@ -296,6 +276,35 @@ class FanGuardTrace(unittest.TestCase):
         result = subprocess.run([UCODE, "-"], input=script, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
+
+
+@unittest.skipUnless(BUSYBOX and CC and os.geteuid() != 0, "BusyBox, a host C compiler and a non-root user are required")
+class FanGuardTrace(FanGuardFixture):
+    @classmethod
+    def setUpClass(cls):
+        # Ash builtins can bypass PATH even with standalone/applets disabled.
+        with tempfile.TemporaryDirectory(prefix="rc01-fan-path-probe-") as directory:
+            for name in ("sleep", "mv"):
+                stub = Path(directory) / name
+                stub.write_text(f"#!{BUSYBOX} sh\nprintf 'fixture-{name}\\n'\n")
+                stub.chmod(0o755)
+            result = subprocess.run(
+                [BUSYBOX, "sh", "-c", 'sleep 0; mv "$1" "$2"', "probe",
+                 str(Path(directory) / "from"), str(Path(directory) / "to")],
+                env={"PATH": directory}, capture_output=True, text=True, timeout=5)
+            if result.returncode or result.stdout.splitlines() != ["fixture-sleep", "fixture-mv"]:
+                raise AssertionError(
+                    "BusyBox must execute PATH sleep/mv fixtures; use "
+                    "scripts/rc01-verify-inputs.sh --busybox-only. "
+                    f"stdout={result.stdout!r}, stderr={result.stderr!r}")
+        cls.build = tempfile.TemporaryDirectory(prefix="rc01-fan-trace-build-")
+        cls.preload = Path(cls.build.name) / "trace.so"
+        subprocess.run([CC, "-shared", "-fPIC", "-O2", "-o", str(cls.preload),
+                        str(Path(__file__).with_name("fan_trace_preload.c")), "-ldl"], check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.build.cleanup()
 
     # --- protection behaviour -------------------------------------------------
 
@@ -352,7 +361,7 @@ class FanGuardTrace(unittest.TestCase):
         self.assertEqual([self.record(f"snap.{n}")["failures"] for n in range(3, 9)], [1, 2, 0, 1, 2, 0])
         self.assertFalse(self.record()["latched"])
 
-    def test_over_temperature_boundary_latches_on_valid_sample_only(self):
+    def test_over_temperature_latches_even_with_invalid_rpm(self):
         code, events = self.run_guard(SCENARIOS["over-temperature-boundary"])
         self.assertEqual(self.actions(events), [
             ("pwm", "255"), ("sleep", "3"), ("pwm", "77"), ("sleep", "2"), ("sleep", "2"), ("pwm", "255"),
@@ -360,11 +369,19 @@ class FanGuardTrace(unittest.TestCase):
             ("pwm", "255")])
         self.assertEqual(self.record("snap.4")["latch_reason"], "over-temperature")
         self.assertEqual(self.record("snap.5")["latched"], True)
-        code, events = self.run_guard_fresh(SCENARIOS["startup-at-threshold-writes-floor-first"])
-        self.assertEqual(self.actions(events)[:5], [("pwm", "255"), ("sleep", "3"), ("pwm", "77"), ("sleep", "2"),
-                                                    ("pwm", "255")])
-        code, events = self.run_guard_fresh(SCENARIOS["hot-with-invalid-rpm-counts-failure"])
-        self.assertEqual([e for e in self.actions(events) if e[0] == "pwm"], [("pwm", "255"), ("pwm", "77"), ("pwm", "255")])
+        code, events = self.run_guard_fresh(SCENARIOS["startup-at-threshold-keeps-full-speed"])
+        self.assertEqual(self.actions(events), [("pwm", "255"), ("sleep", "3"),
+            ("logger", "Temperature exceeds 75 C; full-speed floor latched"),
+            ("sleep", "2"), ("sleep", "2"), ("pwm", "255")])
+        self.assertEqual(self.record("snap.2")["latch_reason"], "over-temperature")
+        code, events = self.run_guard_fresh(SCENARIOS["startup-hot-invalid-rpm"])
+        self.assertEqual(self.actions(events), [("pwm", "255"), ("sleep", "3"),
+            ("logger", "Startup health check failed; full-speed floor latched"),
+            ("sleep", "2"), ("sleep", "2"), ("pwm", "255")])
+        self.assertEqual(self.record("snap.2")["latch_reason"], "over-temperature")
+        code, events = self.run_guard_fresh(SCENARIOS["hot-with-invalid-rpm-latches"])
+        self.assertEqual([e for e in self.actions(events) if e[0] == "pwm"], [("pwm", "255"), ("pwm", "77"), ("pwm", "255"), ("pwm", "255")])
+        self.assertEqual(self.record("snap.3")["latch_reason"], "over-temperature")
         self.assertEqual((self.record("snap.3")["failures"], self.record("snap.3")["sample_reason"]), (1, "rpm-invalid"))
 
     def run_guard_fresh(self, scenario):
@@ -380,7 +397,8 @@ class FanGuardTrace(unittest.TestCase):
                 self.run_guard_fresh(dict(ticks={1: script} if script else {}, last=1))
                 startup = self.record("snap.2")
                 self.assertEqual(startup["sample_reason"], reason)
-                self.assertEqual(startup["latch_reason"], None if reason == "ok" else f"startup:{reason}")
+                expected = "over-temperature" if script == temp(130000) else None if reason == "ok" else f"startup:{reason}"
+                self.assertEqual(startup["latch_reason"], expected)
 
     def test_discovery_failure_never_touches_pwm(self):
         for name in ("controller-missing", "controller-ambiguous"):
@@ -473,8 +491,10 @@ class FanGuardTrace(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="rc01-fan-baseline-") as directory:
             old = Path(directory) / "rc01-fan-guard"
             old.write_bytes(baseline.stdout)
-            cases = [(name, s) for name, s in SCENARIOS.items()] + [
-                (f"reason:{script}", dict(ticks={1: script} if script else {}, last=4)) for script, _ in REASONS]
+            # These intentionally change protection actions relative to the old guard.
+            changed = {"startup-at-threshold-keeps-full-speed", "startup-hot-invalid-rpm", "hot-with-invalid-rpm-latches"}
+            cases = [(name, s) for name, s in SCENARIOS.items() if name not in changed] + [
+                (f"reason:{script}", dict(ticks={1: script} if script else {}, last=4)) for script, _ in REASONS if script != temp(130000)]
             for name, scenario in cases:
                 with self.subTest(name=name):
                     self.wait_for_guard_processes(self.guard_groups)
@@ -640,3 +660,58 @@ class FanGuardTrace(unittest.TestCase):
         result = subprocess.run([BUSYBOX, "sh", "-c", "command -v logger || echo missing"], env=self.env,
                                 capture_output=True, text=True)
         self.assertEqual(result.stdout.strip(), "missing")
+
+
+@unittest.skipUnless(BUSYBOX, "BusyBox is required")
+class FanGuardBehavior(FanGuardFixture):
+    """Protection decisions observed before EXIT, without the C tracer."""
+    def check_scenario(self, scenario):
+        guard = Path(os.environ.get("RC01_FAN_TEST_GUARD", str(GUARD)))
+        code, _ = self.run_guard(scenario, guard=guard)
+        self.assertEqual(code, 0, self.stderr)
+        self.assertEqual(Path(self.env["HW"], "pwm1").read_text().strip(), "255")
+        return self.record()
+
+    def pwm(self, tick):
+        return int((self.ticks / f"pwm.{tick}").read_text())
+
+    def test_startup_hot_keeps_full_speed_and_latches_through_cooling(self):
+        self.check_scenario(dict(setup=temp(75000), ticks={2: temp(45000)}, last=3))
+        self.assertEqual([self.pwm(n) for n in (1, 2, 3, 4)], [255] * 4)
+        for n in (2, 3, 4):
+            self.assertEqual((self.record(f"snap.{n}")["latched"],
+                              self.record(f"snap.{n}")["latch_reason"]), (True, "over-temperature"))
+
+    def test_startup_hot_with_bad_rpm_prioritizes_temperature(self):
+        self.check_scenario(dict(setup=temp(80000) + "; " + RPM0, last=1))
+        self.assertEqual((self.pwm(2), self.record("snap.2")["sample_reason"],
+                          self.record("snap.2")["latch_reason"]), (255, "rpm-zero", "over-temperature"))
+
+    def test_hot_invalid_rpm_then_recovery_keeps_temperature_latch(self):
+        self.check_scenario(dict(ticks={2: temp(80000) + '; echo x > "$HW/fan1_input"',
+                                        3: temp(45000) + "; " + RPM_OK}, last=4))
+        hot, cool = self.record("snap.3"), self.record("snap.4")
+        self.assertEqual((self.pwm(2), self.pwm(3), self.pwm(4)), (77, 255, 255))
+        self.assertEqual((hot["sample_reason"], hot["failures"], hot["latch_reason"]),
+                         ("rpm-invalid", 1, "over-temperature"))
+        self.assertEqual((cool["sample_reason"], cool["failures"], cool["latched"], cool["latch_reason"]),
+                         ("ok", 0, True, "over-temperature"))
+
+    def test_temperature_beats_third_failure_even_with_invalid_pwm(self):
+        self.check_scenario(dict(ticks={2: RPM0, 4: temp(75000) + '; echo x > "$HW/pwm1"',
+                                        5: temp(45000) + "; " + RPM_OK}, last=5))
+        hot = self.record("snap.5")
+        self.assertEqual((hot["failures"], hot["sample_reason"], hot["latch_reason"], self.pwm(5)),
+                         (3, "pwm-invalid", "over-temperature", 255))
+        self.assertEqual((self.record("snap.6")["latch_reason"], self.pwm(6)), ("over-temperature", 255))
+
+    def test_normal_startup_returns_to_floor(self):
+        final = self.check_scenario(SCENARIOS["normal"])
+        self.assertEqual((self.pwm(1), self.pwm(2), self.pwm(3)), (255, 77, 77))
+        self.assertFalse(final["latched"])
+
+    def test_three_failures_latch_and_recovery_does_not_release(self):
+        final = self.check_scenario(SCENARIOS["third-failure-latches-and-recovery-keeps-it"])
+        self.assertEqual([self.pwm(n) for n in (3, 4, 5, 6, 7)], [77, 77, 255, 255, 255])
+        self.assertEqual([self.record(f"snap.{n}")["failures"] for n in (3, 4, 5, 6, 7)], [1, 2, 3, 0, 0])
+        self.assertEqual((final["latched"], final["latch_reason"]), (True, "consecutive-failures:rpm-zero"))

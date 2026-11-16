@@ -135,27 +135,37 @@ rc01_fan_main() {
 	sleep 3
 	if rc01_fan_sample; then
 		RC01_FAN_SAMPLE_PENDING=1
-		rc01_fan_pwm "$RC01_MIN_PWM" || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
+		if [ "$RC01_FAN_TEMP" -ge 75000 ]; then
+			latched=1 RC01_FAN_LATCH=over-temperature
+			logger -p daemon.err -t rc01-fan 'Temperature exceeds 75 C; full-speed floor latched'
+		else
+			rc01_fan_pwm "$RC01_MIN_PWM" || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
+		fi
 	else
 		RC01_FAN_SAMPLE_PENDING=1
 		latched=1 RC01_FAN_LATCH="startup:$RC01_FAN_REASON"
+		if [ "$RC01_FAN_TEMP" -ge 75000 ]; then
+			RC01_FAN_LATCH=over-temperature
+		fi
 		logger -p daemon.err -t rc01-fan 'Startup health check failed; full-speed floor latched'
 	fi
 	rc01_fan_report monitoring 1
 	RC01_FAN_EVENT=sample
 	while sleep 2; do
 		if rc01_fan_sample; then
-			RC01_FAN_SAMPLE_PENDING=1
 			failures=0
-			if [ "$RC01_FAN_TEMP" -ge 75000 ] && [ "$latched" -eq 0 ]; then
+		else
+			failures=$((failures + 1))
+		fi
+		RC01_FAN_SAMPLE_PENDING=1
+		# A valid temperature still protects us when RPM/PWM/fault is bad.
+		# Keep the first latch until restart; temperature wins on this sample.
+		if [ "$latched" -eq 0 ]; then
+			if [ "$RC01_FAN_TEMP" -ge 75000 ]; then
 				latched=1 RC01_FAN_LATCH=over-temperature
 				rc01_fan_pwm 255 || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 				logger -p daemon.err -t rc01-fan 'Temperature exceeds 75 C; full-speed floor latched'
-			fi
-		else
-			RC01_FAN_SAMPLE_PENDING=1
-			failures=$((failures + 1))
-			if [ "$failures" -ge 3 ] && [ "$latched" -eq 0 ]; then
+			elif [ "$failures" -ge 3 ]; then
 				latched=1 RC01_FAN_LATCH="consecutive-failures:$RC01_FAN_REASON"
 				rc01_fan_pwm 255 || { RC01_FAN_EVENT=pwm-write-failed; return 1; }
 				logger -p daemon.err -t rc01-fan 'Fan or thermal readings failed; full-speed floor latched'

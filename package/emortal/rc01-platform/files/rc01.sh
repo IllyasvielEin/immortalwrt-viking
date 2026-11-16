@@ -62,20 +62,35 @@ EOF
 		[ "$(cat "$RC01_SYSFS/class/ubi/ubi0_2/name" 2>/dev/null)" = rootfs_data ] || {
 		rc01_fail 'expected kernel/rootfs at UBI0 volume IDs 0/1'; return 1
 	}
-	map="$(awk 'NF && $1 !~ /^#/ { print }' "$RC01_ENV_CONFIG")"
+	# fw_env.c get_config() ignores trailing text after its five fields.
+	# Keep our stricter single-entry contract, allowing trailing # comments.
+	map="$(awk '{ sub(/#.*/, ""); if (NF) { count++; print } }
+		END { if (count != 1) exit 1 }' "$RC01_ENV_CONFIG")" || {
+		rc01_fail 'environment map must contain one non-redundant entry resolved by partition name'
+		return 1
+	}
 	set -- $map
 	[ "$#" -eq 5 ] && [ "$1" = "/dev/mtd$env" ] || {
 		rc01_fail 'environment map must contain one non-redundant entry resolved by partition name'
 		return 1
 	}
 	shift
+	# U-Boot v2026.10: sscanf("%ms %lli %lx %lx %lx"). Offset has
+	# automatic base; size, erase size and sector count are hexadecimal,
+	# including when no 0x prefix is present. Require zero offset and full
+	# 64-bit hex fields; never let shell arithmetic wrap an oversized field.
+	echo "$1" | grep -Eq '^(0[xX]0+|0)$' || {
+		rc01_fail 'invalid numeric field in environment map'; return 1
+	}
+	offset="$1"
+	shift
 	for value in "$@"; do
-		echo "$value" | grep -Eq '^(0[xX][0-9a-fA-F]+|0|[1-9][0-9]*)$' || {
+		echo "$value" | grep -Eq '^(0[xX])?[0-9a-fA-F]{1,16}$' || {
 			rc01_fail 'invalid numeric field in environment map'; return 1
 		}
 	done
-	[ "$(($1))" -eq 0 ] && [ "$(($2))" -eq "$RC01_ENV_BYTES" ] &&
-		[ "$(($3))" -eq "$RC01_ENV_ERASE" ] && [ "$(($4))" -eq "$RC01_ENV_RANGE" ] || {
+	[ "$((offset))" -eq 0 ] && [ "$((0x${1#0[xX]}))" -eq "$RC01_ENV_BYTES" ] &&
+		[ "$((0x${2#0[xX]}))" -eq "$RC01_ENV_ERASE" ] && [ "$((0x${3#0[xX]}))" -eq "$RC01_ENV_RANGE" ] || {
 		rc01_fail 'environment map must use offset 0, size 64 KiB, erase 128 KiB, range 2 sectors'
 		return 1
 	}

@@ -387,6 +387,14 @@ function partition(records, wanted) {
 	return length(found) == 1 ? found[0].info : null;
 }
 
+// fw_env.c get_config() uses %lli for offset and %lx for the remaining
+// numeric fields, with or without a 0x prefix. Require complete 64-bit
+// fields so oversized input cannot wrap to the expected geometry.
+function environment_hex(value) {
+	return type(value) == 'string' && match(value, /^(0[xX])?[0-9a-fA-F]{1,16}$/)
+		? int(value, 16) : null;
+}
+
 function environment_map(root, env, contract) {
 	let entries = [];
 	for (let line in split(readfile(root + '/etc/fw_env.config') || '', '\n')) {
@@ -395,8 +403,8 @@ function environment_map(root, env, contract) {
 	}
 	let fields = length(entries) == 1 ? entries[0] : [];
 	return env != null && contract != null && length(fields) == 5 && fields[0] == env.device &&
-		number(fields[1]) == 0 && number(fields[2]) == contract.environment?.bytes &&
-		number(fields[3]) == contract.environment?.erase_bytes && number(fields[4]) == contract.environment?.range_blocks;
+		match(fields[1], /^(0[xX]0+|0)$/) != null && environment_hex(fields[2]) == contract.environment?.bytes &&
+		environment_hex(fields[3]) == contract.environment?.erase_bytes && environment_hex(fields[4]) == contract.environment?.range_blocks;
 }
 
 function layout_contract(root) {
