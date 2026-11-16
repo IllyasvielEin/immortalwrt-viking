@@ -49,6 +49,24 @@ class WorkflowConfiguration(unittest.TestCase):
         self.assertIn("default: latest",workflow)
 
 
+class ReviewedBuildLock(unittest.TestCase):
+    def test_current_tree_baseline_validates_and_platform_drift_is_rejected(self):
+        lock = json.loads((ROOT / "config/rc01/software-baselines/locks/with-dae.json").read_text())
+        self.assertEqual(lock["mode"], "locked")
+        self.assertIs(lock["prepared"], True)
+        self.assertIs(lock["with_dae"], True)
+        sources.validate_lock(lock)
+        for change in ("content", "removed-input"):
+            altered = copy.deepcopy(lock)
+            if change == "content":
+                name = next(iter(altered["platform_inputs"]))
+                altered["platform_inputs"][name] = "0" * 64
+            else:
+                altered["platform_inputs"]["config/rc01/upstream-audit/removed-metadata.json"] = "a" * 64
+            with self.subTest(change=change), self.assertRaisesRegex(sources.SourceError, "different reviewed platform inputs"):
+                sources.validate_lock(altered)
+
+
 class ReleasePolicy(unittest.TestCase):
     def api(self, path):
         if path.endswith("/releases/latest"):
@@ -603,15 +621,14 @@ class RecipeClosure(unittest.TestCase):
                 path.chmod(0o644)
         return pinned
 
-    def test_locked_finish_derives_go_inputs_exact_patches_and_replay_provenance_offline(self):
+    def test_locked_prepare_derives_go_inputs_exact_patches_and_replay_provenance_offline(self):
         pinned = self.locked_fixture()
         expected = copy.deepcopy(self.lock)
         with mock.patch.object(sources, "api", side_effect=AssertionError("locked queried latest")), mock.patch.object(sources, "download", side_effect=AssertionError("locked fetched source")):
             sources.locked_sources(expected)
-            sources.apply_outputs(expected)
-            with mock.patch.object(sources, "load_lock", return_value=self.lock), mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"):
-                sources.write_preparation_phase(self.lock, "locked-pending")
-                sources.finish_locked()
+            with mock.patch.object(sources, "load_lock", return_value=self.lock), mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"), mock.patch.object(sources, "ensure_baseline_objects"):
+                sources.write_preparation_phase(self.lock, "planned")
+                sources.prepare()
             saved = json.loads((self.root / ".rc01-sources/lock.json").read_text())
             self.assertTrue(saved["prepared"])
             self.assertEqual(saved["go"]["version"], "1.27.3")
@@ -622,28 +639,53 @@ class RecipeClosure(unittest.TestCase):
             self.assertEqual(saved["outputs"], expected["outputs"])
             self.assertEqual(saved["optional_dae"], pinned)
             saved["replay"] = True
-            with mock.patch.object(sources, "load_lock", return_value=saved), mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"):
-                sources.write_preparation_phase(saved, "locked-pending")
-                sources.finish_locked()
+            with mock.patch.object(sources, "load_lock", return_value=saved), mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"), mock.patch.object(sources, "ensure_baseline_objects"):
+                sources.write_preparation_phase(saved, "planned")
+                sources.prepare()
                 for key in ("go", "package_manifest", "optional_dae"):
                     altered = copy.deepcopy(saved)
                     altered[key]["unverified_fact"] = "external lock"
-                    sources.write_preparation_phase(altered, "locked-pending")
+                    sources.write_preparation_phase(altered, "planned")
                     with self.subTest(field=key), mock.patch.object(sources, "load_lock", return_value=altered), self.assertRaisesRegex(sources.SourceError, "locked replay "+key+" differ"):
-                        sources.finish_locked()
+                        sources.prepare()
 
-    def test_completed_finish_and_prepare_preserve_user_chmod_and_all_peers(self):
+    def test_locked_prepare_refuses_output_drift_before_writing_any_peer(self):
         for with_dae in (False, True):
             with self.subTest(with_dae=with_dae):
                 self.locked_fixture(with_dae)
                 expected = copy.deepcopy(self.lock)
                 sources.locked_sources(expected)
-                sources.apply_outputs(expected)
+                target = self.root / next(reversed(expected["outputs"]))
+                original = target.read_bytes() if target.exists() else None
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"local customization outside patch context\n")
+                sources.write_json(sources.STATE / "lock.json", self.lock)
+                sources.write_preparation_phase(self.lock, "planned")
+                paths = [self.root / name for name in expected["outputs"]]
+                paths += [sources.STATE / "lock.json", sources.STATE / "preparation.json"]
+                before = {path: sources.file_snapshot(path) for path in paths}
+                with mock.patch.object(sources, "load_lock", return_value=self.lock), \
+                     mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
+                     mock.patch.object(sources, "verify_feeds"), \
+                     mock.patch.object(sources, "generated_feed_changes"), \
+                     mock.patch.object(sources, "ensure_baseline_objects"), \
+                     self.assertRaisesRegex(sources.SourceError, "pre/postimage drift"):
+                    sources.prepare()
+                self.assertEqual({path: sources.file_snapshot(path) for path in paths}, before)
+                if original is None:
+                    target.unlink()
+                else:
+                    target.write_bytes(original)
+
+    def test_completed_prepare_preserves_user_chmod_and_all_peers(self):
+        for with_dae in (False, True):
+            with self.subTest(with_dae=with_dae):
+                self.locked_fixture(with_dae)
                 with mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
-                     mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"):
+                     mock.patch.object(sources, "verify_feeds"), mock.patch.object(sources, "generated_feed_changes"), mock.patch.object(sources, "ensure_baseline_objects"):
                     with mock.patch.object(sources, "load_lock", return_value=self.lock):
-                        sources.write_preparation_phase(self.lock, "locked-pending")
-                        sources.finish_locked()
+                        sources.write_preparation_phase(self.lock, "planned")
+                        sources.prepare()
                     saved = json.loads((self.root / ".rc01-sources/lock.json").read_text())
                     target = self.root / "feeds/packages/lang/golang/golang-compiler.mk"
                     lock_path = self.root / ".rc01-sources/lock.json"
@@ -655,7 +697,7 @@ class RecipeClosure(unittest.TestCase):
                         if phase == "complete": sources.write_preparation_phase(saved, "complete")
                         else: phase_path.unlink()
                         for mode in (0o755, 0o444, 0o4644, 0o2644, 0o1644):
-                            for action in (sources.verify, sources.finish_locked, sources.prepare):
+                            for action in (sources.verify, sources.prepare):
                                 with self.subTest(phase=phase, mode=oct(mode), action=action.__name__):
                                     target.chmod(mode)
                                     before = snapshot()
@@ -666,7 +708,6 @@ class RecipeClosure(unittest.TestCase):
                         before = snapshot()
                         with mock.patch.object(sources, "load_lock", return_value=saved):
                             sources.verify()
-                            sources.finish_locked()
                             sources.prepare()
                         self.assertEqual(snapshot(), before)
 

@@ -52,6 +52,13 @@ APPSBLENV 分区为 512 KiB，擦除块 128 KiB，环境工具搜索范围为两
 `locked` 使用仓库审核基线。每次构建记录 `.rc01-sources/lock.json`，
 产物附带软件来源锁、feeds 锁、配置及 package manifest。
 
+来源准备职责集中在 `rc01-software-sources.py`：`plan` 固定 feeds、平台输入、变体和构建时间，
+`prepare` 从固定对象推导并校验配方后统一写入，`verify` 检查已准备来源。
+锁定模式直接使用同一推导和写入路径，不再由 shell 先应用补丁再重建校验。
+`prepare-rc01.sh` 负责更新和安装 feeds、合并配置并执行配置检查；
+CI 负责选择 bootstrap、下载重放锁、缓存和发布校验。
+`rc01-source-metadata.py` 在构建后再次核验来源锁并记录实际配方及产物元数据。
+
 本地安装项目要求的 OpenWrt 主机依赖后执行：
 
 ```sh
@@ -91,6 +98,16 @@ RC01_REPLAY_LOCK=/tmp/rc01-source-lock/lock.json sh scripts/prepare-rc01.sh
 
 Actions 的 `replay_run_id` 用于重放已保存来源锁；重放仍核验平台输入、软件变体、
 feed commit、归档和配方摘要。生成目录 `.rc01-sources/` 不提交版本控制。
+仓库的 `config/rc01/software-baselines/locks/with-dae.json` 是当前平台输入、固定 feeds 和
+审核配方生成的完整锁定来源基线（包含 dae，尚无对应固件构建验收）。本地重放：
+
+```sh
+RC01_WITH_DAE=true RC01_REPLAY_LOCK=config/rc01/software-baselines/locks/with-dae.json sh scripts/prepare-rc01.sh
+```
+
+平台输入有意变更后，旧锁仍须拒绝；先以 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=true`
+运行准备入口，核验新锁并审核差异，再更新该基线。不要只修改平台摘要使旧锁通过。
+不含 dae 的本地锁使用 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=false` 独立生成。
 准备脚本重建 feeds 链接、`feeds.conf`、`.config` 和 RC01 的 `files` 覆盖文件；
 源配置放在 `defconfig/qualcommbe-rc01.config` 与 `config/rc01/`。
 
