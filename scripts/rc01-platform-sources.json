@@ -51,9 +51,11 @@
     {
       "id": "RC01-PCS",
       "paths": [
-        "target/linux/qualcommbe/patches-6.18/0313-net-pcs-ipq9574-modes-and-bringup.patch"
+        "target/linux/qualcommbe/patches-6.18/0313-net-pcs-ipq9574-modes-and-bringup.patch",
+        "target/linux/qualcommbe/patches-6.18/0324-arm64-dts-qcom-ipq9574-add-PCS-uniphy-nodes.patch",
+        "target/linux/qualcommbe/patches-6.18/0356-02-arm64-dts-qcom-ipq9574-describe-remaining-uniphy-resets.patch"
       ],
-      "reason": "独立时钟值、失败重试、复位错误和成对MII所有权",
+      "reason": "独立时钟值、失败重试、复位错误和成对MII所有权；必需index-zero XPCS reset、legacy单项/具名三项binding与PCS1节点名",
       "exit_condition": "上游包含等价失败态契约且故障注入通过"
     },
     {
