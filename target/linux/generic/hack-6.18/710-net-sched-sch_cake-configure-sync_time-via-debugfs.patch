@@ -51,7 +51,7 @@ Signed-off-by: Jonas Köppeler <j.koeppeler@tu-berlin.de>
 +	if (ret) {
  		unregister_qdisc(&cake_qdisc_ops);
 +	} else {
-+		struct dentry *cake_mq_debugfs = debugfs_create_dir("cake_mq", NULL);
++		cake_mq_debugfs = debugfs_create_dir("cake_mq", NULL);
 +
 +		debugfs_create_u64("sync_time_ns", 0644, cake_mq_debugfs, &g_sync_time_ns);
 +	}
