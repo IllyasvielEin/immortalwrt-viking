@@ -207,10 +207,11 @@ class BuildLock(unittest.TestCase):
         self.assertEqual({x["commit"] for x in resolved.values()}, {"a"*40})
 
     def test_single_application_plan_pins_feeds_and_refuses_replay_override(self):
-        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1", "RC01_WITH_DAE": "false"}), \
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1", "RC01_WITH_DAE": "false",
+                                          "RC01_APP": "", "RC01_REPLAY_LOCK": ""}), \
              mock.patch.object(sources, "run", return_value="e"*40), \
              mock.patch.object(sources, "api", side_effect=AssertionError("queried feed latest")), \
-             mock.patch("sys.argv", ["rc01-software-sources.py", "plan", "--app", "mihomo=1.2.3"]):
+             mock.patch("sys.argv", ["rc01-software-sources.py", "plan", "--mode", "latest", "--app", "mihomo=1.2.3"]):
             self.assertEqual(sources.main(), 0)
             lock = sources.load_lock()
             self.assertEqual(lock["application_selection"], {"mihomo": "v1.2.3"})
@@ -281,16 +282,30 @@ class BuildLock(unittest.TestCase):
         self.assertFalse((state / "dae-sources.json").exists())
         self.assertFalse((state / "dae.patch").exists())
 
+    def mock_go_adapter(self, lock):
+        lock["inputs"] = {}
+        lock["outputs"] = {}
+        lock["go"] = {"version": "1.27.3"}
+        recipe = self.root / "feeds/packages/lang/golang/golang1.27/Makefile"
+        recipe.parent.mkdir(parents=True, exist_ok=True)
+        recipe.write_text("GO_VERSION_MAJOR_MINOR:=1.27\nGO_VERSION_PATCH:=3\n")
+
+    def test_mock_go_recipe_matches_record_and_rejects_version_drift(self):
+        self.mock_go_adapter(self.lock)
+        self.lock["prepared"] = True
+        with mock.patch.object(sources, "verify_feeds"):
+            sources.verify(self.lock)
+            recipe = self.root / "feeds/packages/lang/golang/golang1.27/Makefile"
+            recipe.write_text("GO_VERSION_MAJOR_MINOR:=1.27\nGO_VERSION_PATCH:=4\n")
+            with self.assertRaisesRegex(sources.SourceError, "actual Go compiler differs"):
+                sources.verify(self.lock)
+
     def test_latest_prepare_and_replay_finish_and_reenter_without_reapplying(self):
         name = "feeds/packages/net/tailscale/Makefile"
         path = self.root / name
         path.parent.mkdir(parents=True)
         path.write_bytes(b"reviewed preimage")
         self.lock["prepared"] = False
-        def go(lock):
-            lock["inputs"] = {}
-            lock["outputs"] = {}
-            lock["go"] = {"version": "1.27.3"}
         def apps(lock, releases=None):
             sources.record_output(lock, name, b"reviewed preimage", b"reviewed postimage")
             lock["package_manifest"] = {"packages": []}
@@ -301,7 +316,7 @@ class BuildLock(unittest.TestCase):
         with mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock), \
              mock.patch.object(sources, "verify_feeds"), \
              mock.patch.object(sources, "ensure_baseline_objects"), \
-             mock.patch.object(sources, "go_adapter", side_effect=go) as derive, \
+             mock.patch.object(sources, "go_adapter", side_effect=self.mock_go_adapter) as derive, \
              mock.patch.object(sources, "apps_adapter", side_effect=apps), \
              mock.patch.object(sources, "nikki_adapter", side_effect=nikki), \
              mock.patch.object(sources, "dae_adapter"), \
