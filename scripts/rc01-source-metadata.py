@@ -148,7 +148,9 @@ def metadata():
     result["software_resolution"] = {"mode": source_lock["mode"],
         "resolved_at": source_lock["resolved_at"], "replay": source_lock.get("replay", False),
         "source_lock_sha256": hashlib.sha256(source_lock_path.read_bytes()).hexdigest(),
-        "platform_inputs": source_lock["platform_inputs"]}
+        "platform_inputs": source_lock["platform_inputs"],
+        "policy": "single-application" if source_lock.get("application_selection") else source_lock["mode"],
+        "application_selection": source_lock.get("application_selection", {})}
     result["software"] = {}
     result["software"]["ath12k-firmware"] = firmware_metadata(result["ath12k_firmware"])
     result["local_patchset"] = local_patchset()

@@ -50,21 +50,46 @@ class WorkflowConfiguration(unittest.TestCase):
 
 
 class ReviewedBuildLock(unittest.TestCase):
-    def test_current_tree_baseline_validates_and_platform_drift_is_rejected(self):
-        lock = json.loads((ROOT / "config/rc01/software-baselines/locks/with-dae.json").read_text())
-        self.assertEqual(lock["mode"], "locked")
-        self.assertIs(lock["prepared"], True)
-        self.assertIs(lock["with_dae"], True)
-        sources.validate_lock(lock)
-        for change in ("content", "removed-input"):
-            altered = copy.deepcopy(lock)
-            if change == "content":
-                name = next(iter(altered["platform_inputs"]))
-                altered["platform_inputs"][name] = "0" * 64
-            else:
-                altered["platform_inputs"]["config/rc01/upstream-audit/removed-metadata.json"] = "a" * 64
-            with self.subTest(change=change), self.assertRaisesRegex(sources.SourceError, "different reviewed platform inputs"):
-                sources.validate_lock(altered)
+    def test_new_plan_accepts_new_platform_but_old_replay_and_build_drift_fail(self):
+        with tempfile.TemporaryDirectory(prefix="rc01-platform-plan-") as temporary:
+            root = Path(temporary)
+            config = root / "config/rc01/feeds.conf"
+            config.parent.mkdir(parents=True)
+            config.write_text("".join(f"src-git {name} https://github.com/example/{name}.git^{'a'*40}\n"
+                                      for name in ("packages", "luci", "routing", "nikki", "daede")))
+            platform = root / sources.PROTECTED[0]
+            platform.parent.mkdir(parents=True)
+            platform.write_text("old platform\n")
+            with mock.patch.object(sources, "ROOT", root), \
+                 mock.patch.object(sources, "STATE", root / ".rc01-sources"), \
+                 mock.patch.object(sources, "run", return_value="e"*40), \
+                 mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1", "RC01_WITH_DAE": "false"}):
+                sources.plan("locked")
+                old = sources.load_lock()
+                # A completed historical artifact is a replay input, not a
+                # condition that every new checkout must keep satisfying.
+                old["prepared"] = True
+                replay = root / "historical.json"
+                sources.write_json(replay, old)
+                sources.write_json(sources.STATE / "lock.json", old)
+                platform.write_text("new platform\n")
+                with self.assertRaisesRegex(sources.SourceError, "different reviewed platform inputs"):
+                    sources.plan("latest", replay)
+                bad = copy.deepcopy(old)
+                bad["feeds"]["packages"]["url"] = "https://github.com/other/source.git"
+                with self.assertRaisesRegex(sources.SourceError, "origin/commit"):
+                    sources.validate_lock(bad, for_reset=True)
+                feeds = sources.feed_plan("locked")
+                with mock.patch.object(sources, "feed_plan", return_value=feeds), \
+                     mock.patch.object(sources, "verify_feeds"), \
+                     mock.patch.object(sources, "generated_feed_changes"):
+                    sources.plan("latest")
+                current = sources.load_lock()
+                self.assertFalse(current["prepared"])
+                self.assertNotEqual(current["platform_inputs"], old["platform_inputs"])
+                platform.write_text("changed within this build\n")
+                with self.assertRaisesRegex(sources.SourceError, "different reviewed platform inputs"):
+                    sources.load_lock()
 
 
 class ReleasePolicy(unittest.TestCase):
@@ -79,6 +104,16 @@ class ReleasePolicy(unittest.TestCase):
         self.assertEqual(release["version"], "1.2.3")
         self.assertEqual(release["commit"], "a"*40)
         self.assertIsInstance(release["epoch"], int)
+
+    def test_explicit_release_uses_tag_endpoint_and_checks_response(self):
+        calls = []
+        def get(path):
+            calls.append(path)
+            return self.api(path.replace("/releases/tags/v1.2.3", "/releases/latest"))
+        self.assertEqual(sources.stable_release("example/app", get, tag="v1.2.3")["version"], "1.2.3")
+        self.assertEqual(calls[0], "repos/example/app/releases/tags/v1.2.3")
+        with self.assertRaisesRegex(sources.SourceError, "requested release tag"):
+            sources.stable_release("example/app", self.api, tag="v9.9.9")
 
     def test_prerelease_draft_unrecognized_tag_and_missing_commit_are_rejected(self):
         for change in ({"draft": True}, {"prerelease": True}, {"draft": None},
@@ -106,6 +141,25 @@ class ReleasePolicy(unittest.TestCase):
             sources.compatible_recipe(current.replace("safe", "changed"), baseline, ["PKG_VERSION", "PKG_HASH"])
         with self.assertRaises(sources.SourceError):
             sources.compatible_recipe(current+"PKG_HASH:=skip\n", baseline, ["PKG_VERSION", "PKG_HASH"])
+
+    def test_standalone_recipe_comments_are_compatible_but_recipe_data_is_not(self):
+        baseline = "PKG_VERSION:=1.0.0\ndefine Build/Compile\n\tprintf '# data'\n# define data\nendef\n"
+        sources.compatible_recipe("# introduction\n" + baseline + "# appended note\n", baseline, ["PKG_VERSION"])
+        for changed in (baseline.replace("# define data", "# changed data"),
+                        baseline.replace("'# data'", "'# changed'"),
+                        baseline + "DEPENDS:=+unknown\n",
+                        baseline + "PKG_VERSION:=2.0.0\n"):
+            with self.subTest(changed=changed), self.assertRaises(sources.SourceError):
+                sources.compatible_recipe(changed, baseline, ["PKG_VERSION"])
+
+    def test_recipe_continuations_and_tab_commands_remain_exact(self):
+        continuation = "VALUE:=prefix \\\n# continued value\n"
+        command = "target:\n\t# shell command text\n"
+        for baseline in (continuation, command):
+            with self.subTest(baseline=baseline), self.assertRaises(sources.SourceError):
+                sources.compatible_recipe(baseline.replace("# ", "# changed "), baseline, [])
+        with self.assertRaises(sources.SourceError):
+            sources.compatible_recipe("# changed shell data\n", "# shell data\n", [], allow_comments=False)
 
     def test_go_requirement_does_not_silently_select_an_old_compiler(self):
         self.assertEqual(sources.go_requirement({"go.mod": (b"module example.invalid/app\ngo 1.27.0\n", 0o644)}, "1.27.3"), "1.27.0")
@@ -151,6 +205,29 @@ class BuildLock(unittest.TestCase):
     def test_locked_resolution_does_not_call_latest(self):
         resolved = sources.feed_plan("locked", lambda _: self.fail("network in locked mode"))
         self.assertEqual({x["commit"] for x in resolved.values()}, {"a"*40})
+
+    def test_single_application_plan_pins_feeds_and_refuses_replay_override(self):
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1", "RC01_WITH_DAE": "false"}), \
+             mock.patch.object(sources, "run", return_value="e"*40), \
+             mock.patch.object(sources, "api", side_effect=AssertionError("queried feed latest")), \
+             mock.patch("sys.argv", ["rc01-software-sources.py", "plan", "--app", "mihomo=1.2.3"]):
+            self.assertEqual(sources.main(), 0)
+            lock = sources.load_lock()
+            self.assertEqual(lock["application_selection"], {"mihomo": "v1.2.3"})
+            self.assertEqual({item["commit"] for item in lock["feeds"].values()}, {"a"*40})
+            lock["prepared"] = True
+            replay = self.root/"replay.json"
+            sources.write_json(replay, lock)
+            for value in ("mihomo=1.2.3", "tailscale=1.2.4"):
+                with self.assertRaisesRegex(sources.SourceError, "cannot override an explicit replay"):
+                    sources.plan("latest", replay, value)
+            with self.assertRaisesRegex(sources.SourceError, "requires latest mode"):
+                sources.plan("locked", application="tailscale=1.2.3")
+            with mock.patch("sys.argv", ["rc01-software-sources.py", "prepare", "--app", "tailscale=1.2.3"]), \
+                 mock.patch.object(sources, "prepare", side_effect=AssertionError("must reject before prepare")), \
+                 mock.patch("sys.stderr", new_callable=io.StringIO) as errors:
+                self.assertEqual(sources.main(), 1)
+                self.assertIn("differs from the current plan", errors.getvalue())
 
     def test_plan_exports_head_epoch_and_replay_keeps_original_epoch(self):
         def git(*args, **kwargs):
@@ -432,6 +509,8 @@ class BuildLock(unittest.TestCase):
         baseline = ROOT / "config/rc01/software-baselines"
         recipes = {("packages", "net/tailscale/Makefile"): (baseline/"tailscale.Makefile").read_bytes(),
                    ("nikki", "mihomo-meta/Makefile"): (baseline/"mihomo.Makefile").read_bytes()}
+        recipes[("packages", "net/tailscale/Makefile")] = b"# PKG_HASH:=example\n# PKG_SOURCE_URL:=example\n" + recipes[("packages", "net/tailscale/Makefile")]
+        recipes[("nikki", "mihomo-meta/Makefile")] = ("# " + sources.OLD_TIME + "\n").encode() + recipes[("nikki", "mihomo-meta/Makefile")]
         self.lock["go"] = {"version": "1.27.3"}
         archive_times = iter(range(100, 200))
         def source(release, package, expected=None):
@@ -549,6 +628,129 @@ class RecipeClosure(unittest.TestCase):
             return path
         return download
 
+    def test_go_helper_comments_pass_but_missing_patch_preimage_fails(self):
+        helper = "lang/golang/golang-compiler.mk"
+        self.data["packages"][helper] += b"# GOSUMDB policy documentation\n"
+        sources.go_adapter(self.lock)
+        output = base64.b64decode(self.lock["outputs"]["feeds/packages/"+helper]["content"])
+        self.assertIn(b"# GOSUMDB policy documentation", output)
+        self.assertIn(b"GOTOOLCHAIN=local", output)
+        self.data["packages"][helper] = self.data["packages"][helper].replace(b"# 2: additional environment variables (optional)", b"# changed patch context")
+        with self.assertRaises(subprocess.CalledProcessError):
+            sources.go_adapter(copy.deepcopy(self.lock))
+
+    def test_single_application_selection_changes_only_selected_source_and_replays(self):
+        self.locked_fixture(with_dae=False)
+        self.lock.update(mode="latest", application_selection={"tailscale": "v1.2.3"})
+        baseline = copy.deepcopy(self.lock)
+        sources.locked_sources(baseline)
+        other = "feeds/nikki/mihomo-meta/Makefile"
+        calls = []
+        def release(repo, **kwargs):
+            calls.append((repo, kwargs["tag"]))
+            return {"repository": repo, "version": kwargs["tag"][1:], "tag": kwargs["tag"], "commit": "d"*40, "epoch": 1}
+        def source(release, package, expected=None):
+            path = archive(self.root/"dl"/(package+"-"+release["version"]+".tar.gz"), package+"-fixture",
+                           {"go.mod": b"module example.invalid/app\ngo 1.27.0\n"})
+            if expected is not None and sources.digest(path.read_bytes()) != expected:
+                raise sources.SourceError("fixture source hash mismatch")
+            return path
+        with mock.patch.object(sources, "stable_release", side_effect=release), \
+             mock.patch.object(sources, "git_archive_source", side_effect=source), \
+             mock.patch.object(sources, "nikki_adapter", side_effect=AssertionError("unrelated Nikki update")), \
+             mock.patch.object(sources, "dae_adapter", side_effect=AssertionError("unrelated daemon update")):
+            sources.selected_sources(self.lock)
+            self.assertEqual(calls, [("tailscale/tailscale", "v1.2.3")])
+            self.assertEqual(self.lock["feeds"], baseline["feeds"])
+            self.assertEqual(self.lock["outputs"][other], baseline["outputs"][other])
+            self.assertEqual(self.lock["go"], baseline["go"])
+            selected = next(e for e in self.lock["package_manifest"]["packages"] if e["feed"] == "packages")
+            self.assertEqual(selected["version"], "1.2.3")
+            target = "feeds/packages/net/tailscale/Makefile"
+            self.assertEqual(sources.field(base64.b64decode(self.lock["outputs"][target]["content"]).decode(), "PKG_VERSION"), "1.2.3")
+            with mock.patch.object(sources, "stable_release", side_effect=AssertionError("replay queried release")):
+                saved = self.root/"selected-lock.json"
+                sources.write_json(saved, self.lock)
+                rebuilt = json.loads(saved.read_text())
+                sources.replay_sources(rebuilt)
+                self.assertEqual(rebuilt, self.lock)
+                altered = copy.deepcopy(self.lock)
+                next(e for e in altered["package_manifest"]["packages"] if e["feed"] == "packages")["source_sha256"] = "0"*64
+                with self.assertRaisesRegex(sources.SourceError, "hash mismatch"):
+                    sources.replay_sources(altered)
+            changed = copy.deepcopy(baseline)
+            changed["application_selection"] = {"tailscale": "v1.2.4"}
+            sources.selected_sources(changed)
+            self.assertEqual(changed["outputs"][other], baseline["outputs"][other])
+            self.assertNotEqual(changed["outputs"][target], self.lock["outputs"][target])
+            # Validate the mixed source record, then exercise the real verifier
+            # with actual generated recipes (only feed identity is mocked).
+            for name in ("luci", "routing"):
+                self.lock["feeds"].setdefault(name, {"commit": "a"*40})
+            config = self.root/"config/rc01/feeds.conf"
+            config.write_text("".join(f"src-git {name} https://github.com/example/{name}.git^{item['commit']}\n"
+                                      for name, item in self.lock["feeds"].items()))
+            self.lock.update(schema=1, source_date_epoch=1, build_commit="e"*40, prepared=True)
+            for name in self.lock["feeds"]:
+                self.lock["feeds"][name]["url"] = f"https://github.com/example/{name}.git"
+            self.lock["platform_inputs"] = sources.platform_inputs()
+            sources.validate_lock(self.lock)
+            sources.apply_outputs(self.lock)
+            with mock.patch.object(sources, "verify_feeds"):
+                sources.verify(self.lock)
+                bad = copy.deepcopy(self.lock)
+                bad["application_selection"] = {"tailscale": "v9.9.9"}
+                with self.assertRaisesRegex(sources.SourceError, "requested version"):
+                    sources.verify(bad)
+                bad = copy.deepcopy(self.lock)
+                next(e for e in bad["package_manifest"]["packages"] if e["feed"] == "nikki")["version"] = "9.9.9"
+                with self.assertRaisesRegex(sources.SourceError, "unselected application"):
+                    sources.verify(bad)
+                bad = copy.deepcopy(self.lock)
+                bad["go"]["version"] = "1.27.99"
+                with self.assertRaisesRegex(sources.SourceError, "actual Go compiler"):
+                    sources.verify(bad)
+            # The guarded writer still refuses a real user customization.
+            path = self.root/target
+            path.write_bytes(path.read_bytes()+b"# user customization\n")
+            with self.assertRaisesRegex(sources.SourceError, "pre/postimage drift"):
+                sources.apply_outputs(self.lock)
+            self.assertTrue(path.read_bytes().endswith(b"# user customization\n"))
+
+    def test_selected_mihomo_keeps_tailscale_and_runtime_build_options(self):
+        self.locked_fixture(with_dae=False)
+        baseline = copy.deepcopy(self.lock)
+        sources.locked_sources(baseline)
+        self.lock.update(mode="latest", application_selection={"mihomo": "v1.20.1"})
+        release = {"repository": "MetaCubeX/mihomo", "version": "1.20.1", "tag": "v1.20.1", "commit": "c"*40, "epoch": 1}
+        path = archive(self.root/"mihomo-meta-1.20.1.tar.gz", "mihomo", {"go.mod": b"module github.com/metacubex/mihomo\ngo 1.27.0\n"})
+        with mock.patch.object(sources, "stable_release", return_value=release) as resolve, \
+             mock.patch.object(sources, "git_archive_source", return_value=path):
+            sources.selected_sources(self.lock)
+        resolve.assert_called_once_with("MetaCubeX/mihomo", tag="v1.20.1")
+        self.assertEqual(self.lock["outputs"]["feeds/packages/net/tailscale/Makefile"],
+                         baseline["outputs"]["feeds/packages/net/tailscale/Makefile"])
+        output = self.lock["outputs"]["feeds/nikki/mihomo-meta/Makefile"]
+        text = base64.b64decode(output["content"]).decode()
+        self.assertEqual(sources.field(text, "PKG_BUILD_VERSION"), "v1.20.1")
+        self.assertEqual(sources.field(text, "PKG_SOURCE_VERSION"), "c"*40)
+        self.assertIn("CONFLICTS:=mihomo-alpha", text)
+        self.assertIn("with_gvisor", text)
+        self.assertIn(sources.NEW_TIME, text)
+
+    def test_selected_release_requiring_newer_go_refuses_without_recipe_writes(self):
+        self.locked_fixture(with_dae=False)
+        self.lock.update(mode="latest", application_selection={"tailscale": "v1.104.7"})
+        release = {"repository": "tailscale/tailscale", "version": "1.104.7", "tag": "v1.104.7", "commit": "d"*40, "epoch": 1}
+        path = archive(self.root/"tailscale.tar.gz", "tailscale", {"go.mod": b"module tailscale.com\ngo 1.27.4\n"})
+        recipe = self.root/"feeds/packages/net/tailscale/Makefile"
+        before = recipe.read_bytes()
+        with mock.patch.object(sources, "stable_release", return_value=release), \
+             mock.patch.object(sources, "git_archive_source", return_value=path), \
+             self.assertRaisesRegex(sources.SourceError, "requires Go 1.27.4, selected feed compiler is 1.27.3"):
+            sources.selected_sources(self.lock)
+        self.assertEqual(recipe.read_bytes(), before)
+
     def test_go_stable_patch_update_replays_exact_local_toolchain_patch(self):
         compiler = "lang/golang/golang1.27/Makefile"
         self.change_field("packages", compiler, "GO_VERSION_PATCH", "9")
@@ -567,7 +769,8 @@ class RecipeClosure(unittest.TestCase):
     def test_go_rejects_host_compile_bootstrap_install_and_secondary_helper_changes(self):
         compiler = "lang/golang/golang1.27/Makefile"
         bootstrap = "lang/golang/golang-bootstrap/Makefile"
-        mutations = ((compiler, lambda b: b+b"\ndefine Host/Compile\n\tGOTOOLCHAIN=auto go version\nendef\n"),
+        mutations = (("lang/golang/golang-compiler.mk", lambda b: b.replace(b"$(2) $(BASH) make.bash", b"$(2) GOSUMDB=off $(BASH) make.bash")),
+                     (compiler, lambda b: b+b"\ndefine Host/Compile\n\tGOTOOLCHAIN=auto go version\nendef\n"),
                      (bootstrap, lambda b: b.replace(b"define Host/Compile", b"define Host/Compile\n\tGOTOOLCHAIN=auto go version")),
                      (bootstrap, lambda b: b.replace(b"$(INSTALL_BIN)", b"$(INSTALL_DATA)", 1)),
                      (compiler, lambda b: b.replace(b"GO_BOOTSTRAP_VERSION:=bootstrap", b"GO_BOOTSTRAP_VERSION:=1.25")),
@@ -856,7 +1059,7 @@ class ResetGeneratedProtection(unittest.TestCase):
             path = self.root / name
             sources.record_output(self.lock, name, path.read_bytes(), b"generated "+name.encode())
             path.write_bytes(b"generated "+name.encode())
-        mock.patch.object(sources, "validate_lock", side_effect=lambda lock: lock).start()
+        mock.patch.object(sources, "validate_lock", side_effect=lambda lock, **kwargs: lock).start()
 
     def git(self, *args):
         return subprocess.check_output(["git", "-C", str(self.feed), *args], text=True).strip()
@@ -1010,6 +1213,32 @@ class SourceMetadataIntegration(unittest.TestCase):
                 self.assertEqual(result["software"]["tailscale"]["version"],manifest[0]["version"])
                 self.assertEqual(result["feeds"],{name:item["commit"] for name,item in feeds.items()})
                 self.assertFalse(result["optional_dae"]["enabled"])
+                # A mixed manifest is consumed as a single-application policy,
+                # with the untouched recipe bound to the chosen baseline.
+                selected = {"tailscale": manifest[0]["release"]["tag"]}
+                unselected = copy.deepcopy(manifest[1])
+                unselected.pop("release")
+                baseline_manifest = root/"config/rc01/patches/packages/manifest.json"
+                sources.write_json(baseline_manifest, {"packages": [manifest[0], unselected]})
+                lock["application_selection"] = selected
+                lock["package_manifest"]["packages"][1] = unselected
+                lock.pop("nikki")
+                (root/"config/rc01/feeds.conf").write_text("".join(
+                    f"src-git {name} {item['url']}^{item['commit']}\n" for name, item in feeds.items()))
+                with mock.patch.object(sources, "ROOT", root):
+                    lock["platform_inputs"] = sources.platform_inputs()
+                sources.write_json(state/"lock.json", lock)
+                mixed = metadata.metadata()
+                self.assertEqual(mixed["software_resolution"]["policy"], "single-application")
+                self.assertEqual(mixed["software_resolution"]["application_selection"], selected)
+                self.assertEqual(mixed["software"]["tailscale"]["version"], manifest[0]["version"])
+                self.assertEqual(mixed["software"]["mihomo-meta"], unselected)
+                bad = copy.deepcopy(lock)
+                bad["application_selection"] = {"tailscale": "v9.9.9"}
+                sources.write_json(state/"lock.json", bad)
+                with self.assertRaisesRegex(ValueError, "requested version"):
+                    metadata.metadata()
+                sources.write_json(state/"lock.json", lock)
                 # The result has no fixture username, machine path or environment.
                 self.assertNotIn(str(root),json.dumps(result))
                 path=root/"feeds/packages/net/tailscale/Makefile"

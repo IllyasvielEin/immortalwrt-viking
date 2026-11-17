@@ -98,16 +98,46 @@ RC01_REPLAY_LOCK=/tmp/rc01-source-lock/lock.json sh scripts/prepare-rc01.sh
 . .rc01-sources/environment.sh
 ```
 
+只更新一个应用时，在同一准备入口设置 `RC01_APP`，例如：
+
+```sh
+RC01_UPDATE_MODE=latest RC01_APP=tailscale=1.104.6 sh scripts/prepare-rc01.sh
+# 或 RC01_APP=mihomo=1.19.34；版本可带 v 前缀
+```
+
+这是相对于仓库 `config/rc01/patches/packages/manifest.json` 的定向选择：五个 feeds
+保持 `config/rc01/feeds.conf` 的固定提交，未选应用沿用 manifest，Nikki、Go 和可选 dae
+保持审核基线，不滚动到 latest。它不继承上次临时 latest 构建的选择；需要保留某次构建的
+全部来源时使用该次来源锁 replay。低层规划入口为
+`python3 -B scripts/rc01-software-sources.py plan --mode latest --app tailscale=1.104.6`；
+它只建立计划，不安装 feeds、不准备来源。完整准备应使用上面的环境变量入口，避免 shell
+重新规划时丢失选择。
+
+`--app`/`RC01_APP` 只能选择 Tailscale 或 Mihomo 的一个稳定版本，与 `locked` 或显式
+replay 同用会报错，包括看似相同的选择也不能覆盖 replay。规划保存可变选择，来源解析
+把 tag 固定为 commit、实际归档 SHA256、go.mod 摘要及配方前后像；metadata 标记
+`policy=single-application` 并记录 `application_selection`，不会把混合 manifest 表述为
+整组软件已更新。replay 按记录对象重建并核对，不再查询浮动 release。
+
+版本选择不会自动升级 compiler。实际归档中的 go.mod 最低版本必须由本次固定 feed 的
+Go 满足，且实际 compiler 与来源记录一致；例如 Tailscale 1.104.7 要求 Go 1.27.4，当前
+基线 Go 1.27.3 会明确拒绝。若要更换 compiler/feed，需另行审核对应来源和适配器。
+配方仅允许已列字段变化，以及 define、续行、tab recipe 之外的独立列首注释；不折叠空白、
+不改 recipe 字符串。实际补丁仍检查前像并应用：即使注释本身不改变语义，若改到补丁的
+context 行也需要明确调整补丁。新计划采集当前平台，不要求匹配仓内历史锁；本次构建内
+漂移和显式历史 replay 的平台不匹配仍拒绝。新计划清理前次生成的软件文件时，不要求
+旧平台与当前平台相同，但仍核对 feed 身份、原始前像、完整输出及权限；用户修改不会被覆盖。
+
 Actions 的 `replay_run_id` 用于重放已保存来源锁；重放仍核验平台输入、软件变体、
 feed commit、归档和配方摘要。生成目录 `.rc01-sources/` 不提交版本控制。
-仓库的 `config/rc01/software-baselines/locks/with-dae.json` 是当前平台输入、固定 feeds 和
-审核配方生成的完整锁定来源基线（包含 dae，尚无对应固件构建验收）。本地重放：
+仓库的 `config/rc01/software-baselines/locks/with-dae.json` 是历史平台输入、固定 feeds 和
+审核配方生成的完整来源记录（包含 dae，尚无对应固件构建验收）。本地重放：
 
 ```sh
 RC01_WITH_DAE=true RC01_REPLAY_LOCK=config/rc01/software-baselines/locks/with-dae.json sh scripts/prepare-rc01.sh
 ```
 
-平台输入有意变更后，旧锁仍须拒绝；先以 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=true`
+平台输入有意变更后，旧锁的显式 replay 仍须拒绝；新计划不受它阻断。如需另存新的历史记录，先以 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=true`
 运行准备入口，核验新锁并审核差异，再更新该基线。不要只修改平台摘要使旧锁通过。
 不含 dae 的本地锁使用 `RC01_UPDATE_MODE=locked RC01_WITH_DAE=false` 独立生成。
 锁中的 `build_commit`、`resolved_at` 记录最初规划来源时的 HEAD 和 UTC 时间，

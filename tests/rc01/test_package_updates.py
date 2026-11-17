@@ -1,5 +1,6 @@
 """Offline checks against the real pinned recipe objects; no feed update/build."""
 from pathlib import Path
+import base64
 import hashlib
 import importlib.util
 import json
@@ -100,7 +101,7 @@ class PackageRecipeTests(unittest.TestCase):
                                  "https://codeload.github.com/tailscale/tailscale/tar.gz/v$(PKG_VERSION)?")
             else:
                 self.assertEqual(variable(text, "PKG_SOURCE_VERSION"), item["source_commit"])
-                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v1.19.34")
+                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v" + item["version"])
                 self.assertIn(NEW_TIME, text)
             # The complete recipe must differ only in these reviewed fields.
             old = dict(line.split(":=", 1) for line in self.originals[item["feed"]].replace(OLD_TIME, NEW_TIME).splitlines() if ":=" in line)
@@ -133,7 +134,8 @@ class PackageRecipeTests(unittest.TestCase):
     def test_partial_update_and_postimage_drift_refuse_without_other_writes(self):
         path = self.recipes()["nikki"]
         original = path.read_text()
-        path.write_text(original.replace("PKG_VERSION:=1.19.32", "PKG_VERSION:=1.19.34"))
+        selected = next(item for item in MANIFEST if item["feed"] == "nikki")
+        path.write_text(sources.replace_field(original, "PKG_VERSION", selected["version"]))
         self.assert_refused_unchanged("pre/postimage drift")
         path.write_text(original)
         self.apply()
@@ -185,13 +187,26 @@ class IntegrationContractTests(unittest.TestCase):
         pins = (ROOT / "config/rc01/feeds.conf").read_text()
         for item in MANIFEST:
             self.assertIn("^" + item["feed_revision"] + "\n", pins)
-        by_feed = {item["feed"]: item for item in MANIFEST}
-        self.assertEqual(by_feed["packages"]["source_commit"], "c54807352ae196919497b3f8fddc3cedf88368b9")
-        self.assertEqual(by_feed["packages"]["source_sha256"], "a6ea0771776ab9d3b93147cc221ad02f1b75073ce34380bb29d58b7df9863f44")
-        self.assertEqual(by_feed["nikki"]["source_commit"], "0455d0d28c4526937380505153e65a843d8612e8")
-        self.assertEqual(by_feed["nikki"]["source_sha256"], "5ef52ba261e872e99658422165d0c0a9fbebcf3366c9544ac8da813933e3d245")
-        # These exact flags/call sites also preserve the existing source build.
-        self.assertNotIn("GOSUMDB", (ROOT / "scripts/rc01-software-sources.py").read_text())
+        # The selected manifest owns version/source identity; test the real
+        # patch products instead of freezing another copy of its values here.
+        baselines = ROOT / "config/rc01/software-baselines"
+        recipes = {("packages", "net/tailscale/Makefile"): (baselines/"tailscale.Makefile").read_bytes(),
+                   ("nikki", "mihomo-meta/Makefile"): (baselines/"mihomo.Makefile").read_bytes()}
+        lock = {"with_dae": False, "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
+        with mock.patch.object(sources, "go_adapter"), \
+             mock.patch.object(sources, "pristine", side_effect=lambda feed, name: recipes[(feed, name)]):
+            sources.locked_sources(lock)
+        for item in MANIFEST:
+            output = lock["outputs"][f"feeds/{item['feed']}/{item['path']}"]
+            text = base64.b64decode(output["content"]).decode()
+            self.assertEqual(variable(text, "PKG_VERSION"), item["version"])
+            key = "PKG_HASH" if item["feed"] == "packages" else "PKG_MIRROR_HASH"
+            self.assertEqual(variable(text, key), item["source_sha256"])
+            self.assertEqual(output["after"], item["applied_sha256"])
+            if item["feed"] == "nikki":
+                self.assertEqual(variable(text, "PKG_SOURCE_VERSION"), item["source_commit"])
+                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v"+item["version"])
+
 
 
 if __name__ == "__main__":

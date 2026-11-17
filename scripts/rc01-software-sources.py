@@ -113,11 +113,14 @@ def github_repo(url):
     return match[1]
 
 
-def stable_release(repo, get=api):
-    # /latest excludes drafts/prereleases server-side; validate again locally.
-    release = get(f"repos/{repo}/releases/latest")
+def stable_release(repo, get=api, tag=None):
+    # Resolve a user selection once; replay uses the recorded commit/hash.
+    endpoint = "tags/" + urllib.parse.quote(tag, safe="") if tag else "latest"
+    release = get(f"repos/{repo}/releases/{endpoint}")
+    if tag and release.get("tag_name") != tag:
+        raise SourceError(f"{repo}: requested release tag differs from response")
     if release.get("draft") is not False or release.get("prerelease") is not False:
-        raise SourceError(f"{repo}: latest response is not a stable published release")
+        raise SourceError(f"{repo}: release response is not a stable published release")
     tag = release.get("tag_name", "")
     if not SEMVER.fullmatch(tag):
         raise SourceError(f"{repo}: unsupported stable release tag {tag!r}")
@@ -154,21 +157,38 @@ def feeds_text(lock):
     return "".join(f"src-git {name} {item['url']}^{item['commit']}\n" for name, item in lock["feeds"].items())
 
 
-def validate_lock(lock):
+APP_PATHS = {"tailscale": ("packages", "net/tailscale/Makefile"),
+             "mihomo": ("nikki", "mihomo-meta/Makefile")}
+
+
+def application_selection(value):
+    name, separator, tag = value.partition("=")
+    if name not in APP_PATHS or not separator or not SEMVER.fullmatch(tag):
+        raise SourceError("--app needs tailscale=VERSION or mihomo=VERSION (stable release only)")
+    return {name: "v" + SEMVER.fullmatch(tag)[1]}
+
+
+def validate_lock(lock, *, for_reset=False):
     if lock.get("mode") not in ("latest", "locked"):
         raise SourceError("invalid software lock mode")
-    if lock.get("schema") != 1 or lock.get("platform_inputs") != platform_inputs():
+    if lock.get("schema") != 1 or (not for_reset and lock.get("platform_inputs") != platform_inputs()):
         raise SourceError("software lock belongs to different reviewed platform inputs")
     if (type(lock.get("source_date_epoch")) is not int or lock["source_date_epoch"] < 0
             or type(lock.get("with_dae")) is not bool or not HEX40.fullmatch(lock.get("build_commit", ""))):
         raise SourceError("invalid build epoch, variant or source commit in software lock")
+    selection = lock.get("application_selection")
+    if selection is not None:
+        if (lock["mode"] != "latest" or not isinstance(selection, dict) or len(selection) != 1
+                or any(not isinstance(name, str) or not isinstance(tag, str)
+                       or application_selection(name+"="+tag) != selection for name, tag in selection.items())):
+            raise SourceError("invalid single-application selection")
     allowed = feed_plan("locked")
     if set(lock.get("feeds", {})) != set(allowed):
         raise SourceError("unexpected software source-lock feed set")
     for name, item in lock["feeds"].items():
         if item.get("url") != allowed[name]["url"] or not HEX40.fullmatch(item.get("commit", "")):
             raise SourceError(f"unexpected software source-lock origin/commit: {name}")
-        if lock["mode"] == "locked" and item["commit"] != allowed[name]["commit"]:
+        if (lock["mode"] == "locked" or selection) and item["commit"] != allowed[name]["commit"]:
             raise SourceError(f"locked feed differs from reviewed baseline: {name}")
     if lock["mode"] == "latest" and lock.get("package_manifest"):
         entries = lock["package_manifest"]["packages"]
@@ -176,7 +196,19 @@ def validate_lock(lock):
                     ("nikki", "mihomo-meta/Makefile"): ("MetaCubeX/mihomo", "mihomo-meta")}
         if {(e["feed"], e["path"]) for e in entries} != set(expected) or len(entries) != 2:
             raise SourceError("unexpected resolved application set")
+        baseline = {}
+        if selection:
+            baseline = {(e["feed"], e["path"]): e for e in json.loads(
+                (ROOT / "config/rc01/patches/packages/manifest.json").read_text())["packages"]}
+        selected_paths = {APP_PATHS[name] for name in selection} if selection else set(expected)
         for entry in entries:
+            key = (entry["feed"], entry["path"])
+            if key not in selected_paths:
+                if entry != baseline.get(key):
+                    raise SourceError("unselected application differs from reviewed manifest")
+                continue
+            if selection and entry["release"]["tag"] != next(iter(selection.values())):
+                raise SourceError("resolved application differs from requested version")
             repo, package = expected[(entry["feed"], entry["path"])]
             release = entry["release"]
             version = entry["version"]
@@ -191,30 +223,37 @@ def validate_lock(lock):
                     or not isinstance(release.get("epoch"), int) or release["epoch"] < 0
                     or not HEX64.fullmatch(entry.get("source_sha256", ""))):
                 raise SourceError(f"invalid locked application identity: {package}")
-        n = lock.get("nikki", {})
-        if (n.get("repository") != "nikkinikki-org/OpenWrt-nikki"
-                or not HEX40.fullmatch(n.get("commit", ""))
-                or not SEMVER.fullmatch(n.get("tag", ""))
-                or SEMVER.fullmatch(n["tag"])[1] != n.get("version")
-                or n.get("source_url") != f"https://codeload.github.com/nikkinikki-org/OpenWrt-nikki/tar.gz/{n['commit']}"
-                or n.get("source_archive") != f"rc01-nikki-{n['commit']}.tar.gz"
-                or not HEX64.fullmatch(n.get("source_sha256", ""))):
-            raise SourceError("invalid locked Nikki stable source identity")
-        if lock.get("with_dae"):
-            dae = lock.get("optional_dae", {})
-            if dae.get("feed_commit") != lock["feeds"]["daede"]["commit"]:
-                raise SourceError("daemon source lock does not match this build's feed")
-            archives = dae.get("source_archives", {})
-            if set(archives) != {"dae", "daed"}:
-                raise SourceError("missing locked daemon source archives")
-            for name, item in archives.items():
-                hashed = item.get("sha256", "")
-                version = item.get("version", "")
-                filename = f"{name}-src-{version}-{hashed[:12]}.tar.gz"
-                if (not HEX64.fullmatch(hashed) or not re.fullmatch(r"20[0-9]{2}\.[0-9]{2}\.[0-9]{2}", version)
-                        or item.get("filename") != filename
-                        or item.get("url") != f"https://github.com/kenzok8/openwrt-daede/releases/download/{name}-src/{filename}"):
-                    raise SourceError("invalid locked daemon archive identity")
+        if selection:
+            if lock.get("nikki") is not None:
+                raise SourceError("single-application selection must retain the baseline Nikki source")
+            if lock.get("with_dae") and lock.get("optional_dae") != json.loads(
+                    (ROOT / "config/rc01/patches/daede/sources.json").read_text()):
+                raise SourceError("unselected daemon sources differ from reviewed manifest")
+        else:
+            n = lock.get("nikki", {})
+            if (n.get("repository") != "nikkinikki-org/OpenWrt-nikki"
+                    or not HEX40.fullmatch(n.get("commit", ""))
+                    or not SEMVER.fullmatch(n.get("tag", ""))
+                    or SEMVER.fullmatch(n["tag"])[1] != n.get("version")
+                    or n.get("source_url") != f"https://codeload.github.com/nikkinikki-org/OpenWrt-nikki/tar.gz/{n['commit']}"
+                    or n.get("source_archive") != f"rc01-nikki-{n['commit']}.tar.gz"
+                    or not HEX64.fullmatch(n.get("source_sha256", ""))):
+                raise SourceError("invalid locked Nikki stable source identity")
+            if lock.get("with_dae"):
+                dae = lock.get("optional_dae", {})
+                if dae.get("feed_commit") != lock["feeds"]["daede"]["commit"]:
+                    raise SourceError("daemon source lock does not match this build's feed")
+                archives = dae.get("source_archives", {})
+                if set(archives) != {"dae", "daed"}:
+                    raise SourceError("missing locked daemon source archives")
+                for name, item in archives.items():
+                    hashed = item.get("sha256", "")
+                    version = item.get("version", "")
+                    filename = f"{name}-src-{version}-{hashed[:12]}.tar.gz"
+                    if (not HEX64.fullmatch(hashed) or not re.fullmatch(r"20[0-9]{2}\.[0-9]{2}\.[0-9]{2}", version)
+                            or item.get("filename") != filename
+                            or item.get("url") != f"https://github.com/kenzok8/openwrt-daede/releases/download/{name}-src/{filename}"):
+                        raise SourceError("invalid locked daemon archive identity")
     return lock
 
 
@@ -266,7 +305,10 @@ def reset_generated(previous):
     No checkout/reset operation may discard unrelated local feed work. All
     source pre/postimages and feed identities validate before restoring files.
     """
-    validate_lock(previous)
+    # This restores old generated software files, not an old platform build.
+    # Keep identity/preimage/user-edit checks; the new plan binds the current
+    # platform. Explicit replay and in-build verify still require exact inputs.
+    validate_lock(previous, for_reset=True)
     verify_feeds(previous)
     owned = set(previous.get("outputs", {}))
     generated_feed_changes(previous, owned)
@@ -307,9 +349,12 @@ def reset_generated(previous):
             path.chmod(mode)
 
 
-def plan(mode, replay=None):
+def plan(mode, replay=None, application=None):
     if STATE.is_symlink():
         raise SourceError("source state directory must not be a symlink")
+    if application and (replay or mode != "latest"):
+        raise SourceError("--app requires latest mode and cannot override an explicit replay")
+    selection = application_selection(application) if application else None
     if replay:
         lock = json.loads(Path(replay).read_text())
         if not lock.get("prepared") or lock.get("schema") != 1:
@@ -317,10 +362,12 @@ def plan(mode, replay=None):
         lock["replay"] = True
     else:
         lock = {"schema": 1, "mode": mode, "resolved_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "feeds": feed_plan(mode), "platform_inputs": platform_inputs(), "prepared": False,
+                "feeds": feed_plan("locked" if selection else mode), "platform_inputs": platform_inputs(), "prepared": False,
                 "with_dae": os.environ.get("RC01_WITH_DAE", "false") == "true",
                 "source_date_epoch": int(os.environ.get("SOURCE_DATE_EPOCH") or run("git", "show", "-s", "--format=%ct", "HEAD", cwd=ROOT)),
                 "build_commit": run("git", "rev-parse", "HEAD", cwd=ROOT)}
+    if selection:
+        lock["application_selection"] = selection
     if lock["with_dae"] != (os.environ.get("RC01_WITH_DAE", "false") == "true"):
         raise SourceError("replay daemon selection differs from requested variant")
     validate_lock(lock)
@@ -361,13 +408,27 @@ def replace_field(text, key, value):
     return re.sub(r"^" + re.escape(key) + r":=.*$", lambda _: key + ":=" + value, text, flags=re.M)
 
 
-def compatible_recipe(current, baseline, keys):
-    # Version/hash churn is allowed; install/build/dependency changes require
-    # updating this checked-in adapter, not a permissive regex/fuzzy patch.
+def compatible_recipe(current, baseline, keys, allow_comments=True):
+    # Ignore only standalone column-zero Make comments outside defines and
+    # continuations. Recipe commands, define data, whitespace and inline '#'s
+    # remain exact. Non-Make closure inputs opt out (e.g. shell heredocs).
     def shape(text):
         for key in keys:
             text = replace_field(text, key, "<resolved>")
-        return text
+        if not allow_comments:
+            return text
+        kept, depth, continued = [], 0, False
+        for line in text.splitlines(keepends=True):
+            if not depth and not continued and line.startswith("#") and not line.rstrip("\n").endswith("\\"):
+                continue
+            kept.append(line)
+            if not continued and not line.startswith("\t"):
+                if re.match(r"^ *(?:(?:override|export) +)?define(?: +|$)", line):
+                    depth += 1
+                elif re.match(r"^ *endef(?:\s|$)", line):
+                    depth = max(0, depth - 1)
+            continued = line.rstrip("\n").endswith("\\")
+        return "".join(kept)
     if shape(current) != shape(baseline):
         raise SourceError("unsupported application recipe change; review its build/install/dependency adapter")
 
@@ -559,7 +620,8 @@ def recipe_closure(feed, group, lock):
             if name == "ci/pins.env":
                 normalize_pins(content.decode(), baseline.decode())
             else:
-                compatible_recipe(content.decode(), baseline.decode(), expected.get("fields", []))
+                compatible_recipe(content.decode(), baseline.decode(), expected.get("fields", []),
+                                  allow_comments=name.endswith(("/Makefile", ".mk")))
         elif digest(content) != expected["sha256"]:
             raise SourceError(f"unsupported {group} build/lifecycle input change: {name}")
         payloads[name] = content
@@ -600,8 +662,7 @@ def go_adapter(lock):
         work = Path(temporary)
         for name in files:
             payload = pristine("packages", name)
-            if payload != (BASELINES / PurePosixPath(name).name).read_bytes():
-                raise SourceError(f"unsupported Go build helper change: {name}; review local GOTOOLCHAIN guard")
+            compatible_recipe(payload.decode(), (BASELINES / PurePosixPath(name).name).read_text(), [])
             path = work / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
@@ -634,15 +695,24 @@ def canonical_release(release):
 
 
 def apps_adapter(lock, releases=None):
-    manifest = []
+    selection = lock.get("application_selection")
+    selected_paths = {APP_PATHS[name] for name in selection} if selection else set(APP_PATHS.values())
+    manifest = [entry for entry in lock.get("package_manifest", {}).get("packages", [])
+                if (entry["feed"], entry["path"]) not in selected_paths]
     for repo, feed, path, package, baseline, keys in [
         ("tailscale/tailscale", "packages", "net/tailscale/Makefile", "tailscale", "tailscale.Makefile", ["PKG_VERSION", "PKG_RELEASE", "PKG_HASH"]),
         ("MetaCubeX/mihomo", "nikki", "mihomo-meta/Makefile", "mihomo-meta", "mihomo.Makefile", ["PKG_VERSION", "PKG_SOURCE_VERSION", "PKG_MIRROR_HASH", "PKG_BUILD_VERSION"])]:
+        if (feed, path) not in selected_paths:
+            continue
         before = pristine(feed, path)
         current = before.decode()
         compatible_recipe(current, (BASELINES / baseline).read_text(), keys)
         resolved = releases[(feed, path)] if releases else None
-        release = canonical_release(resolved["release"] if resolved else stable_release(repo))
+        if resolved:
+            release = canonical_release(resolved["release"])
+        else:
+            release = canonical_release(stable_release(repo, tag=next(iter(selection.values())))
+                                        if selection else stable_release(repo))
         source = git_archive_source(release, package, resolved["source_sha256"] if resolved else None)
         members = archive_members(source)
         required = go_requirement(members, lock["go"]["version"])
@@ -651,15 +721,15 @@ def apps_adapter(lock, releases=None):
         if package == "tailscale":
             after = replace_field(after, "PKG_RELEASE", "1")
             after = replace_field(after, "PKG_SOURCE_URL", "https://github.com/tailscale/tailscale.git")
-            after = replace_field(after, "PKG_HASH", hashed).replace("PKG_HASH:=", "PKG_MIRROR_HASH:=", 1)
-            after = after.replace("PKG_SOURCE_URL:=", "PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)\nPKG_SOURCE_PROTO:=git\nPKG_SOURCE_VERSION:=" + release["commit"] + "\nPKG_SOURCE_URL:=", 1)
+            after = re.sub(r"(?m)^PKG_HASH:=", "PKG_MIRROR_HASH:=", replace_field(after, "PKG_HASH", hashed), count=1)
+            after = re.sub(r"(?m)^PKG_SOURCE_URL:=", lambda _: "PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)\nPKG_SOURCE_PROTO:=git\nPKG_SOURCE_VERSION:=" + release["commit"] + "\nPKG_SOURCE_URL:=", after, count=1)
         else:
             after = replace_field(after, "PKG_SOURCE_VERSION", release["commit"])
             after = replace_field(after, "PKG_MIRROR_HASH", hashed)
             after = replace_field(after, "PKG_BUILD_VERSION", release["tag"])
-            if after.count(OLD_TIME) != 1:
+            if field(after, "PKG_BUILD_TIME") != field(OLD_TIME, "PKG_BUILD_TIME"):
                 raise SourceError("Mihomo SOURCE_DATE_EPOCH preimage changed")
-            after = after.replace(OLD_TIME, NEW_TIME)
+            after = replace_field(after, "PKG_BUILD_TIME", field(NEW_TIME, "PKG_BUILD_TIME"))
         record_output(lock, f"feeds/{feed}/{path}", before, after.encode())
         manifest.append({"feed": feed, "feed_revision": lock["feeds"][feed]["commit"], "path": path,
             "version": release["version"], "source_commit": release["commit"],
@@ -785,10 +855,14 @@ def replay_sources(lock):
     # code merely by recomputing its own postimage hash.
     derived = {key: value for key, value in lock.items() if key not in
                ("outputs", "inputs", "package_manifest", "optional_dae", "nikki", "go", "dae_patch")}
-    go_adapter(derived)
-    apps_adapter(derived, {(e["feed"], e["path"]): e for e in lock["package_manifest"]["packages"]})
-    nikki_adapter(derived, lock["nikki"])
-    dae_adapter(derived, replay=True)
+    releases = {(e["feed"], e["path"]): e for e in lock["package_manifest"]["packages"]}
+    if lock.get("application_selection"):
+        selected_sources(derived, releases)
+    else:
+        go_adapter(derived)
+        apps_adapter(derived, releases)
+        nikki_adapter(derived, lock["nikki"])
+        dae_adapter(derived, replay=True)
     keys = ("outputs", "inputs", "package_manifest", "go", "optional_dae", "dae_patch", "nikki")
     for key in keys:
         if derived.get(key) != lock.get(key):
@@ -843,10 +917,13 @@ def prepare():
     else:
         if lock.get("prepared"):
             raise SourceError("latest sources already resolved; use verify or begin a new explicit plan")
-        go_adapter(lock)
-        apps_adapter(lock)
-        nikki_adapter(lock)
-        dae_adapter(lock)
+        if lock.get("application_selection"):
+            selected_sources(lock)
+        else:
+            go_adapter(lock)
+            apps_adapter(lock)
+            nikki_adapter(lock)
+            dae_adapter(lock)
     validate_lock(lock)
     apply_outputs(lock)
     lock["prepared"] = True
@@ -883,6 +960,17 @@ def verify(lock=None):
         actual = digest(current["content"]) if current is not None else None
         if actual != item["after"] or (current is not None and current["mode"] != item["mode"]):
             raise SourceError(f"prepared software source differs from build lock: {name}")
+    for entry in lock.get("package_manifest", {}).get("packages", []):
+        name = f"feeds/{entry['feed']}/{entry['path']}"
+        path = safe_output(name)
+        if (digest(path.read_bytes()) != entry["applied_sha256"]
+                or field(path.read_text(), "PKG_VERSION") != entry["version"]):
+            raise SourceError(f"prepared application differs from selected manifest: {name}")
+    if lock.get("go"):
+        recipe = ROOT / "feeds/packages/lang/golang/golang1.27/Makefile"
+        actual = field(recipe.read_text(), "GO_VERSION_MAJOR_MINOR") + "." + field(recipe.read_text(), "GO_VERSION_PATCH")
+        if actual != lock["go"]["version"]:
+            raise SourceError("actual Go compiler differs from this build's source record")
     return lock
 
 
@@ -956,15 +1044,29 @@ def locked_sources(lock):
     lock["dae_patch"] = "".join(patches)
 
 
+def selected_sources(lock, releases=None):
+    # Keep the reviewed feeds/compiler and every unrelated application fixed.
+    # Reuse the existing guarded baseline transforms, then replace one entry.
+    locked_sources(lock)
+    apps_adapter(lock, releases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("plan", "prepare", "verify"))
     parser.add_argument("--mode", choices=("latest", "locked"), default=os.environ.get("RC01_UPDATE_MODE", "latest"))
     parser.add_argument("--replay", default=os.environ.get("RC01_REPLAY_LOCK"))
+    parser.add_argument("--app", default=os.environ.get("RC01_APP"), metavar="NAME=VERSION",
+                        help="update only tailscale or mihomo on the reviewed fixed feeds (latest mode)")
     args = parser.parse_args()
     try:
+        if args.app and args.replay:
+            raise SourceError("--app cannot override an explicit replay")
+        if (args.command != "plan" and args.app
+                and application_selection(args.app) != load_lock().get("application_selection")):
+            raise SourceError("application selection differs from the current plan; create a new plan")
         if args.command == "plan":
-            plan(args.mode, args.replay)
+            plan(args.mode, args.replay, args.app)
         elif args.command == "prepare":
             prepare()
         else:
