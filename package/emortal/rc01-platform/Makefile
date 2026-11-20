@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=rc01-platform
 PKG_VERSION:=1
-PKG_RELEASE:=14
+PKG_RELEASE:=15
 PKG_LICENSE:=GPL-2.0-only
 
 include $(INCLUDE_DIR)/package.mk
@@ -30,6 +30,7 @@ endef
 
 define Package/rc01-platform/install
 	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/init.d $(1)/usr/libexec $(1)/lib/upgrade $(1)/usr/bin $(1)/usr/share/ucode/rc01 $(1)/usr/share/rc01
+	$(INSTALL_BIN) ./files/rc01-pstore.init $(1)/etc/init.d/rc01-pstore
 	$(INSTALL_BIN) ./files/rc01-fan.init $(1)/etc/init.d/rc01-fan
 	$(INSTALL_BIN) ./files/rc01-fan-guard $(1)/usr/libexec/rc01-fan-guard
 	$(INSTALL_BIN) ./files/rc01-sfp-led.init $(1)/etc/init.d/rc01-sfp-led

@@ -58,6 +58,7 @@ class ShippedRuntime(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.tree = self.root / 'tree'
         self.files = {
+            'etc/init.d/rc01-pstore': ROOT / 'package/emortal/rc01-platform/files/rc01-pstore.init',
             'usr/share/rc01/layout.json': ROOT / 'config/rc01/layout.json',
             'lib/upgrade/rc01-layout.sh': ROOT / 'package/emortal/rc01-platform/files/rc01-layout.sh',
             'lib/upgrade/rc01.sh': ROOT / 'package/emortal/rc01-platform/files/rc01.sh',
@@ -68,6 +69,9 @@ class ShippedRuntime(unittest.TestCase):
             target = self.tree / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(source.read_bytes())
+        rc_d = self.tree / 'etc/rc.d'
+        rc_d.mkdir()
+        (rc_d / 'S12rc01-pstore').symlink_to('../init.d/rc01-pstore')
         s = importlib.util.spec_from_file_location('image_runtime', ROOT / 'scripts/verify-rc01-images.py')
         self.images = importlib.util.module_from_spec(s)
         s.loader.exec_module(self.images)
@@ -81,7 +85,7 @@ class ShippedRuntime(unittest.TestCase):
 
     def test_actual_filesystem_contains_current_layout_and_preflight(self):
         result = self.images.verify_runtime_payload(self.squashfs())
-        self.assertEqual(result['runtime_layout_files_verified'], 5)
+        self.assertEqual(result['runtime_layout_files_verified'], 7)
 
     def test_stale_shipped_contract_is_rejected(self):
         (self.tree / 'usr/share/rc01/layout.json').write_text('{}\n')

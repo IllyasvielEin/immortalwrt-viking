@@ -1,0 +1,35 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: GPL-2.0-only
+
+START=12
+
+boot() {
+	local pstore=/sys/fs/pstore archive=/overlay/rc01-pstore
+	local last=0 seq dir boot_id
+	set -- "$pstore"/dmesg-ramoops-*
+	[ -f "$1" ] || { rm -f "$pstore"/console-ramoops-*; return; }
+	# Leave the records in RAM unless the archive survives a reboot.
+	grep -qs '^[^ ]* /overlay ubifs ' /proc/mounts || return 0
+
+	for dir in "$archive"/[0-9]*-*; do
+		[ -d "$dir" ] && last=${dir##*/}
+	done
+	seq=$(expr "${last%%-*}" + 1)
+	read -r boot_id < /proc/sys/kernel/random/boot_id
+	dir="$archive/$(printf '%08d' "$seq")-${boot_id%%-*}"
+	set -- "$pstore"/*
+	if mkdir -p -m 700 "$dir" && cp "$@" "$dir/" && {
+		grep -E '^DISTRIB_(REVISION|DESCRIPTION)=' /etc/openwrt_release
+		printf 'kernel=%s\nboot_id=%s\n' "$(uname -r)" "$boot_id"
+		date
+	} > "$dir/meta" && fsync "$dir"/* "$dir"; then
+		rm -f "$@"
+	else
+		rm -rf "$dir"
+		logger -t rc01-pstore "Failed to archive pstore to $dir"
+		return 1
+	fi
+
+	set -- "$archive"/[0-9]*-*/
+	while [ "$#" -gt 10 ]; do rm -rf "$1"; shift; done
+}

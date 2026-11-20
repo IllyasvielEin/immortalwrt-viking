@@ -518,6 +518,8 @@ def verify_factory(path: Path, kernel: bytes, root: bytes) -> dict:
 def verify_runtime_payload(root: bytes) -> dict:
     """Check the shipped filesystem, not only the source used to build it."""
     expected = {
+        'etc/init.d/rc01-pstore': ROOT / 'package/emortal/rc01-platform/files/rc01-pstore.init',
+        'etc/rc.d/S12rc01-pstore': ROOT / 'package/emortal/rc01-platform/files/rc01-pstore.init',
         'usr/share/rc01/layout.json': ROOT / 'config/rc01/layout.json',
         'lib/upgrade/rc01-layout.sh': ROOT / 'package/emortal/rc01-platform/files/rc01-layout.sh',
         'lib/upgrade/rc01.sh': ROOT / 'package/emortal/rc01-platform/files/rc01.sh',
