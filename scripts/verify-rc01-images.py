@@ -234,7 +234,17 @@ def reserved_regions(tree: Fdt) -> list[tuple[str, int, int]]:
 
 def verify_kernel_memory(tree: Fdt, load: int, size: int) -> None:
     require(size > 0 and load + size <= 1 << 64, "invalid kernel footprint")
-    for node, address, length in reserved_regions(tree):
+    regions = reserved_regions(tree)
+    ramoops = "/reserved-memory/ramoops@90000000"
+    start, ramoops_size = 0x90000000, 0x100000
+    require([(address, length) for node, address, length in regions if node == ramoops] == [(start, ramoops_size)],
+            "missing or invalid ramoops reservation")
+    require(tree.string(ramoops, "compatible") == "ramoops" and "no-map" in tree.nodes[ramoops],
+            "invalid ramoops properties")
+    for node, address, length in regions:
+        if node != ramoops:
+            require(start + ramoops_size <= address or address + length <= start,
+                    f"ramoops overlaps reserved memory: {node}")
         require(load + size <= address or address + length <= load,
                 f"kernel footprint overlaps reserved memory: {node}")
 

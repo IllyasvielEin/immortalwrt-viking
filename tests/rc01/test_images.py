@@ -26,6 +26,7 @@ DTB_SOURCE = '''/dts-v1/;
         tzapp@49b00000 { reg = <0 0x49b00000 0 0x600000>; no-map; };
         bootloader@4a100000 { reg = <0 0x4a100000 0 0x400000>; no-map; };
         secure@48000000 { reg = <0 0x48000000 0 0x100000>; no-map; };
+        ramoops@90000000 { compatible = "ramoops"; reg = <0 0x90000000 0 0x100000>; no-map; };
     };
     controller: fan-controller@2f {
         compatible = "microchip,emc2301", "microchip,emc2305";
@@ -71,6 +72,38 @@ def rootfs(size=4096):
     blob[:4] = b"hsqs"
     struct.pack_into("<Q", blob, 40, size)
     return bytes(blob)
+
+
+class Ramoops(unittest.TestCase):
+    def setUp(self):
+        self.tree = object.__new__(images.Fdt)
+        self.tree.reservations = []
+        self.node = "/reserved-memory/ramoops@90000000"
+        self.tree.nodes = {
+            "/reserved-memory": {"#address-cells": struct.pack(">I", 2), "#size-cells": struct.pack(">I", 2)},
+            self.node: {"reg": struct.pack(">4I", 0, 0x90000000, 0, 0x100000),
+                        "compatible": b"ramoops\0", "no-map": b""},
+        }
+
+    def test_missing_reservation(self):
+        del self.tree.nodes[self.node]
+        with self.assertRaisesRegex(images.VerificationError, "ramoops reservation"):
+            images.verify_kernel_memory(self.tree, 0x41000000, 1)
+
+    def test_overlap_with_other_reservations(self):
+        other = "/reserved-memory/other@8ff80000"
+        self.tree.nodes[other] = {"reg": struct.pack(">4I", 0, 0x8ff80000, 0, 0x100000)}
+        with self.assertRaisesRegex(images.VerificationError, "ramoops overlaps.*other"):
+            images.verify_kernel_memory(self.tree, 0x41000000, 1)
+        del self.tree.nodes[other]
+        self.tree.reservations.append((0x90080000, 0x1000))
+        with self.assertRaisesRegex(images.VerificationError, "ramoops overlaps.*FDT reserve map"):
+            images.verify_kernel_memory(self.tree, 0x41000000, 1)
+
+    def test_kernel_footprint(self):
+        images.verify_kernel_memory(self.tree, 0x8fe00000, 0x200000)
+        with self.assertRaisesRegex(images.VerificationError, "kernel footprint overlaps.*ramoops"):
+            images.verify_kernel_memory(self.tree, 0x8fe00000, 0x200001)
 
 
 @unittest.skipUnless(DTC, "dtc is required for FIT fixtures")
@@ -190,7 +223,7 @@ class Images(unittest.TestCase):
             images.verify_fit(self.fit(load="0x41080000"))
 
     def test_kernel_avoids_each_actual_reserved_region(self):
-        for load in ("0x48000000", "0x49a00000", "0x4a000000"):
+        for load in ("0x48000000", "0x49a00000", "0x4a000000", "0x90000000"):
             with self.subTest(load=load), self.assertRaisesRegex(images.VerificationError, "reserved memory"):
                 images.verify_fit(self.fit(load=load))
         images.verify_fit(self.fit(load="0x47e00000"))  # Adjacent boundary is valid.

@@ -20,7 +20,7 @@ for symbol in \
 	CONFIG_ATH12K_THERMAL CONFIG_PACKAGE_MAC80211_DEBUGFS \
 	CONFIG_PACKAGE_ath12k-firmware-qcn9274-ddwrt CONFIG_PACKAGE_ipq-wifi-xiaomi_be10000 \
 	CONFIG_PACKAGE_wpad-openssl CONFIG_PACKAGE_rc01-platform CONFIG_PACKAGE_rc01-rgb \
-	CONFIG_PACKAGE_kmod-hwmon-emc2305 CONFIG_PACKAGE_kmod-thermal \
+	CONFIG_PACKAGE_kmod-hwmon-emc2305 CONFIG_PACKAGE_kmod-thermal CONFIG_PACKAGE_kmod-ramoops \
 	CONFIG_PACKAGE_fdt-utils CONFIG_PACKAGE_uboot-envtools \
 	CONFIG_PACKAGE_mihomo-meta CONFIG_PACKAGE_nikki CONFIG_PACKAGE_luci-app-nikki \
 	CONFIG_PACKAGE_luci-app-router-tool CONFIG_PACKAGE_luci-app-rc01 \

@@ -222,9 +222,10 @@ def verify_wireless(wireless: Path) -> dict:
 
 def verify_kernel_config(config: Path) -> dict:
     text = config.read_text()
-    for symbol in ("NETFILTER", "NETFILTER_INGRESS", "NET_INGRESS"):
+    for symbol in ("NETFILTER", "NETFILTER_INGRESS", "NET_INGRESS", "PSTORE_CONSOLE"):
         require(re.search(rf"^CONFIG_{symbol}=y$", text, re.M), f"final kernel lacks CONFIG_{symbol}=y")
     require(re.search(r"^CONFIG_NF_FLOW_TABLE=[ym]$", text, re.M), "final kernel lacks flowtable dependency")
+    require(re.search(r"^CONFIG_PSTORE_RAM=[ym]$", text, re.M), "final kernel lacks ramoops")
     return {"control_port_ingress_config": "verified in final kernel .config"}
 
 

@@ -196,6 +196,7 @@ class PreparedPlatform(unittest.TestCase):
                 platform.verify_wireless(copied)
             config = Path(temporary) / ".config"
             text = "CONFIG_NETFILTER=y\nCONFIG_NETFILTER_INGRESS=y\nCONFIG_NET_INGRESS=y\nCONFIG_NF_FLOW_TABLE=m\n"
+            text += "CONFIG_PSTORE_RAM=m\nCONFIG_PSTORE_CONSOLE=y\n"
             config.write_text(text)
             platform.verify_kernel_config(config)
             config.write_text(text.replace("CONFIG_NETFILTER_INGRESS=y", "# CONFIG_NETFILTER_INGRESS is not set"))

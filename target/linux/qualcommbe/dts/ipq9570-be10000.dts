@@ -154,6 +154,15 @@
 			reg = <0x0 0x49b00000 0x0 0x00600000>;
 			no-map;
 		};
+
+		/* Preserve kernel crash logs across a warm reboot. */
+		ramoops@90000000 {
+			compatible = "ramoops";
+			reg = <0x0 0x90000000 0x0 0x00100000>;
+			no-map;
+			record-size = <0x40000>;
+			console-size = <0x40000>;
+		};
 	};
 
 	sfp: sfp {
