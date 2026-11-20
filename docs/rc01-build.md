@@ -176,6 +176,12 @@ dae 变体还检查最终内核配置与实际 `vmlinux` BTF。两种软件变�
 `.github/workflows/verify-rc01.yml` 可用 `source_run_id` 对通过原生检查的当前布局产物重新验收，
 并核对提交、布局与物料身份。
 
+从同一次 Actions run 和 attempt 下载已验收镜像及 `rc01-symbols-{run_id}-{run_attempt}`，
+比对两包中的 `rc01-images.sha256`，并在镜像目录执行 `sha256sum -c rc01-images.sha256`。
+解析现场栈中的 `函数+偏移 [模块]` 时，设置 `CROSS_COMPILE` 为匹配的 AArch64 工具链前缀，
+在符号包目录运行内核源码中的 `scripts/faddr2line`，例如
+`"$kernel_dir/scripts/faddr2line" qcom-ppe.ko qcom_ppe_ds_start+0x4`。内核内建函数使用 `vmlinux`。
+
 **验证边界：CI 通过仅证明对应提交和产物通过构建及静态检查，不模拟硬件启动。**
 当前布局的实际前级接受、ENV 兼容、ECC/坏块写入边界、RAM 恢复、迁移、启动、升级和回厂
 仍需独立验收；本指南不预报新 CI 或现场成功。风扇、无线、网络和代理共存也须在新镜像上实测。

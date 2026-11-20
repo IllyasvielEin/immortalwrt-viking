@@ -422,6 +422,26 @@ jobs:
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
           wireless_dir="$(find build_dir -type d -path '*/backports-7.2' -print -quit)"
           test -n "$wireless_dir"
+          symbols="$RUNNER_TEMP/rc01-symbols"
+          mkdir -p "$symbols"
+          cp "$kernel_dir/.config" "$symbols/kernel.config"
+          cp "$kernel_dir/vmlinux" "$kernel_dir/drivers/net/ethernet/qualcomm/ppe/qcom-ppe.ko" \
+            "$wireless_dir/drivers/net/wireless/ath/ath12k/ath12k.ko" \
+            "$wireless_dir/drivers/net/wireless/ath/ath12k/wifi7/ath12k_wifi7.ko" \
+            "$wireless_dir/net/mac80211/mac80211.ko" "$wireless_dir/net/wireless/cfg80211.ko" \
+            "$TARGET_DIR"/{version.buildinfo,rc01-build-metadata.txt,rc01-images.sha256} "$symbols/"
+          readelf="$(find "$PWD"/staging_dir/toolchain-aarch64*/bin -name '*-linux-musl-readelf' -print -quit)"
+          export CROSS_COMPILE="${readelf%readelf}"
+          for elf in "$symbols/vmlinux" "$symbols"/*.ko; do
+            sections="$("$readelf" -SW "$elf")"
+            [[ $sections == *" .debug_info "* && $sections == *" .debug_line "* ]] || {
+              echo "Missing DWARF sections in $elf" >&2
+              exit 1
+            }
+          done
+          "$kernel_dir/scripts/faddr2line" "$symbols/qcom-ppe.ko" qcom_ppe_ds_start+0x4 | grep -E 'ppe_ds\.c:[1-9][0-9]*'
+          "$kernel_dir/scripts/faddr2line" "$symbols/vmlinux" start_kernel+0x4 | grep -E '\.[ch]:[1-9][0-9]*'
+
           python3 -B scripts/validate-rc01-platform.py "$kernel_dir" "$wireless_dir" > "$TARGET_DIR/rc01-platform-validation.json"
           luci_resources="$PWD/feeds/luci/modules/luci-base/htdocs/luci-static/resources"
           test -s "$luci_resources/validation.js"
@@ -467,7 +487,7 @@ jobs:
 
       - name: Check final validation records before publishing
         id: verified_privacy
-        run: python3 -B scripts/validate-rc01-public-artifacts.py "$TARGET_DIR"
+        run: python3 -B scripts/validate-rc01-public-artifacts.py "$TARGET_DIR" "$RUNNER_TEMP/rc01-symbols"
 
       - name: Upload verified images and build metadata
         if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
@@ -485,6 +505,15 @@ jobs:
             ${{ env.TARGET_DIR }}/version.buildinfo
             ${{ env.TARGET_DIR }}/profiles.json
             ${{ env.TARGET_DIR }}/sha256sums
+
+      - name: Upload matching debug symbols
+        if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc01-symbols-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: ${{ runner.temp }}/rc01-symbols/
 
       - name: Check failure logs before publishing
         id: logs_privacy

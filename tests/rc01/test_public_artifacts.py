@@ -65,6 +65,10 @@ class PublicArtifacts(unittest.TestCase):
         for category in ("source_privacy", "metrics_privacy", "image_privacy", "verified_privacy", "logs_privacy"):
             self.assertIn(f"id: {category}", workflow)
             self.assertIn(f"steps.{category}.outcome == 'success'", workflow)
+        self.assertIn('validate-rc01-public-artifacts.py "$TARGET_DIR" "$RUNNER_TEMP/rc01-symbols"', workflow)
+        symbols = workflow.split("- name: Upload matching debug symbols\n")[1].split("\n      - name:", 1)[0]
+        self.assertIn("steps.verified_privacy.outcome == 'success'", symbols)
+        self.assertIn("path: ${{ runner.temp }}/rc01-symbols/", symbols)
 
     def test_build_guide_has_no_abbreviated_site_endpoint(self):
         guide = (ROOT / "docs/rc01-build.md").read_text()
