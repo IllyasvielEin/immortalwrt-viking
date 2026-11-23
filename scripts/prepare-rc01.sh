@@ -7,6 +7,10 @@ cd "$(dirname "$0")/.."
 root="$PWD"
 python3 -B scripts/rc01-layout.py --check-generated
 
+# honk (daeuniverse eBPF proxy, runtime unverified) is always built; the old
+# switch is rejected rather than silently ignored.
+[ -z "${RC01_WITH_HONK+x}" ] || { echo 'RC01_WITH_HONK was removed; honk is always built' >&2; exit 1; }
+
 # Feeds are pinned to full commit IDs in config/rc01/feeds.conf; nothing is
 # resolved to a newer revision at build time.
 cp config/rc01/feeds.conf feeds.conf
@@ -17,7 +21,8 @@ cp config/rc01/feeds.conf feeds.conf
 # New controlled patches are added here.
 rc01_patches='packages:config/rc01/patches/golang/100-rc01-local-toolchain.patch
 packages:config/rc01/patches/packages/100-tailscale-1.104.6.patch
-nikki:config/rc01/patches/packages/110-mihomo-1.19.34.patch'
+nikki:config/rc01/patches/packages/110-mihomo-1.19.34.patch
+daeuniverse:config/rc01/patches/honk/100-rc01-honk-source.patch'
 
 for entry in $rc01_patches; do
 	feed="${entry%%:*}"
@@ -44,6 +49,12 @@ done
 	luci-app-nikki luci-i18n-nikki-zh-cn \
 	luci-proto-wireguard luci-app-tailscale-community luci-i18n-tailscale-community-zh-cn \
 	luci-app-cpufreq luci-i18n-cpufreq-zh-cn conntrack iperf3 pciutils usbutils
+
+# Only honk and its LuCI page; the feed's dae, luci-app-dae, vmlinux-btf and
+# vmlinux-btf-builtin stay uninstalled (honk's recipe no longer depends on
+# vmlinux-btf, see the controlled patch).
+./scripts/feeds install -p daeuniverse honk luci-app-honk luci-lib-daeuniverse \
+	luci-i18n-daeuniverse-zh-cn
 
 # Nikki's stable and alpha providers have symmetric CONFLICTS. Keeping both
 # installed in the build package index creates a Kconfig dependency cycle.

@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# RC01 controlled patch for daeuniverse/openwrt-packages honk/Makefile; preserve
+# upstream attribution and license (GPL-3.0-only).
+# Applies to feed commit e104a4930c5fc4f625f3355257626495685424f5.
+# Source: daeuniverse/honk tag v0.1.0-beta.6 = commit
+#   64848881b7304e250e7a25422f4f1d86a5975eca
+# Tarball: https://codeload.github.com/daeuniverse/honk/tar.gz/v0.1.0-beta.6
+# SHA-256: cfddedeafa349d0bdfaebd792d6f15c9f31de46a051e5a0692749a74f69d8e6d
+#   (the same value on two independent downloads); top directory honk-0.1.0-beta.6/.
+# Changes: standard OpenWrt source download instead of the ./src checkout and its
+# custom Build/Prepare; version, tag and hash are fixed (no HONK_VERSION or
+# HONK_GIT_TAG override); the vmlinux-btf dependency is dropped because RC01 uses
+# the kernel's built-in BTF (/sys/kernel/btf/vmlinux, which honk.init accepts).
+# PKG_RELEASE 2 -> 3: same upstream version with a different recipe, so the
+# apk version differs from the official feed's honk-0.1.0_beta6-r2.
+--- a/honk/Makefile
++++ b/honk/Makefile
+@@ -1,10 +1,10 @@
+ #
+ # OpenWrt package: honk (https://github.com/daeuniverse/honk)
+ #
+-# The sources are expected next to this Makefile in ./src, which is what the
+-# GitHub workflow checks out:
+-#
+-#   git clone https://github.com/daeuniverse/honk src
++# RC01: the sources are the upstream tag tarball, downloaded by `make download`
++# and checked against PKG_HASH. The ./src checkout and the HONK_VERSION and
++# HONK_GIT_TAG overrides of the upstream recipe are gone, so the version, the
++# tag and the hash cannot drift apart.
+ #
+ # Apart from the embedded dashboard (downloaded as a release archive, never
+ # compiled here), nothing is fetched while building. build.sh downloads the
+@@ -12,7 +12,7 @@
+ # nightly toolchain pinned in crates/honk-ebpf/rust-toolchain.toml, compiles
+ # honk-core with the crate's own pinned stable toolchain, and uses the OpenWrt
+ # cross gcc/g++ of the SDK (TARGET_CROSS) for BoringSSL, SQLite and the final
+-# link. HONK_VERSION is the package version (0.1.0_beta6, apk spells the beta
++# link. PKG_VERSION is the package version (0.1.0_beta6, apk spells the beta
+ # pre-release with "_beta") and HONK_GIT_TAG the upstream tag the sources come
+ # from (v0.1.0-beta.6), which is the version honk's build script embeds.
+ #
+@@ -39,21 +39,26 @@
+ include $(TOPDIR)/rules.mk
+ 
+ PKG_NAME:=honk
+-PKG_VERSION:=$(if $(HONK_VERSION),$(HONK_VERSION),0.1.0_beta6)
+-PKG_RELEASE:=2
++PKG_VERSION:=0.1.0_beta6
++PKG_RELEASE:=3
+ 
+-# Upstream release the sources are checked out from. honk's build script derives
+-# the version it embeds from the tag in GITHUB_REF, so build.sh exports it.
+-HONK_GIT_TAG:=$(if $(HONK_GIT_TAG),$(HONK_GIT_TAG),v0.1.0-beta.6)
++# Upstream release the sources come from. honk's build script derives the
++# version it embeds from the tag, so build.sh exports it.
++HONK_GIT_TAG:=v0.1.0-beta.6
++
++# Upstream codeload tarball of the tag (commit
++# 64848881b7304e250e7a25422f4f1d86a5975eca). It unpacks to honk-0.1.0-beta.6/,
++# which is why PKG_BUILD_DIR follows the tag and not PKG_VERSION.
++PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
++PKG_SOURCE_URL:=https://codeload.github.com/daeuniverse/honk/tar.gz/$(HONK_GIT_TAG)?
++PKG_HASH:=cfddedeafa349d0bdfaebd792d6f15c9f31de46a051e5a0692749a74f69d8e6d
+ 
+ PKG_LICENSE:=GPL-3.0-only
+ PKG_LICENSE_FILES:=LICENSE
+-PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
++PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(patsubst v%,%,$(HONK_GIT_TAG))
+ 
+ include $(INCLUDE_DIR)/package.mk
+ 
+-HONK_SRC:=$(PKG_DIR)/src
+-
+ define Package/honk
+   SECTION:=net
+   CATEGORY:=Network
+@@ -64,31 +69,24 @@
+   # honk-core is linked against the musl and the C++ runtime of OpenWrt. Its
+   # eBPF datapath needs TC-bpf and a veth pair plus the daens namespace, and
+   # its NFQUEUE staging uses nftables queue expressions over nfnetlink_queue.
+-  # Its BTF comes from vmlinux-btf, as for dae. The geo packages ship the dat
++  # RC01: BTF comes from the kernel's own CONFIG_DEBUG_INFO_BTF
++  # (/sys/kernel/btf/vmlinux), which the init script accepts, so the
++  # vmlinux-btf package is not a dependency. The geo packages ship the dat
+   # files; this package links them into /usr/share/honk, which honk searches
+   # before the dae locations.
+   DEPENDS:=+libstdcpp +kmod-veth +kmod-sched-core +kmod-sched-bpf \
+            +kmod-nft-core +kmod-nft-queue +kmod-nfnetlink-queue \
+-           +kmod-nf-conntrack +vmlinux-btf +v2ray-geoip +v2ray-geosite
++           +kmod-nf-conntrack +v2ray-geoip +v2ray-geosite
+ endef
+ 
+ define Package/honk/description
+  honk is an eBPF transparent proxy engine. honk-core embeds its eBPF object and
+- needs kernel BTF for CO-RE relocations, which vmlinux-btf provides. This
++ needs kernel BTF for CO-RE relocations, which this build takes from the
++ kernel's built-in BTF (/sys/kernel/btf/vmlinux). This
+  build enables the Clash API, the native API and the embedded doona dashboard
+  (native-ui), which is served at /ui on the native API listener.
+ endef
+ 
+-define Build/Prepare
+-	@if [ ! -d "$(HONK_SRC)" ]; then \
+-		echo "honk: the source tree is missing at $(HONK_SRC)"; \
+-		echo "honk: run 'git clone https://github.com/daeuniverse/honk src' in $(PKG_DIR)"; \
+-		exit 1; \
+-	fi
+-	mkdir -p $(PKG_BUILD_DIR)
+-	$(CP) $(HONK_SRC)/. $(PKG_BUILD_DIR)/
+-endef
+-
+ define Build/Compile
+ 	HONK_SRC="$(PKG_BUILD_DIR)" \
+ 	HONK_VERSION="$(PKG_VERSION)" \

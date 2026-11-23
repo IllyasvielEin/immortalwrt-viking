@@ -431,7 +431,7 @@ function scan_processes(root) {
 	let processes = [];
 	for (let path in glob(root + '/proc/[0-9]*/comm') || []) {
 		let name = text(path);
-		if (index([ 'mihomo', 'daed', 'dae', 'tailscaled', ...SHELL_SERVICES ], name) < 0) continue;
+		if (index([ 'mihomo', 'daed', 'dae', 'honk-core', 'tailscaled', ...SHELL_SERVICES ], name) < 0) continue;
 		let status = readfile(replace(path, /comm$/, 'status')) || '';
 		let rss = match(status, /(^|\n)VmRSS:\s+(\d+) kB/), ppid = match(status, /(^|\n)PPid:\s+(\d+)/);
 		push(processes, { name, pid: int(split(path, '/')[-2]), ppid: ppid ? int(ppid[2]) : null, rss_kib: rss ? int(rss[2]) : null });
@@ -564,6 +564,8 @@ export function collect(root, uci, cache) {
 			nikki_enabled: enabled(read('nikki', 'config', 'enabled')),
 			daed_enabled: enabled(read('daed', 'config', 'enabled')),
 			dae_enabled: enabled(read('dae', 'config', 'enabled')),
+			honk_installed: executable(root + '/usr/bin/honk-core'),
+			honk_enabled: enabled(read('honk', 'config', 'enabled')),
 			automatic_network: read('router-tool', 'main', 'auto_network') != '0', offload: firewall }
 	};
 }
@@ -596,9 +598,10 @@ export function assess(state, target) {
 	check('ppe', state.ppe.present ? 'ok' : 'warn', 'Native PPE module presence; zero or unavailable counters do not prove a fault');
 	let active = name => length(filter(state.processes, p => p.name == name)) > 0;
 	// Nikki is the only supported transparent proxy; a manually installed
-	// dae/daed running or enabled alongside it is still a conflict.
-	let proxies = [ 'nikki', 'dae', 'daed' ];
-	let running = { nikki: active('mihomo'), dae: active('dae'), daed: active('daed') };
+	// dae/daed/honk running or enabled alongside it is still a conflict; an
+	// installed but stopped and disabled honk is not.
+	let proxies = [ 'nikki', 'dae', 'daed', 'honk' ];
+	let running = { nikki: active('mihomo'), dae: active('dae'), daed: active('daed'), honk: active('honk-core') };
 	check('proxy-conflict', length(filter(proxies, name => running[name] || state.proxy[name + '_enabled'])) > 1 ? 'error' : 'ok',
 		'Run only one transparent proxy at a time');
 	if (target == 'nikki') {

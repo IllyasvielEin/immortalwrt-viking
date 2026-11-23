@@ -30,11 +30,12 @@ def patch_list():
 
 
 class PinnedFeeds(unittest.TestCase):
-    def test_every_feed_line_is_a_full_commit_pin_and_dae_feed_is_gone(self):
+    def test_every_feed_line_is_a_full_commit_pin_and_only_the_daeuniverse_feed_remains_of_dae(self):
         lines = (ROOT / "config/rc01/feeds.conf").read_text().splitlines()
         for line in lines:
             self.assertRegex(line, r"^src-git [a-z0-9_-]+ https://\S+\.git\^[0-9a-f]{40}$")
-        self.assertEqual(set(FEEDS), {"packages", "luci", "routing", "nikki"})
+        self.assertEqual(set(FEEDS), {"packages", "luci", "routing", "nikki", "daeuniverse"})
+        self.assertEqual(FEEDS["daeuniverse"], "e104a4930c5fc4f625f3355257626495685424f5")
         self.assertEqual(len(lines), len(FEEDS))
         self.assertNotIn("daede", (ROOT / "config/rc01/feeds.conf").read_text())
 
@@ -102,7 +103,8 @@ class PrepareAppliesControlledPatches(unittest.TestCase):
         nikki = next(item for item in MANIFEST if item["feed"] == "nikki")
         self.assertIn("SOURCE_DATE_EPOCH", self.recipe("nikki", nikki["path"]))
         # Applied patches stay uncommitted so the feed remains at its pinned HEAD.
-        for feed in ("packages", "nikki"):
+        self.assertEqual(variable(self.recipe("daeuniverse", "honk/Makefile"), "PKG_RELEASE"), "3")
+        for feed in ("packages", "nikki", "daeuniverse"):
             self.assertEqual(fixture.git(self.project / "feeds" / feed, "rev-parse", "HEAD"), FEEDS_FIXTURE(self.project)[feed])
 
     def test_second_run_recognises_applied_patches_and_changes_nothing(self):

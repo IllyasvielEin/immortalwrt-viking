@@ -18,6 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import prepare_fixture  # noqa: E402
+from clean_env import clean_environ  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/rc01-go-bootstrap.py"
@@ -244,7 +245,8 @@ class BootstrapTests(unittest.TestCase):
         project = prepare_fixture.make_project(self.work, defconfig=stale)
 
         def prepare(extra):
-            return prepare_fixture.run_prepare(project, sys.executable, extra)
+            # Test-owned variables are passed explicitly; run_prepare drops inherited RC01_*.
+            return prepare_fixture.run_prepare(project, sys.executable, {"RC01_GO_TEST_LOG": str(self.log)} | extra)
 
         for selected in (str(root), ""):
             with self.subTest(selected=selected):
@@ -337,7 +339,7 @@ class CompiledGoTests(unittest.TestCase):
         identity = next(i for i, line in enumerate(lines) if 'echo "repository=' in line)
         command = "\n".join(line.strip() for line in lines[identity:identity + 3])
         result = subprocess.run(["sh", "-c", command], cwd=ROOT,
-                                env=os.environ | {"GITHUB_REPOSITORY": "private-fixture-owner/custom-name"},
+                                env=clean_environ() | {"GITHUB_REPOSITORY": "private-fixture-owner/custom-name"},
                                 capture_output=True, text=True, check=True)
         metadata = dict(line.split("=", 1) for line in result.stdout.splitlines())
         self.assertEqual(metadata["repository"], "immortalwrt-viking")
@@ -398,7 +400,7 @@ all:
 \t$(call GoHost/Host/Compile)
 ''')
         calls = self.work / "calls"
-        env = os.environ | {"GOTOOLCHAIN": "auto", "GOENV": "/bad/goenv", "RC01_TEST_CALLS": str(calls),
+        env = clean_environ() | {"GOTOOLCHAIN": "auto", "GOENV": "/bad/goenv", "RC01_TEST_CALLS": str(calls),
                             "GOPROXY": "https://proxy.golang.org", "GOSUMDB": "sum.golang.org"}
         result = subprocess.run(["make", "--no-print-directory", "-f", str(makefile)],
                                 cwd=self.work, env=env, capture_output=True, text=True)

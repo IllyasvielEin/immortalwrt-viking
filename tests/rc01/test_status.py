@@ -24,6 +24,7 @@ class StatusFixture(unittest.TestCase):
             "nikki": {"config": {"enabled": "0"}},
             "daed": {"config": {"enabled": "0"}},
             "dae": {"config": {"enabled": "0"}},
+            "honk": {"config": {"enabled": "0"}},
             "firewall": {"defaults": {".type": "defaults", "flow_offloading": "0", "flow_offloading_hw": "0"}},
         }
         self.write("tmp/sysinfo/board_name", "xiaomi,be10000")
@@ -270,6 +271,30 @@ print(sprintf('%J', [ first, second ]));''')
     def test_dae_processes_block_nikki(self):
         self.write("proc/124/comm", "dae")
         self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
+
+    def test_honk_enabled_blocks_nikki_even_before_process_start(self):
+        self.config["honk"]["config"]["enabled"] = "1"
+        result = self.run_status("nikki")
+        self.assertEqual(self.levels(result)["other-proxy"], "error")
+        self.assertEqual(self.levels(result)["proxy-conflict"], "ok")
+
+    def test_honk_process_blocks_nikki(self):
+        self.write("proc/124/comm", "honk-core")
+        self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
+
+    def test_running_honk_and_nikki_together_are_a_proxy_conflict(self):
+        self.write("proc/123/comm", "mihomo")
+        self.write("proc/124/comm", "honk-core")
+        self.assertEqual(self.levels(self.run_status("nikki"))["proxy-conflict"], "error")
+
+    def test_installed_but_stopped_and_disabled_honk_does_not_block_nikki(self):
+        self.write("usr/bin/honk-core", "test executable placeholder")
+        (self.root / "usr/bin/honk-core").chmod(0o755)
+        result = self.run_status("nikki")
+        self.assertTrue(result["state"]["proxy"]["honk_installed"])
+        self.assertFalse(result["state"]["proxy"]["honk_enabled"])
+        self.assertEqual(self.levels(result)["other-proxy"], "ok")
+        self.assertTrue(result["result"]["passed"])
 
     def test_nikki_preflight_needs_no_btf_and_state_has_no_dae_core_probe(self):
         result = self.run_status("nikki")

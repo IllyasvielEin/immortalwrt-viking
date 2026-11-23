@@ -65,4 +65,13 @@ uci commit firewall
 for service in tailscale tailscale-settings; do
 	[ ! -x "/etc/init.d/$service" ] || "/etc/init.d/$service" disable
 done
+
+# honk (optional variant) and Nikki are mutually exclusive transparent proxies,
+# and this firmware does not take over traffic by default. The package's own
+# 90-honk-autostart runs after this script and keeps an enabled value that is
+# already set, so a fresh image leaves honk disabled until the user turns it on.
+if [ -e /etc/config/honk ]; then
+	uci -q set honk.config.enabled='0'
+	uci -q commit honk
+fi
 exit 0

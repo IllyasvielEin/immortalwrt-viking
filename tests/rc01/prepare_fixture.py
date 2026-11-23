@@ -7,6 +7,8 @@ commits pinned in the fixture's feeds.conf. The controlled patches are the real
 ones. The Go preimages are the pristine fixtures in tests/rc01/fixtures; the
 tailscale and mihomo recipes are rebuilt from each patch's own old-side lines,
 which checks the patch/manifest contract but not the upstream file content.
+The honk recipe is the pristine upstream file at the pinned daeuniverse commit
+(tests/rc01/fixtures/daeuniverse), so its patch is checked against real text.
 """
 import json
 import os
@@ -14,9 +16,14 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from clean_env import clean_environ  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/rc01/fixtures/go/lang/golang"
+DAEUNIVERSE = ROOT / "tests/rc01/fixtures/daeuniverse"
 PATCHES = ROOT / "config/rc01/patches"
 GIT_ENV = {"GIT_AUTHOR_NAME": "fixture", "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
            "GIT_COMMITTER_NAME": "fixture", "GIT_COMMITTER_EMAIL": "fixture@example.invalid"}
@@ -44,7 +51,7 @@ def preimage_from_patch(patch, path):
 
 def git(repository, *arguments):
     return subprocess.run(["git", "-C", str(repository), *arguments], check=True, text=True,
-                          capture_output=True, env=os.environ | GIT_ENV).stdout.strip()
+                          capture_output=True, env=clean_environ() | GIT_ENV).stdout.strip()
 
 
 def executable(path, content):
@@ -69,7 +76,7 @@ def make_project(work, defconfig="", extra_scripts=("rc01-go-bootstrap.py",)):
     for directory in ("scripts", "config/rc01/files/etc/board.d", "config/rc01/files/etc/uci-defaults",
                       "defconfig", "test-bin"):
         (project / directory).mkdir(parents=True, exist_ok=True)
-    for name in ("prepare-rc01.sh", "rc01-layout.py", *extra_scripts):
+    for name in ("prepare-rc01.sh", "rc01-layout.py", "kconfig.pl", *extra_scripts):
         shutil.copy2(ROOT / "scripts" / name, project / "scripts" / name)
     for relative in ("config/rc01/layout.json", "config/rc01/layout.mk",
                      "package/emortal/rc01-platform/files/rc01-layout.sh"):
@@ -93,6 +100,9 @@ def make_project(work, defconfig="", extra_scripts=("rc01-go-bootstrap.py",)):
         "nikki": make_feed(project, "nikki", {
             manifest["nikki"]["path"]: preimage_from_patch(
                 patch("packages/" + manifest["nikki"]["patch"]), manifest["nikki"]["path"]),
+        }),
+        "daeuniverse": make_feed(project, "daeuniverse", {
+            "honk/Makefile": (DAEUNIVERSE / "honk/Makefile").read_text(),
         }),
     }
     (project / "config/rc01/feeds.conf").write_text(
@@ -119,8 +129,44 @@ esac
 def run_prepare(project, python, extra_env=None):
     events = project / "events"
     events.unlink(missing_ok=True)
-    env = os.environ | {"PATH": str(project / "test-bin") + os.pathsep + os.environ["PATH"],
-                        "RC01_TEST_PYTHON": python, "RC01_TEST_EVENTS": str(events)} | (extra_env or {})
+    env = clean_environ() | {"PATH": str(project / "test-bin") + os.pathsep + os.environ["PATH"],
+                             "RC01_TEST_PYTHON": python, "RC01_TEST_EVENTS": str(events)} | (extra_env or {})
     result = subprocess.run(["sh", "scripts/prepare-rc01.sh"], cwd=project, env=env,
                             capture_output=True, text=True)
     return result, (events.read_text().splitlines() if events.exists() else [])
+
+
+class ValidationProject:
+    """A tree of symlinks to this repository where package/feeds/daeuniverse/honk is ours to point.
+
+    scripts/validate-rc01-config.sh resolves that link relative to the tree it runs
+    in, so the real script runs unmodified against a configuration of our choosing.
+    """
+
+    def __init__(self, work):
+        self.root = Path(work).resolve() / "project"
+        self.root.mkdir()
+        for name in ("scripts", "config", "target", "defconfig"):
+            (self.root / name).symlink_to(ROOT / name)
+        package = self.root / "package"
+        package.mkdir()
+        for child in (ROOT / "package").iterdir():
+            if child.name != "feeds":
+                (package / child.name).symlink_to(child)
+        (self.root / "feeds/daeuniverse/honk").mkdir(parents=True)
+        (self.root / "feeds/other/honk").mkdir(parents=True)
+        self.link("daeuniverse")
+
+    def link(self, feed):
+        directory = self.root / "package/feeds/daeuniverse"
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / "honk"
+        target.unlink(missing_ok=True)
+        target.symlink_to(self.root / "feeds" / feed / "honk")
+
+    def validate(self, text, extra_env=None):
+        config = self.root / ".config"
+        config.write_text(text)
+        return subprocess.run(["sh", str(self.root / "scripts/validate-rc01-config.sh"), str(config)],
+                              capture_output=True, text=True,
+                              env=clean_environ() | {"RC01_GO_BOOTSTRAP_ROOT": ""} | (extra_env or {}))

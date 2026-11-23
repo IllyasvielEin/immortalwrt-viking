@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 
-PUBLIC_MAINTAINERS = {"openwrt", "immortalwrt", "vikingyfy", "metacubex", "tailscale", "nikkinikki-org"}
+PUBLIC_MAINTAINERS = {"openwrt", "immortalwrt", "vikingyfy", "metacubex", "tailscale", "nikkinikki-org", "daeuniverse"}
 RULES = {
     "private-key": re.compile(r"-----BEGIN (?:OPENSSH|RSA|EC|DSA|ENCRYPTED)?\s*PRIVATE KEY-----"),
     "credential": re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|tskey-(?:auth|api)-[A-Za-z0-9_-]{12,})\b"),

@@ -30,6 +30,16 @@ env:
   CCACHE_MAXSIZE: 3G
   CCACHE_COMPILERCHECK: content
   RC01_GO_BOOTSTRAP_MODE: ${{ inputs.go_bootstrap }}
+  # honk build inputs, in one place. scripts/prepare-rc01.sh and the controlled
+  # patch config/rc01/patches/honk/100-rc01-honk-source.patch pin the same tag;
+  # the toolchain step below checks the Rust and bpf-linker pins against the
+  # downloaded honk source, and tests/rc01/test_honk.py checks the tag.
+  RC01_HONK_TAG: v0.1.0-beta.6
+  RC01_HONK_COMMIT: 64848881b7304e250e7a25422f4f1d86a5975eca
+  RC01_HONK_RUST_STABLE: 1.99.1
+  RC01_HONK_RUST_NIGHTLY: nightly-2026-10-20
+  RC01_HONK_BPF_LINKER_VERSION: 0.11.0
+  RC01_HONK_BPF_LINKER_SHA256: 10f62ba9ab7e544d538370552660efcb4f1a19153d5752bbf0f6b51f3bada450
   TZ: Asia/Singapore
 
 jobs:
@@ -60,7 +70,7 @@ jobs:
             build-essential clang llvm flex bison gawk gcc-multilib gettext git \
             libncurses-dev libssl-dev zlib1g-dev python3-dev python3-setuptools \
             python3-pyelftools python3-cryptography rsync swig unzip file wget \
-            pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils squashfs-tools shellcheck busybox curl bzip2
+            cmake libclang-dev pkg-config ca-certificates xz-utils zstd device-tree-compiler mtd-utils squashfs-tools shellcheck busybox curl bzip2
 
       - name: Look up source downloads
         id: downloads_lookup
@@ -197,6 +207,49 @@ jobs:
             make -j1 V=s download 2>&1 | tee -a download.log
           fi
 
+      - name: Restore Cargo registry for honk
+        if: ${{ !inputs.cold_cache }}
+        continue-on-error: true
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: rc01-honk-cargo-${{ runner.os }}-${{ env.RC01_HONK_TAG }}
+
+      - name: Install honk Rust toolchains and bpf-linker
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v rustup >/dev/null || { echo 'rustup is required on the runner' >&2; exit 1; }
+          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+          mkdir -p "$cargo_home/bin"
+          export PATH="$cargo_home/bin:$PATH"
+          echo "$cargo_home/bin" >> "$GITHUB_PATH"
+          # The toolchain pins come from the honk source that make download fetched;
+          # a different pin there means these workflow constants are stale.
+          archive="$(find dl -maxdepth 1 -name 'honk-*.tar.gz' -print)"
+          [ "$(printf '%s\n' "$archive" | grep -c .)" -eq 1 ] || { echo 'Expected one downloaded honk source archive' >&2; exit 1; }
+          top="honk-${RC01_HONK_TAG#v}"
+          pin() { tar -xzOf "$archive" "$top/$1" | sed -n "s/^$2 *= *\"\(.*\)\"\$/\1/p;s/^$2=\(.*\)\$/\1/p"; }
+          same() { [ "$1" = "$2" ] || { echo "honk $3 is '$1' in the source but '$2' in the workflow" >&2; exit 1; }; }
+          same "$(pin rust-toolchain.toml channel)" "$RC01_HONK_RUST_STABLE" 'stable Rust'
+          same "$(pin crates/honk-ebpf/rust-toolchain.toml channel)" "$RC01_HONK_RUST_NIGHTLY" 'eBPF nightly Rust'
+          same "$(pin .github/ci/pins.env BPF_LINKER_VERSION)" "$RC01_HONK_BPF_LINKER_VERSION" 'bpf-linker version'
+          same "$(pin .github/ci/pins.env BPF_LINKER_SHA256)" "$RC01_HONK_BPF_LINKER_SHA256" 'bpf-linker sha256'
+          rustup toolchain install "$RC01_HONK_RUST_STABLE" --profile minimal --target aarch64-unknown-linux-musl
+          rustup toolchain install "$RC01_HONK_RUST_NIGHTLY" --profile minimal --component rust-src,llvm-tools
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bpf-linker.tar.zst" \
+            "https://github.com/aya-rs/bpf-linker/releases/download/v$RC01_HONK_BPF_LINKER_VERSION/bpf-linker-x86_64-unknown-linux-musl.tar.zst"
+          echo "$RC01_HONK_BPF_LINKER_SHA256  $RUNNER_TEMP/bpf-linker.tar.zst" | sha256sum -c -
+          zstd -dc "$RUNNER_TEMP/bpf-linker.tar.zst" | tar -xf - -C "$cargo_home/bin"
+          # The pinned release binary reports "bpf-linker 0.0.0"; the sha256 check
+          # above is what pins the version, so only check that it runs.
+          bpf-linker --version
+          rustup toolchain list
+          command -v cargo
+
       - name: Initialize build observations
         id: build_metrics
         shell: bash
@@ -275,6 +328,14 @@ jobs:
             echo "mihomo=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/mihomo-meta/Makefile)"
             echo "tailscale=$(sed -n 's/^PKG_VERSION:=//p' feeds/packages/net/tailscale/Makefile)"
             echo "nikki=$(sed -n 's/^PKG_VERSION:=//p' feeds/nikki/nikki/Makefile)"
+            echo "honk=$(sed -n 's/^PKG_VERSION:=//p' feeds/daeuniverse/honk/Makefile)-r$(sed -n 's/^PKG_RELEASE:=//p' feeds/daeuniverse/honk/Makefile)"
+            echo "honk_tag=$RC01_HONK_TAG"
+            echo "honk_source_commit=$RC01_HONK_COMMIT"
+            echo "honk_source_sha256=$(sed -n 's/^PKG_HASH:=//p' feeds/daeuniverse/honk/Makefile)"
+            echo "honk_rust_stable=$RC01_HONK_RUST_STABLE"
+            echo "honk_rust_nightly=$RC01_HONK_RUST_NIGHTLY"
+            echo "honk_bpf_linker=$RC01_HONK_BPF_LINKER_VERSION"
+            echo "honk_runtime=not-verified"
             echo "rc01_cma_mib=320"
             echo "qcn9274_hw1_mlo=false"
             echo "qcn9274_hw1_ds_abi=0x10098b57/WBE.1.0-02903"
@@ -299,7 +360,7 @@ jobs:
             echo "fan_pwm_output=push-pull"
             echo "nand_id_match=full-per-entry-length; ESMT device ID=51:7f:7f"
             echo "nand_probe_diagnostics=true"
-            for feed in packages luci routing nikki; do
+            for feed in packages luci routing nikki daeuniverse; do
               echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
             done
             for patch in config/rc01/patches/*/*.patch; do
@@ -309,6 +370,7 @@ jobs:
           cp target/linux/generic/backport-6.18/442-v6.19-mtd-spinand-esmt-f50d2g41ka-qpic-id.patch "$TARGET_DIR/rc01-nand-id-correction.patch"
           cp target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch "$TARGET_DIR/rc01-nand-probe-diagnostics.patch"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
+          git -C feeds/daeuniverse diff -- honk/Makefile > "$TARGET_DIR/rc01-honk-build.patch"
           git -C feeds/packages diff -- lang/golang/golang-compiler.mk lang/golang/golang-host-build.mk > "$TARGET_DIR/rc01-go-build.patch"
           (cd "$TARGET_DIR"; sha256sum -- *xiaomi_be10000-squashfs-* > rc01-images.sha256)
 
@@ -353,6 +415,7 @@ jobs:
           kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
           test -n "$kernel_dir"
           sh scripts/validate-rc01-nand.sh "$kernel_dir" "$kernel_dir/vmlinux"
+          sh scripts/validate-rc01-honk-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
           wireless_dir="$(find build_dir -type d -path '*/backports-7.2' -print -quit)"
           test -n "$wireless_dir"
@@ -427,7 +490,7 @@ jobs:
         if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-identity-preserved-dhcp-complete-nikki-${{ github.run_number }}
+          name: rc01-identity-preserved-dhcp-complete-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |

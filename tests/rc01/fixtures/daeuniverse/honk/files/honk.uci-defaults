@@ -1,0 +1,25 @@
+# Sets the UCI option enabled, which decides whether honk starts at boot, and
+# enables the rc.d link that runs the init script's boot. Run by the package
+# scripts (default_postinst sources it in a subshell, pkgname set) and on the
+# first boot of a firmware image that contains the package (pkgname empty).
+# Never on the build host, where /etc/init.d would be the host's.
+if [ -z "$IPKG_INSTROOT" ]; then
+	# An option already set is the user's choice, also one that sysupgrade kept
+	if [ -z "$(uci -q get honk.config.enabled)" ]; then
+		if [ -f /tmp/honk-autostart ]; then
+			# saved by the preinst script before apk replaced an unedited
+			# /etc/config/honk of a version that kept the option
+			enabled="$(cat /tmp/honk-autostart)"
+		elif [ -n "$pkgname" ] && /etc/init.d/honk enabled; then
+			# an apk upgrade from a version whose boot setting was the rc.d link
+			enabled=1
+		else
+			# a fresh install, or a new image: off until the user turns it on
+			enabled=0
+		fi
+		uci -q set honk.config.enabled="$enabled"
+		uci commit honk
+	fi
+	rm -f /tmp/honk-autostart
+	/etc/init.d/honk enable
+fi

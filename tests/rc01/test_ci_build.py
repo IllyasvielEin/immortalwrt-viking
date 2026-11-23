@@ -12,6 +12,9 @@ from unittest import mock
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from clean_env import clean_environ  # noqa: E402
+import prepare_fixture as fixture  # noqa: E402
 
 
 class BuildAttempts(unittest.TestCase):
@@ -24,7 +27,7 @@ class BuildAttempts(unittest.TestCase):
                             + '; else exit ' + str(serial_code) + '; fi\n')
             fake.chmod(0o755)
             result = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/rc01-ci-build.py")],
-                                    cwd=work, env=os.environ | {"PATH": str(work) + os.pathsep + os.environ["PATH"]},
+                                    cwd=work, env=clean_environ() | {"PATH": str(work) + os.pathsep + os.environ["PATH"]},
                                     capture_output=True, text=True)
             return result, json.loads((work / "rc01-build-timings.json").read_text()), (work / "build.log").read_text()
 
@@ -116,7 +119,7 @@ class BuildObservations(unittest.TestCase):
             ccache.write_text("#!/bin/sh\n[ \"$CCACHE_STATSLOG\" = \"" + str(work / "metrics/ccache-stats.log")
                               + "\" ] || exit 4\nprintf '%s\\n' \"$*\"\n")
             ccache.chmod(0o755)
-            environment = os.environ | {"GITHUB_ENV": str(work / "github-env"),
+            environment = clean_environ() | {"GITHUB_ENV": str(work / "github-env"),
                                        "PATH": str(work) + os.pathsep + os.environ["PATH"],
                                        "RC01_COMPILER_MATCHED_KEY": "fixture-prefix-hit"}
             command = [sys.executable, "-B", str(ROOT / "scripts/rc01-ci-metrics.py")]
@@ -146,6 +149,9 @@ class WorkflowContract(unittest.TestCase):
             self.assertNotIn(text, self.text)
         inputs = self.text.split("    inputs:\n", 1)[1].split("\npermissions:", 1)[0]
         self.assertEqual(set(re.findall(r"^      (\w+):$", inputs, re.M)), {"go_bootstrap", "cold_cache"})
+        # honk is always built: no switch, no variant, no separate configuration fragment.
+        for text in ("include_honk", "RC01_WITH_HONK", "honk.config", "honk_build"):
+            self.assertNotIn(text, self.text)
 
     def test_prepare_step_uses_pinned_feeds_and_the_default_source_date_epoch(self):
         step = self.text.split("sh scripts/prepare-rc01.sh", 1)[1].split("- name:", 1)[0]
@@ -153,12 +159,12 @@ class WorkflowContract(unittest.TestCase):
         self.assertIn("config/rc01/patches/**", self.text)
 
     def test_build_metadata_records_feed_commits_and_patch_digests(self):
-        for text in ("for feed in packages luci routing nikki", "git -C \"feeds/$feed\" rev-parse HEAD",
+        for text in ("for feed in packages luci routing nikki daeuniverse", "git -C \"feeds/$feed\" rev-parse HEAD",
                      "sha256sum \"$patch\"", "source_commit=$(git rev-parse HEAD)"):
             self.assertIn(text, self.text)
 
-    def test_artifact_name_has_a_single_fixed_variant(self):
-        self.assertIn("name: rc01-identity-preserved-dhcp-complete-nikki-${{ github.run_number }}", self.text)
+    def test_artifact_name_has_no_variant_suffix(self):
+        self.assertIn("name: rc01-identity-preserved-dhcp-complete-${{ github.run_number }}\n", self.text)
 
 
 class ConfigValidation(unittest.TestCase):
@@ -170,14 +176,11 @@ class ConfigValidation(unittest.TestCase):
         symbols = re.findall(r"CONFIG_[\w-]+", required)
         self.assertGreater(len(symbols), 50)
         return "".join(f"{symbol}=y\n" for symbol in symbols) + (
-            'CONFIG_FEED_nikki=m\nCONFIG_GOLANG_BUILD_BOOTSTRAP=y\nCONFIG_GOLANG_EXTERNAL_BOOTSTRAP_ROOT=""\n') + extra
+            'CONFIG_FEED_nikki=m\nCONFIG_FEED_daeuniverse=m\nCONFIG_GOLANG_BUILD_BOOTSTRAP=y\nCONFIG_GOLANG_EXTERNAL_BOOTSTRAP_ROOT=""\n') + extra
 
     def validate(self, text):
         with tempfile.TemporaryDirectory(prefix="rc01-config-") as directory:
-            path = Path(directory) / ".config"
-            path.write_text(text)
-            return subprocess.run(["sh", str(ROOT / "scripts/validate-rc01-config.sh"), str(path)],
-                                  capture_output=True, text=True, env=os.environ | {"RC01_GO_BOOTSTRAP_ROOT": ""})
+            return fixture.ValidationProject(directory).validate(text)
 
     def test_required_selection_passes_without_any_dae_feed(self):
         result = self.validate(self.config())
@@ -186,7 +189,7 @@ class ConfigValidation(unittest.TestCase):
 
     def test_dae_daed_and_every_ui_or_btf_form_are_rejected(self):
         for package in ("dae", "daed", "daed-geoip", "daed-geosite", "luci-app-dae", "luci-app-daed",
-                        "luci-app-daede", "luci-i18n-daed-zh-cn", "vmlinux-btf"):
+                        "luci-app-daede", "luci-i18n-daed-zh-cn", "vmlinux-btf", "vmlinux-btf-builtin"):
             for value in ("y", "m"):
                 with self.subTest(package=package, value=value):
                     result = self.validate(self.config(f"CONFIG_PACKAGE_{package}={value}\n"))

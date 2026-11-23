@@ -37,7 +37,13 @@ for symbol in \
 	CONFIG_PACKAGE_iperf3 CONFIG_PACKAGE_pciutils CONFIG_PACKAGE_usbutils \
 	CONFIG_PACKAGE_cpufreq CONFIG_PACKAGE_luci-app-cpufreq \
 	CONFIG_PACKAGE_kmod-usb-storage CONFIG_PACKAGE_kmod-usb-storage-uas \
-	CONFIG_PACKAGE_kmod-fs-ext4 CONFIG_PACKAGE_block-mount CONFIG_PACKAGE_e2fsprogs
+	CONFIG_PACKAGE_kmod-fs-ext4 CONFIG_PACKAGE_block-mount CONFIG_PACKAGE_e2fsprogs \
+	CONFIG_KERNEL_DEBUG_INFO_BTF CONFIG_KERNEL_CGROUPS CONFIG_KERNEL_CGROUP_BPF \
+	CONFIG_PACKAGE_kmod-sched-bpf CONFIG_PACKAGE_kmod-veth \
+	CONFIG_PACKAGE_kmod-nft-queue CONFIG_PACKAGE_kmod-nfnetlink-queue \
+	CONFIG_PACKAGE_libstdcpp CONFIG_PACKAGE_v2ray-geoip CONFIG_PACKAGE_v2ray-geosite \
+	CONFIG_PACKAGE_honk CONFIG_PACKAGE_luci-app-honk CONFIG_PACKAGE_luci-lib-daeuniverse \
+	CONFIG_PACKAGE_luci-i18n-daeuniverse-zh-cn
 do
 	require_y "$symbol"
 done
@@ -50,11 +56,13 @@ done
 profiles="$(grep -Ec '^CONFIG_TARGET_.+_DEVICE_.+=y$' "$config" || :)"
 [ "$profiles" -eq 1 ] || { echo "Expected one RC01 device, found $profiles" >&2; exit 1; }
 grep -Fqx 'CONFIG_FEED_nikki=m' "$config" || { echo 'Do not mix the Nikki release binary feed into this source build' >&2; exit 1; }
+grep -Fqx 'CONFIG_FEED_daeuniverse=m' "$config" || { echo 'Do not mix the daeuniverse binary feed into this source build' >&2; exit 1; }
 
 for package in \
 	mihomo-alpha sing-box luci-app-homeproxy luci-app-openclash \
 	luci-app-passwall luci-app-passwall2 \
-	dae daed daed-geoip daed-geosite luci-app-dae luci-app-daed luci-app-daede luci-i18n-daed-zh-cn vmlinux-btf \
+	dae daed daed-geoip daed-geosite luci-app-dae luci-app-daed luci-app-daede luci-i18n-daed-zh-cn \
+	vmlinux-btf vmlinux-btf-builtin \
 	irqbalance luci-app-qca-ppe-qos qca-ppe-qos qosify sqm-scripts \
 	tcpdump-mini ethtool iw tc-tiny tc-bpf \
 	samba4-server ksmbd-server luci-app-samba4 \
@@ -65,6 +73,12 @@ do
 		exit 1
 	fi
 done
+
+# honk uses the kernel's own BTF and must not pull in vmlinux-btf (rejected
+# above); it has to come from the pinned daeuniverse source feed.
+[ "$(readlink -f package/feeds/daeuniverse/honk)" = "$PWD/feeds/daeuniverse/honk" ] || {
+	echo 'honk must come from the pinned daeuniverse source feed' >&2; exit 1
+}
 
 grep -Fq 'ATH12K_PPE_DS_SUPPORT' package/kernel/mac80211/ath.mk || {
 	echo 'Native ath12k Direct Switch support disappeared' >&2; exit 1

@@ -40,16 +40,17 @@ APPSBLENV 分区为 512 KiB，擦除块 128 KiB，环境工具搜索范围为两
 
 ## 构建与软件来源
 
-工作流 `.github/workflows/build-rc01.yml` 使用手动 `workflow_dispatch`，输入只有 `go_bootstrap` 与 `cold_cache`。
+工作流 `.github/workflows/build-rc01.yml` 使用手动 `workflow_dispatch`，输入为 `go_bootstrap` 与 `cold_cache`。
 目标是只构建上述布局，工作流不执行设备刷写。
 
 软件来源由仓库固定，构建时不解析更新的 HEAD 或 Release：
 
-- `config/rc01/feeds.conf` 的每一行都是 `src-git <名称> <URL>^<40 位提交>`，固定 packages、luci、routing、nikki。
+- `config/rc01/feeds.conf` 的每一行都是 `src-git <名称> <URL>^<40 位提交>`，固定 packages、luci、routing、nikki、daeuniverse（后者仅供 honk）。
   修改某个 feed 的版本就是修改这一行的提交 ID，并经审核提交。
 - 对固定 feed 的修改只来自 `config/rc01/patches/` 下的标准 `.patch`：
   `golang/` 修改 packages 的 `lang/golang/*.mk`（编译器与主机 Go 使用本地工具链），
-  `packages/` 将 Tailscale、Mihomo 升到审核过的版本（Mihomo 补丁同时让构建时间取 `SOURCE_DATE_EPOCH`）。
+  `packages/` 将 Tailscale、Mihomo 升到审核过的版本（Mihomo 补丁同时让构建时间取 `SOURCE_DATE_EPOCH`），
+  `honk/` 修改 daeuniverse feed 的 `honk/Makefile`（见下文 honk）。
   `packages/manifest.json` 记录每个包的 feed、路径、补丁、版本、源码提交与哈希以及补丁后配方的摘要，
   供产物元数据核对。
 - `scripts/prepare-rc01.sh` 在 `./scripts/feeds update -a` 之后，确认每个 feed 位于固定提交，
@@ -59,7 +60,7 @@ APPSBLENV 分区为 512 KiB，擦除块 128 KiB，环境工具搜索范围为两
 - 之后脚本安装所选软件包根、合并 `defconfig/qualcommbe-rc01.config`、选择 Go bootstrap、
   执行 `make defconfig`、`scripts/validate-rc01-config.sh` 与 rc01-platform 配方预检。
   `SOURCE_DATE_EPOCH` 沿用 OpenWrt 的 `scripts/get_source_date_epoch.sh`（仓库 HEAD 提交时间）。
-- 软件包中不含 dae/daed/daede 的任何形式；`validate-rc01-config.sh` 会拒绝它们及 `vmlinux-btf`。
+- 软件包中不含 dae/daed/daede 的任何形式；`validate-rc01-config.sh` 会拒绝它们及 `vmlinux-btf`、`vmlinux-btf-builtin`。
 
 产物的 `rc01-build-metadata.txt` 记录仓库提交与树、各 feed 的提交、受控补丁文件的 SHA-256、
 `SOURCE_DATE_EPOCH`、Go bootstrap 等；`rc01-source-metadata.py` 在构建后核验平台来源、
@@ -107,6 +108,43 @@ Actions 的 `go_bootstrap=external` 校验官方 Go 1.24.13 bootstrap 后从固�
 `source` 使用源码链。`cold_cache=true` 跳过缓存恢复与保存。缓存、并行及串行重试统计
 随构建记录；软件版本与来源以产物的 `rc01-build-metadata.txt` 和 feed 提交为准。
 
+## honk（实验，运行时未验证）
+
+固件默认编入 daeuniverse 的 eBPF 透明代理 honk 及其 LuCI 页面（`luci-app-honk`、`luci-lib-daeuniverse` 与中文包
+`luci-i18n-daeuniverse-zh-cn`），没有构建开关；首启默认停用，与 Nikki 二选一。RC01 上的运行时行为尚未验证，必须在新镜像上实测。
+
+- 来源：官方 feed `https://github.com/daeuniverse/openwrt-packages.git`，在 `feeds.conf` 固定为
+  `e104a4930c5fc4f625f3355257626495685424f5`。honk 源码是 `daeuniverse/honk` 标签 `v0.1.0-beta.6`
+  （提交 `64848881b7304e250e7a25422f4f1d86a5975eca`）的 codeload tarball，SHA-256
+  `cfddedeafa349d0bdfaebd792d6f15c9f31de46a051e5a0692749a74f69d8e6d`，解包目录 `honk-0.1.0-beta.6/`。
+- 补丁：`config/rc01/patches/honk/100-rc01-honk-source.patch` 只修改该 feed 的 `honk/Makefile`：
+  用标准 `PKG_SOURCE_URL`/`PKG_HASH` 下载源码，取代依赖 `./src` 检出的自定义 `Build/Prepare`；
+  版本、标签与哈希写死，去掉 `HONK_VERSION`/`HONK_GIT_TAG` 外部覆盖；去掉对 `vmlinux-btf` 的依赖，
+  BTF 来自内核自带的 `/sys/kernel/btf/vmlinux`（`honk.init` 同时接受该路径）；`PKG_RELEASE` 2→3，
+  使 apk 版本不同于官方 feed 的 `0.1.0_beta6-r2`。该补丁与其他补丁一样，在
+  `prepare-rc01.sh` 中检查并应用，上游 feed 变化会立即暴露。feed 中的 `dae`、`luci-app-dae`、
+  `vmlinux-btf`、`vmlinux-btf-builtin` 不会被安装，配置校验也拒绝它们。
+- 构建：`prepare-rc01.sh` 无条件安装 honk 相关包（原 `RC01_WITH_HONK` 开关已移除，设置它会报错），
+  `defconfig/qualcommbe-rc01.config` 直接包含其选项（BTF、cgroup BPF、`kmod-sched-bpf`、`kmod-veth`、
+  nft 队列与 nfnetlink 队列、geo 数据等；不开启 XDP 套接字、BPF stream parser、kprobes 与主机 BPF 工具链），
+  `validate-rc01-config.sh` 要求这些符号都存在。构建后
+  `scripts/validate-rc01-honk-kernel.sh` 核对编译出的内核配置（BPF/CGROUP_BPF/NET_CLS_ACT/NET_XGRESS/
+  DEBUG_INFO_BTF/NET_NS/NF_TABLES_INET 为 `y`，VETH/NF_TABLES/NFT_CT/NFT_QUEUE/NETFILTER_NETLINK_QUEUE 等为 `y` 或 `m`）
+  和 `vmlinux` 的 `.BTF` 段。
+- 与 Nikki 二选一：`89-rc01-bypass` 在存在 `/etc/config/honk` 时把 `honk.config.enabled` 设为 `0`；
+  honk 包自带的 `90-honk-autostart` 在其后运行，只在该选项为空时才写入，所以全新镜像保持不自启。
+  使用 `sysupgrade` 保留设置时，新镜像的首启脚本会再次执行，honk 同样回到停用，需手动重新启用。
+  启用 honk 前先停用 Nikki，反之亦然；Nikki 预检会把运行或启用中的 honk 报告为冲突。
+- CI 的 Rust 依赖：honk 的 `build.sh` 用 cargo 构建 `honk-core --features ebpf,native-ui`，需要 Rust 稳定版
+  `1.99.1`（含 `aarch64-unknown-linux-musl` 目标）、eBPF 用 `nightly-2026-10-20`（`rust-src`、`llvm-tools`）
+  和经 SHA-256 校验的 `bpf-linker 0.11.0`，以及 `cmake`、`libclang-dev`、`clang`、`llvm`、`pkg-config`、`zstd`。
+  这些版本集中在工作流顶层 `env`（`RC01_HONK_*`），安装步骤在下载源码之后、编译之前，并对照下载的 honk 源码中的
+  `rust-toolchain.toml` 与 `.github/ci/pins.env`，不一致即失败。Cargo 注册表按 honk 标签缓存。
+  `build.sh` 还会在编译时下载其固定的 doona 界面压缩包并校验 SHA-256，所以编译需要联网。
+- 待实机验证：`honk` 在 RC01 内核上的 eBPF 加载、TC/veth/`daens` 命名空间、NFQUEUE、cgroup 遥测，与 PPE 硬件加速及
+  无线共存、LuCI 页面、启动/升级后的停用状态、与 Nikki 切换，以及 `honk-core` 的依赖库是否只含 libc、libgcc_s 与 libstdc++。
+  CI 通过只证明构建与静态检查。
+
 ## CI 验收范围
 
 CI 静态检查候选 MBN 与 MIBIB 的大小、摘要、格式和布局一致性，
@@ -117,7 +155,7 @@ factory/sysupgrade 载荷一致性、坏块预算和至少 32 MiB data 卷 LEB �
 
 通过的构建交付 factory、sysupgrade、校验和、配置、feeds 与补丁记录、package manifest 及同批 APK/公钥，
 不包含签名私钥。未完成验收的 artifact 不能作为合格刷写材料。
-镜像包命名为 `rc01-identity-preserved-dhcp-complete-nikki-{run_number}`，
+镜像包命名为 `rc01-identity-preserved-dhcp-complete-{run_number}`，
 包含同批布局契约、MIBIB 和静态验证记录；静态物料 artifact 同样不包含 U-Boot 二进制。
 `.github/workflows/verify-rc01.yml` 可用 `source_run_id` 对通过原生检查的当前布局产物重新验收，
 并核对提交、布局与物料身份。
@@ -127,6 +165,8 @@ factory/sysupgrade 载荷一致性、坏块预算和至少 32 MiB data 卷 LEB �
 解析现场栈中的 `函数+偏移 [模块]` 时，设置 `CROSS_COMPILE` 为匹配的 AArch64 工具链前缀，
 在符号包目录运行内核源码中的 `scripts/faddr2line`，例如
 `"$kernel_dir/scripts/faddr2line" qcom-ppe.ko qcom_ppe_ds_start+0x4`。内核内建函数使用 `vmlinux`。
+基础配置（含 honk 与 Nikki）固定 `CONFIG_KERNEL_DEBUG_INFO=y` 且不启用 `KERNEL_DEBUG_INFO_REDUCED`
+（qualcommbe 默认会启用后者），`validate-rc01-config.sh` 要求前者并拒绝后者，符号包因此始终带完整 DWARF。符号包步骤不依赖 honk 专属选项（如 BTF）。
 
 **验证边界：CI 通过仅证明对应提交和产物通过构建及静态检查，不模拟硬件启动。**
 当前布局的实际前级接受、ENV 兼容、ECC/坏块写入边界、RAM 恢复、迁移、启动、升级和回厂
@@ -157,7 +197,8 @@ HTTPS 证书在设备本地生成，不预置账号、密码、订阅或私钥�
 RC01 使用 EMC2301 风扇控制器及 `emc2305` 驱动，按设备寻找 hwmon，不固定序号。
 温控保留非零转速下限和故障满速保护；先验收起转、转速与温度响应，再进行负载测试。
 代理先用单客户端验证 DNS、IPv4/IPv6、回程及实际接管，再对照 PPE/无线加速；
-Nikki 是唯一支持的透明代理；手动安装的其他代理（如 dae）与其同时运行或启用会被预检判为冲突。后续安装内核模块使用同一构建的包与来源。
+Nikki 是默认受支持的透明代理；honk 为实验性、首启停用，且与 Nikki 二选一。其他代理（dae、daed、honk）
+与 Nikki 同时运行或启用会被预检判为冲突（已安装但停止并禁用的 honk 不算冲突）。后续安装内核模块使用同一构建的包与来源。
 
 
 ## 离线对象级验证
