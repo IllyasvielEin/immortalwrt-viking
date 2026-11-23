@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Check publishable text and decoded source-lock payloads without printing secrets."""
+"""Check publishable text and decoded embedded payloads without printing secrets."""
 import argparse
 import base64
 import json
@@ -10,8 +10,7 @@ import re
 import subprocess
 import sys
 
-PUBLIC_MAINTAINERS = {"openwrt", "immortalwrt", "vikingyfy", "kenzok8", "metacubex",
-                      "tailscale", "nikkinikki-org", "daeuniverse"}
+PUBLIC_MAINTAINERS = {"openwrt", "immortalwrt", "vikingyfy", "metacubex", "tailscale", "nikkinikki-org"}
 RULES = {
     "private-key": re.compile(r"-----BEGIN (?:OPENSSH|RSA|EC|DSA|ENCRYPTED)?\s*PRIVATE KEY-----"),
     "credential": re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|tskey-(?:auth|api)-[A-Za-z0-9_-]{12,})\b"),

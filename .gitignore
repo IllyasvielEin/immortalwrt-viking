@@ -36,5 +36,3 @@ git-src
 .ccache
 .sccache
 .vscode*
-
-/.rc01-sources

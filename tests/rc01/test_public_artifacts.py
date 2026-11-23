@@ -62,7 +62,7 @@ class PublicArtifacts(unittest.TestCase):
 
     def test_workflow_checks_each_upload_category_before_publishing(self):
         workflow = (ROOT / ".github/workflows/build-rc01.yml").read_text()
-        for category in ("source_privacy", "metrics_privacy", "image_privacy", "verified_privacy", "logs_privacy"):
+        for category in ("metrics_privacy", "image_privacy", "verified_privacy", "logs_privacy"):
             self.assertIn(f"id: {category}", workflow)
             self.assertIn(f"steps.{category}.outcome == 'success'", workflow)
         self.assertIn('validate-rc01-public-artifacts.py "$TARGET_DIR" "$RUNNER_TEMP/rc01-symbols"', workflow)

@@ -359,7 +359,7 @@ class Translations(unittest.TestCase):
         assess = platform[platform.index("export function assess"):platform.index("export function snapshot")]
         calls = assess.split("check('")[1:]
         messages = {re.search(r"'((?:[^'\\]|\\.)+)'\);", call).group(1) for call in calls}
-        self.assertEqual(len(calls), 18, "preflight check count changed; review this extraction")
+        self.assertEqual(len(calls), 17, "preflight check count changed; review this extraction")
         strings |= messages
         self.assertEqual(sorted(strings - translated), [])
 

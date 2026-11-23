@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # RC01 source recipe update; preserve upstream attribution and license.
-# Prerequisite: prepare-rc01.sh SOURCE_DATE_EPOCH timestamp guard.
+# Also pins PKG_BUILD_TIME to SOURCE_DATE_EPOCH so the binary is reproducible.
 # Mirror hash: OpenWrt rawgit tar/gzip -n, umask 022, epoch 1794376419;
 # independently verified by scripts/dl_github_archive.py.
 --- a/mihomo-meta/Makefile
@@ -30,5 +30,6 @@
 -PKG_BUILD_VERSION:=v1.19.32
 +PKG_BUILD_VERSION:=v1.19.34
  PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
- PKG_BUILD_TIME:=$(shell date -u -d "@$(SOURCE_DATE_EPOCH)" -Iseconds)
+-PKG_BUILD_TIME:=$(shell date -u -Iseconds)
++PKG_BUILD_TIME:=$(shell date -u -d "@$(SOURCE_DATE_EPOCH)" -Iseconds)
  

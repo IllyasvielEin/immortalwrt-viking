@@ -65,10 +65,4 @@ uci commit firewall
 for service in tailscale tailscale-settings; do
 	[ ! -x "/etc/init.d/$service" ] || "/etc/init.d/$service" disable
 done
-if [ -x /etc/init.d/dae ]; then
-	uci -q set dae.config.enabled='0'
-	uci -q set daede.config.active_backend='dae'
-	uci -q commit dae
-	uci -q commit daede
-fi
 exit 0

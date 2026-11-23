@@ -1,23 +1,20 @@
-"""Offline checks against the real pinned recipe objects; no feed update/build."""
+"""Pinned feeds, controlled patches and their application by prepare-rc01.sh; offline."""
 from pathlib import Path
-import base64
-import hashlib
-import importlib.util
 import json
-import shutil
-import subprocess
+import re
+import sys
 import tempfile
 import unittest
-from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import prepare_fixture as fixture  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("package_sources", ROOT / "scripts/rc01-software-sources.py")
-sources = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sources)
-PATCHES = ROOT / "config/rc01/patches/packages"
-MANIFEST = json.loads((PATCHES / "manifest.json").read_text())["packages"]
-OLD_TIME = 'PKG_BUILD_TIME:=$(shell date -u -Iseconds)'
-NEW_TIME = 'PKG_BUILD_TIME:=$(shell date -u -d "@$(SOURCE_DATE_EPOCH)" -Iseconds)'
+PATCHES = ROOT / "config/rc01/patches"
+MANIFEST = json.loads((PATCHES / "packages/manifest.json").read_text())["packages"]
+PREPARE = (ROOT / "scripts/prepare-rc01.sh").read_text()
+FEEDS = dict(re.fullmatch(r"src-git (\S+) \S+\^([0-9a-f]{40})", line).groups()
+             for line in (ROOT / "config/rc01/feeds.conf").read_text().splitlines() if line)
 
 
 def variable(text, name):
@@ -27,186 +24,123 @@ def variable(text, name):
     return values[0]
 
 
-class PackageRecipeTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.originals = {}
-        for item in MANIFEST:
-            result = subprocess.run(["git", "-C", str(ROOT / "feeds" / item["feed"]),
-                                     "show", item["feed_revision"] + ":" + item["path"]],
-                                    capture_output=True, text=True)
-            if result.returncode:
-                raise unittest.SkipTest("pinned feed git objects required; these tests never fetch them")
-            cls.originals[item["feed"]] = result.stdout
+def patch_list():
+    block = re.search(r"rc01_patches='([^']*)'", PREPARE)[1]
+    return [tuple(line.split(":", 1)) for line in block.splitlines()]
 
+
+class PinnedFeeds(unittest.TestCase):
+    def test_every_feed_line_is_a_full_commit_pin_and_dae_feed_is_gone(self):
+        lines = (ROOT / "config/rc01/feeds.conf").read_text().splitlines()
+        for line in lines:
+            self.assertRegex(line, r"^src-git [a-z0-9_-]+ https://\S+\.git\^[0-9a-f]{40}$")
+        self.assertEqual(set(FEEDS), {"packages", "luci", "routing", "nikki"})
+        self.assertEqual(len(lines), len(FEEDS))
+        self.assertNotIn("daede", (ROOT / "config/rc01/feeds.conf").read_text())
+
+    def test_manifest_and_patches_agree_with_feed_pins_and_prepare(self):
+        listed = patch_list()
+        patches = {p.relative_to(ROOT).as_posix() for p in PATCHES.glob("*/*.patch")}
+        self.assertEqual({patch for _, patch in listed}, patches)
+        self.assertEqual(len(listed), len(patches))
+        for _, patch in listed:
+            self.assertTrue((ROOT / patch).is_file())
+        for item in MANIFEST:
+            with self.subTest(patch=item["patch"]):
+                self.assertEqual(item["feed_revision"], FEEDS[item["feed"]])
+                self.assertIn((item["feed"], f"config/rc01/patches/packages/{item['patch']}"), listed)
+                self.assertNotIn("baseline_sha256", item)
+        for feed, _ in listed:
+            self.assertIn(feed, FEEDS)
+
+    def test_patches_declare_the_reviewed_version_and_source_hash(self):
+        for item in MANIFEST:
+            with self.subTest(patch=item["patch"]):
+                patch = (PATCHES / "packages" / item["patch"]).read_text()
+                self.assertIn(f"--- a/{item['path']}\n", patch)
+                added = {line[1:].split(":=", 1)[0]: line[1:].split(":=", 1)[1]
+                         for line in patch.splitlines() if line.startswith("+") and ":=" in line}
+                self.assertEqual(added["PKG_VERSION"], item["version"])
+                key = "PKG_HASH" if item["feed"] == "packages" else "PKG_MIRROR_HASH"
+                self.assertEqual(added[key], item["source_sha256"])
+                if item["feed"] == "nikki":
+                    self.assertEqual(added["PKG_SOURCE_VERSION"], item["source_commit"])
+                    self.assertEqual(added["PKG_BUILD_VERSION"], "v" + item["version"])
+                    # Reproducible build time is part of the patch, not a hidden pre-step.
+                    self.assertIn('PKG_BUILD_TIME:=$(shell date -u -d "@$(SOURCE_DATE_EPOCH)" -Iseconds)', patch)
+
+    def test_prepare_has_no_resolver_replay_or_dae_inputs(self):
+        for text in ("software-sources", ".rc01-sources", "RC01_WITH_DAE", "RC01_UPDATE_MODE",
+                     "RC01_REPLAY", "dae.config", "daede"):
+            self.assertNotIn(text, PREPARE)
+        for text in ("scripts/feeds update -a", "feeds.conf"):
+            self.assertIn(text, PREPARE)
+
+
+class PrepareAppliesControlledPatches(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="rc01-package-test-")
+        temporary = tempfile.TemporaryDirectory(prefix="rc01-prepare-patches-")
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name)
-        self.feeds = {}
-        (self.work / "feeds").mkdir()
-        shutil.copytree(PATCHES, self.work / "config/rc01/patches/packages")
+        self.project = fixture.make_project(self.work)
+
+    def prepare(self):
+        return fixture.run_prepare(self.project, sys.executable)
+
+    def recipe(self, feed, path):
+        return (self.project / "feeds" / feed / path).read_text()
+
+    def test_every_patch_is_checked_then_applied_before_the_package_index_is_built(self):
+        result, events = self.prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertLess(events.index("feeds update -a"), events.index("feeds update -i"))
+        self.assertIn("GOTOOLCHAIN=local", self.recipe("packages", "lang/golang/golang-compiler.mk"))
+        self.assertIn("GOTOOLCHAIN=local", self.recipe("packages", "lang/golang/golang-host-build.mk"))
         for item in MANIFEST:
-            name = item["feed"]
-            feed = self.work / "feeds" / name
-            subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout",
-                            str(ROOT / "feeds" / name), str(feed)], check=True)
-            # Detach only the disposable clone; never checkout the shared feed.
-            (feed / ".git/HEAD").write_text(item["feed_revision"] + "\n")
-            recipe = feed / item["path"]
-            recipe.parent.mkdir(parents=True)
-            recipe.write_text(self.originals[name])
-            (recipe.parent / "unrelated.keep").write_bytes(b"preserve local files\n")
-            self.feeds[name] = feed
-
-    def apply(self):
-        lock = {"with_dae": False, "prepared": True,
-                "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
-        with mock.patch.object(sources, "ROOT", self.work), mock.patch.object(sources, "go_adapter"), \
-             mock.patch.object(sources, "validate_lock", side_effect=lambda value: value):
-            sources.verify_feeds(lock)
-            sources.locked_sources(lock)
-            sources.apply_outputs(lock)
-            sources.verify(lock)
-
-    def recipes(self):
-        return {item["feed"]: self.feeds[item["feed"]] / item["path"] for item in MANIFEST}
-
-    def snapshot(self):
-        return {str(p.relative_to(self.work)): p.read_bytes()
-                for feed in self.feeds.values() for p in feed.rglob("*")
-                if p.is_file() and ".git" not in p.relative_to(feed).parts}
-
-    def assert_refused_unchanged(self, message):
-        before = self.snapshot()
-        with self.assertRaisesRegex(sources.SourceError, message):
-            self.apply()
-        self.assertEqual(self.snapshot(), before)
-
-    def test_locked_baselines_exact_versions_hashes_and_idempotence(self):
-        for item in MANIFEST:
-            self.assertEqual(hashlib.sha256(self.recipes()[item["feed"]].read_text().replace(OLD_TIME, NEW_TIME).encode()).hexdigest(),
-                             item["baseline_sha256"])
-        self.apply()
-        for item in MANIFEST:
-            path = self.recipes()[item["feed"]]
-            text = path.read_text()
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), item["applied_sha256"])
+            text = self.recipe(item["feed"], item["path"])
             self.assertEqual(variable(text, "PKG_VERSION"), item["version"])
-            key = "PKG_HASH" if item["feed"] == "packages" else "PKG_MIRROR_HASH"
-            self.assertEqual(variable(text, key), item["source_sha256"])
-            if item["feed"] == "packages":
-                self.assertEqual(variable(text, "PKG_RELEASE"), "1")
-                self.assertEqual(variable(text, "PKG_SOURCE_URL"),
-                                 "https://codeload.github.com/tailscale/tailscale/tar.gz/v$(PKG_VERSION)?")
-            else:
-                self.assertEqual(variable(text, "PKG_SOURCE_VERSION"), item["source_commit"])
-                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v" + item["version"])
-                self.assertIn(NEW_TIME, text)
-            # The complete recipe must differ only in these reviewed fields.
-            old = dict(line.split(":=", 1) for line in self.originals[item["feed"]].replace(OLD_TIME, NEW_TIME).splitlines() if ":=" in line)
-            new = dict(line.split(":=", 1) for line in text.splitlines() if ":=" in line)
-            changed = {key for key in old | new if old.get(key) != new.get(key)}
-            self.assertEqual(changed, {"PKG_VERSION", "PKG_RELEASE", "PKG_HASH"} if item["feed"] == "packages"
-                             else {"PKG_VERSION", "PKG_SOURCE_VERSION", "PKG_MIRROR_HASH", "PKG_BUILD_VERSION"})
-            self.assertEqual(path.parent.joinpath("unrelated.keep").read_bytes(), b"preserve local files\n")
-        before = self.snapshot()
-        self.apply()
-        self.assertEqual(self.snapshot(), before)
+        nikki = next(item for item in MANIFEST if item["feed"] == "nikki")
+        self.assertIn("SOURCE_DATE_EPOCH", self.recipe("nikki", nikki["path"]))
+        # Applied patches stay uncommitted so the feed remains at its pinned HEAD.
+        for feed in ("packages", "nikki"):
+            self.assertEqual(fixture.git(self.project / "feeds" / feed, "rev-parse", "HEAD"), FEEDS_FIXTURE(self.project)[feed])
 
-    def test_each_wrong_feed_revision_refuses_before_any_recipe_write(self):
-        for item in MANIFEST:
-            with self.subTest(feed=item["feed"]):
-                head = self.feeds[item["feed"]] / ".git/HEAD"
-                correct = head.read_text()
-                head.write_text("0" * 40 + "\n")
-                self.assert_refused_unchanged("locked commit: " + item["feed"])
-                head.write_text(correct)
+    def test_second_run_recognises_applied_patches_and_changes_nothing(self):
+        self.assertEqual(self.prepare()[0].returncode, 0)
+        before = {p: p.read_bytes() for p in (self.project / "feeds").rglob("*") if p.is_file() and ".git" not in p.parts}
+        result, _ = self.prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("Already applied"), len(patch_list()))
+        self.assertEqual(before, {p: p.read_bytes() for p in before})
 
-    def test_drift_outside_patch_context_is_not_overwritten(self):
-        for name, path in self.recipes().items():
-            with self.subTest(feed=name):
-                original = path.read_bytes()
-                path.write_bytes(original + b"# local recipe customization\n")
-                self.assert_refused_unchanged("pre/postimage drift")
-                path.write_bytes(original)
+    def test_feed_not_at_its_pinned_commit_is_rejected_before_any_patch(self):
+        feed = self.project / "feeds/packages"
+        (feed / "extra").write_text("moves HEAD\n")
+        fixture.git(feed, "add", "-A")
+        fixture.git(feed, "commit", "--quiet", "-m", "unpinned")
+        result, events = self.prepare()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not at its pinned commit", result.stderr)
+        self.assertNotIn("GOTOOLCHAIN=local", self.recipe("packages", "lang/golang/golang-compiler.mk"))
+        self.assertNotIn("feeds update -i", events)
 
-    def test_partial_update_and_postimage_drift_refuse_without_other_writes(self):
-        path = self.recipes()["nikki"]
-        original = path.read_text()
-        selected = next(item for item in MANIFEST if item["feed"] == "nikki")
-        path.write_text(sources.replace_field(original, "PKG_VERSION", selected["version"]))
-        self.assert_refused_unchanged("pre/postimage drift")
-        path.write_text(original)
-        self.apply()
-        path.write_text(path.read_text().replace("with_gvisor", "without_gvisor"))
-        self.assert_refused_unchanged("pre/postimage drift")
-
-    def test_mixed_already_applied_and_baseline_can_resume(self):
-        tailscale = self.recipes()["packages"]
-        original = tailscale.read_bytes()
-        self.apply()
-        tailscale.write_bytes(original)
-        self.apply()
-        for item in MANIFEST:
-            self.assertEqual(hashlib.sha256(self.recipes()[item["feed"]].read_bytes()).hexdigest(),
-                             item["applied_sha256"])
-
-    def test_timestamp_guard_accepts_raw_preimage_and_rejects_unknown_or_duplicate_lines(self):
-        path = self.recipes()["nikki"]
-        for applied in (False, True):
-            if applied:
-                self.apply()
-            original = path.read_text()
-            timestamp = NEW_TIME if applied else OLD_TIME
-            for replacement in ("PKG_BUILD_TIME:=unknown", timestamp + "\n" + timestamp):
-                with self.subTest(applied=applied, timestamp=replacement):
-                    path.write_text(original.replace(timestamp, replacement))
-                    self.assert_refused_unchanged("pre/postimage drift")
-                    path.write_text(original)
-            if applied:
-                path.write_text(original.replace(NEW_TIME, OLD_TIME))
-                self.assert_refused_unchanged("pre/postimage drift")
-                path.write_text(original)
-
-    def test_symlinked_recipe_is_rejected(self):
-        path = self.recipes()["nikki"]
-        original = path.read_bytes()
-        outside = self.work / "outside"
-        outside.write_bytes(original)
-        path.unlink()
-        path.symlink_to(outside)
-        with self.assertRaisesRegex(sources.SourceError, "unsafe application output path"):
-            self.apply()
-        self.assertEqual(outside.read_bytes(), original)
-        self.assertEqual(self.recipes()["packages"].read_text(), self.originals["packages"])
+    def test_patch_that_does_not_apply_fails_check_without_touching_that_recipe(self):
+        nikki = next(item for item in MANIFEST if item["feed"] == "nikki")
+        path = self.project / "feeds/nikki" / nikki["path"]
+        drifted = path.read_text().replace("PKG_BUILD_PARALLEL:=1", "PKG_BUILD_PARALLEL:=0")
+        self.assertNotEqual(drifted, path.read_text())
+        path.write_text(drifted)
+        result, events = self.prepare()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("patch does not apply", result.stderr)
+        self.assertEqual(path.read_text(), drifted)
+        self.assertNotIn("feeds update -i", events)
+        self.assertNotIn("defconfig", events)
 
 
-class IntegrationContractTests(unittest.TestCase):
-    def test_pins_and_recorded_source_provenance(self):
-        pins = (ROOT / "config/rc01/feeds.conf").read_text()
-        for item in MANIFEST:
-            self.assertIn("^" + item["feed_revision"] + "\n", pins)
-        # The selected manifest owns version/source identity; test the real
-        # patch products instead of freezing another copy of its values here.
-        baselines = ROOT / "config/rc01/software-baselines"
-        recipes = {("packages", "net/tailscale/Makefile"): (baselines/"tailscale.Makefile").read_bytes(),
-                   ("nikki", "mihomo-meta/Makefile"): (baselines/"mihomo.Makefile").read_bytes()}
-        lock = {"with_dae": False, "feeds": {item["feed"]: {"commit": item["feed_revision"]} for item in MANIFEST}}
-        with mock.patch.object(sources, "go_adapter"), \
-             mock.patch.object(sources, "pristine", side_effect=lambda feed, name: recipes[(feed, name)]):
-            sources.locked_sources(lock)
-        for item in MANIFEST:
-            output = lock["outputs"][f"feeds/{item['feed']}/{item['path']}"]
-            text = base64.b64decode(output["content"]).decode()
-            self.assertEqual(variable(text, "PKG_VERSION"), item["version"])
-            key = "PKG_HASH" if item["feed"] == "packages" else "PKG_MIRROR_HASH"
-            self.assertEqual(variable(text, key), item["source_sha256"])
-            self.assertEqual(output["after"], item["applied_sha256"])
-            if item["feed"] == "nikki":
-                self.assertEqual(variable(text, "PKG_SOURCE_VERSION"), item["source_commit"])
-                self.assertEqual(variable(text, "PKG_BUILD_VERSION"), "v"+item["version"])
-
+def FEEDS_FIXTURE(project):
+    conf = (project / "config/rc01/feeds.conf").read_text()
+    return dict(re.fullmatch(r"src-git (\S+) \S+\^([0-9a-f]{40})", line).groups() for line in conf.splitlines())
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ import io
 import json
 from pathlib import Path
 import shutil
-import struct
 import subprocess
 import tarfile
 import tempfile
@@ -121,38 +120,6 @@ class FirmwarePairing(unittest.TestCase):
             changed[key] = "unreviewed"
             with self.subTest(key=key), self.assertRaises(ValueError):
                 metadata.firmware_metadata(changed)
-
-    def test_optional_dae_btf_provenance_reads_the_actual_kernel_section(self):
-        with tempfile.TemporaryDirectory(prefix="rc01-btf-provenance-") as temporary:
-            root = Path(temporary)
-            kernel = root / "build_dir/target-test/linux-qualcommbe_ipq95xx/linux-6.18.60/vmlinux"
-            kernel.parent.mkdir(parents=True)
-            kernel.with_name(".config").write_text("CONFIG_DEBUG_INFO_BTF=y\n")
-            names = b"\0.shstrtab\0.BTF\0"
-            section = b"\x9f\xeb\x01\x00" + bytes(20)
-            blob = bytearray(288 + len(section))
-            blob[:6] = b"\x7fELF\x02\x01"
-            struct.pack_into("<Q", blob, 40, 64)
-            struct.pack_into("<HHH", blob, 58, 64, 3, 1)
-            struct.pack_into("<IIQQQQIIQQ", blob, 128, 1, 3, 0, 0, 256, len(names), 0, 0, 1, 0)
-            struct.pack_into("<IIQQQQIIQQ", blob, 192, 11, 1, 0, 0, 288, len(section), 0, 0, 1, 0)
-            blob[256:256 + len(names)] = names
-            blob[288:] = section
-            kernel.write_bytes(blob)
-            original = metadata.ROOT
-            metadata.ROOT = root
-            try:
-                result = metadata.kernel_btf_metadata()
-                self.assertEqual(result["btf_sha256"], hashlib.sha256(section).hexdigest())
-                self.assertFalse(result["shadow_vmlinux_btf"])
-                kernel.write_bytes(blob[:-1])
-                with self.assertRaises(ValueError):
-                    metadata.kernel_btf_metadata()
-                kernel.write_bytes(blob.replace(b".BTF", b".XYZ"))
-                with self.assertRaises(ValueError):
-                    metadata.kernel_btf_metadata()
-            finally:
-                metadata.ROOT = original
 
 
 if __name__ == "__main__":

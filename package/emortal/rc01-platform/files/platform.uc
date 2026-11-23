@@ -560,10 +560,7 @@ export function collect(root, uci, cache) {
 		ppe: ppe_state(root, now),
 		sfp: sfp_state(root, uci, now, filter(ports, p => p.name == 'sfp')[0], processes),
 		connectivity: netled_state(root, uci, now, processes),
-		proxy: { btf: stat(root + '/sys/kernel/btf/vmlinux') != null,
-			nikki_installed: executable(root + '/usr/libexec/mihomo'),
-			daed_installed: executable(root + '/usr/bin/daed'),
-			dae_installed: executable(root + '/usr/bin/dae'),
+		proxy: { nikki_installed: executable(root + '/usr/libexec/mihomo'),
 			nikki_enabled: enabled(read('nikki', 'config', 'enabled')),
 			daed_enabled: enabled(read('daed', 'config', 'enabled')),
 			dae_enabled: enabled(read('dae', 'config', 'enabled')),
@@ -598,19 +595,20 @@ export function assess(state, target) {
 	check('ports', !length(filter(state.ports, p => !p.present)) ? 'ok' : 'error', 'Requires lan1..lan4, sfp and wan net devices; cables may be disconnected');
 	check('ppe', state.ppe.present ? 'ok' : 'warn', 'Native PPE module presence; zero or unavailable counters do not prove a fault');
 	let active = name => length(filter(state.processes, p => p.name == name)) > 0;
+	// Nikki is the only supported transparent proxy; a manually installed
+	// dae/daed running or enabled alongside it is still a conflict.
 	let proxies = [ 'nikki', 'dae', 'daed' ];
 	let running = { nikki: active('mihomo'), dae: active('dae'), daed: active('daed') };
 	check('proxy-conflict', length(filter(proxies, name => running[name] || state.proxy[name + '_enabled'])) > 1 ? 'error' : 'ok',
 		'Run only one transparent proxy at a time');
-	if (index(proxies, target) >= 0) {
-		check('proxy-installed', state.proxy[target + '_installed'] ? 'ok' : 'error', 'Requested proxy core is installed');
+	if (target == 'nikki') {
+		check('proxy-installed', state.proxy.nikki_installed ? 'ok' : 'error', 'Requested proxy core is installed');
 		check('other-proxy', length(filter(proxies, name => name != target && (running[name] || state.proxy[name + '_enabled']))) ? 'error' : 'ok',
 			'Stop and disable the other proxy before switching');
 		check('network-owner', state.proxy.automatic_network ? 'warn' : 'ok', 'Bypass networking should remain manually managed');
 		let offload = state.proxy.offload;
 		check('offload-baseline', !offload.available || offload.software || offload.hardware ? 'warn' : 'ok',
 			'Validate the proxy with flow offload disabled before testing acceleration coexistence');
-		if (target != 'nikki') check('btf', state.proxy.btf ? 'ok' : 'error', 'dae/daed requires runtime kernel BTF');
 		check('traffic-acceptance', 'info', 'Read-only preflight does not test DNS, routing, TCP/UDP, IPv6 or leak protection');
 	}
 	return { target, passed: !length(filter(checks, c => c.level == 'error')), checks };
@@ -618,6 +616,6 @@ export function assess(state, target) {
 
 export function snapshot(uci, cache) {
 	let state = collect('', uci, cache);
-	state.preflight = map([ 'hardware', 'nikki', 'dae', 'daed' ], target => assess(state, target));
+	state.preflight = map([ 'hardware', 'nikki' ], target => assess(state, target));
 	return state;
 }

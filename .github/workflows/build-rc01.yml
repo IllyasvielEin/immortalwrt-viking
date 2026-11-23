@@ -3,24 +3,6 @@ name: Build Xiaomi RC01 DHCP complete firmware
 on:
   workflow_dispatch:
     inputs:
-      software_updates:
-        description: 'Software feeds/apps: latest stable per build, or reviewed locked baseline'
-        type: choice
-        required: true
-        default: latest
-        options:
-          - latest
-          - locked
-      replay_run_id:
-        description: 'Optional prior run ID: replay its rc01-software-source-lock artifact'
-        type: string
-        required: false
-        default: ''
-      include_dae:
-        description: 'Experimental dae + daede UI; exact version in this build source lock (runtime unverified)'
-        type: boolean
-        required: true
-        default: true
       go_bootstrap:
         description: 'Go bootstrap: verified official binary or full source chain'
         type: choice
@@ -40,7 +22,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: rc01-${{ github.ref }}-${{ inputs.include_dae }}-${{ inputs.software_updates || 'latest' }}-${{ inputs.go_bootstrap }}-${{ inputs.replay_run_id || 'fresh' }}
+  group: rc01-${{ github.ref }}-${{ inputs.go_bootstrap }}
   cancel-in-progress: false
 
 env:
@@ -49,8 +31,6 @@ env:
   CCACHE_COMPILERCHECK: content
   RC01_GO_BOOTSTRAP_MODE: ${{ inputs.go_bootstrap }}
   TZ: Asia/Singapore
-  RC01_WITH_DAE: ${{ inputs.include_dae }}
-  RC01_UPDATE_MODE: ${{ inputs.software_updates || 'latest' }}
 
 jobs:
   build:
@@ -90,9 +70,9 @@ jobs:
         with:
           path: dl
           lookup-only: true
-          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/patches/**', 'defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/dae.config', 'defconfig/qualcommbe-rc01.config') }}-
+            rc01-dl-${{ runner.os }}-${{ hashFiles('config/rc01/feeds.conf', 'config/rc01/patches/**', 'defconfig/qualcommbe-rc01.config') }}-
             rc01-dl-${{ runner.os }}-
 
 
@@ -113,9 +93,9 @@ jobs:
         with:
           path: .ccache
           lookup-only: true
-          key: rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config', 'config/rc01/dae.config') }}-
+            rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-${{ hashFiles('defconfig/qualcommbe-rc01.config') }}-
             rc01-ccache-v2-content-${{ runner.os }}-${{ runner.arch }}-qualcommbe-ipq95xx-${{ hashFiles('toolchain/**', 'include/toolchain*.mk', 'rules.mk', 'target/linux/generic/kernel-6.18') }}-
 
 
@@ -200,48 +180,13 @@ jobs:
             *) echo 'Invalid bootstrap mode' >&2; exit 1 ;;
           esac
 
-      - name: Load an earlier software source lock
-        if: ${{ inputs.replay_run_id != '' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPLAY_RUN_ID: ${{ inputs.replay_run_id }}
-        run: |
-          set -euo pipefail
-          [[ "$REPLAY_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'Invalid replay run ID' >&2; exit 1; }
-          gh run download "$REPLAY_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rc01-software-source-lock --dir "$RUNNER_TEMP/rc01-replay"
-          echo "RC01_REPLAY_LOCK=$RUNNER_TEMP/rc01-replay/lock.json" >> "$GITHUB_ENV"
-
-      - name: Resolve software sources and prepare configuration
+      - name: Prepare pinned feeds, controlled patches and configuration
         shell: bash
         run: |
           set -euo pipefail
           sh scripts/prepare-rc01.sh 2>&1 | tee prepare.log
           ./scripts/diffconfig.sh > rc01.diffconfig
-          . ./.rc01-sources/environment.sh
-          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Check source lock and documentation before publishing
-        id: source_privacy
-        if: ${{ always() && !cancelled() && hashFiles('.rc01-sources/lock.json') != '' }}
-        run: python3 -B scripts/validate-rc01-public-artifacts.py .rc01-sources docs/rc01-build.md
-
-      - name: Preserve this build's software source lock
-        if: ${{ always() && !cancelled() && steps.source_privacy.outcome == 'success' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: rc01-software-source-lock
-          if-no-files-found: ignore
-          retention-days: 90
-          include-hidden-files: true
-          path: |
-            .rc01-sources/lock.json
-            .rc01-sources/feeds.conf
-            .rc01-sources/package-manifest.json
-            .rc01-sources/dae-sources.json
-            .rc01-sources/dae.patch
+          echo "SOURCE_DATE_EPOCH=$(./scripts/get_source_date_epoch.sh)" >> "$GITHUB_ENV"
 
       - name: Download package sources
         id: downloads
@@ -311,15 +256,14 @@ jobs:
             fi
           done
           cp rc01.diffconfig "$TARGET_DIR/rc01.diffconfig"
-          cp .rc01-sources/feeds.conf "$TARGET_DIR/rc01-feeds.lock"
-          cp .rc01-sources/lock.json "$TARGET_DIR/rc01-software-source-lock.json"
+          cp config/rc01/feeds.conf "$TARGET_DIR/rc01-feeds.conf"
           cp scripts/rc01-platform-sources.json "$TARGET_DIR/rc01-platform-sources.json"
           cp config/rc01/layout.json "$TARGET_DIR/rc01-layout.json"
           cp config/rc01/boot/mibib-front-bdata-r1.bin "$TARGET_DIR/rc01-mibib-front-bdata-r1.bin"
           cp rc01-boot-materials.json "$TARGET_DIR/rc01-boot-materials.json"
-          python3 -c 'import json, pathlib, sys; s=json.loads(pathlib.Path(".rc01-sources/lock.json").read_text()); pathlib.Path(sys.argv[1]).write_text(json.dumps(s["package_manifest"], indent=2)+"\n")' "$TARGET_DIR/rc01-package-sources.json"
+          cp config/rc01/patches/packages/manifest.json "$TARGET_DIR/rc01-package-sources.json"
           python3 -B scripts/rc01-source-metadata.py "$TARGET_DIR/rc01-source-metadata.json"
-          cp -a config/rc01/patches/packages "$TARGET_DIR/rc01-package-patches"
+          cp -a config/rc01/patches "$TARGET_DIR/rc01-patches"
           cp files/etc/uci-defaults/89-rc01-bypass "$TARGET_DIR/rc01-network-defaults.sh"
           {
             echo "repository=immortalwrt-viking"
@@ -353,26 +297,19 @@ jobs:
             echo "lan_address_mode=dhcp-client"
             echo "dhcp_client_hostname=RC01"
             echo "fan_pwm_output=push-pull"
-            echo "dae_test_build=$RC01_WITH_DAE"
             echo "nand_id_match=full-per-entry-length; ESMT device ID=51:7f:7f"
             echo "nand_probe_diagnostics=true"
-            for feed in packages luci routing nikki daede; do
+            for feed in packages luci routing nikki; do
               echo "feed_$feed=$(git -C "feeds/$feed" rev-parse HEAD)"
+            done
+            for patch in config/rc01/patches/*/*.patch; do
+              echo "patch_$(basename "$patch")_sha256=$(sha256sum "$patch" | cut -d' ' -f1)"
             done
           } > "$TARGET_DIR/rc01-build-metadata.txt"
           cp target/linux/generic/backport-6.18/442-v6.19-mtd-spinand-esmt-f50d2g41ka-qpic-id.patch "$TARGET_DIR/rc01-nand-id-correction.patch"
           cp target/linux/qualcommbe/patches-6.18/0412-mtd-spinand-rc01-probe-diagnostics.patch "$TARGET_DIR/rc01-nand-probe-diagnostics.patch"
           git -C feeds/nikki diff -- mihomo-meta/Makefile > "$TARGET_DIR/rc01-nikki-build.patch"
           git -C feeds/packages diff -- lang/golang/golang-compiler.mk lang/golang/golang-host-build.mk > "$TARGET_DIR/rc01-go-build.patch"
-          if [ "$RC01_WITH_DAE" = true ]; then
-            cp feeds/daede/ci/pins.env "$TARGET_DIR/rc01-daede-upstream.lock"
-            if [ -f .rc01-sources/dae.patch ]; then
-              cp .rc01-sources/dae.patch "$TARGET_DIR/rc01-daede-build.patch"
-            else
-              cp config/rc01/patches/daede/100-rc01-dae-lifecycle-and-source-policy.patch "$TARGET_DIR/rc01-daede-build.patch"
-            fi
-            cp feeds/daede/dae/Makefile "$TARGET_DIR/rc01-dae.Makefile"
-          fi
           (cd "$TARGET_DIR"; sha256sum -- *xiaomi_be10000-squashfs-* > rc01-images.sha256)
 
       - name: Check image metadata before publishing
@@ -416,9 +353,6 @@ jobs:
           kernel_dir="$(find build_dir -type d -path '*/linux-qualcommbe_ipq95xx/linux-6.18.*' -print -quit)"
           test -n "$kernel_dir"
           sh scripts/validate-rc01-nand.sh "$kernel_dir" "$kernel_dir/vmlinux"
-          if [ "$RC01_WITH_DAE" = true ]; then
-            sh scripts/validate-rc01-dae-kernel.sh "$kernel_dir/.config" "$kernel_dir/vmlinux"
-          fi
           test -x staging_dir/hostpkg/bin/ucode || make -j4 package/utils/ucode/host/compile
           wireless_dir="$(find build_dir -type d -path '*/backports-7.2' -print -quit)"
           test -n "$wireless_dir"
@@ -493,7 +427,7 @@ jobs:
         if: ${{ success() && steps.verified_privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: rc01-identity-preserved-dhcp-complete-${{ inputs.include_dae && 'dae-test' || 'nikki' }}-${{ github.run_number }}
+          name: rc01-identity-preserved-dhcp-complete-nikki-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |

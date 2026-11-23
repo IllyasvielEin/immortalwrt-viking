@@ -26,15 +26,14 @@ class StatusInterfaces(unittest.TestCase):
             export function snapshot() {
                 return { schema: 1, preflight: [
                   { target: 'hardware', passed: true, checks: [] },
-                  { target: 'nikki', passed: true, checks: [] },
-                  { target: 'dae', passed: false, checks: [] },
-                  { target: 'daed', passed: false, checks: [] }
+                  { target: 'nikki', passed: false, checks: [] }
                 ] };
             }\n''')
             command = [UCODE, "-L", str(path / "*.uc")]
             cli = ROOT / "package/emortal/rc01-platform/files/rc01-check"
             for args, code in [(["status"], 0), (["check", "hardware"], 0),
-                               (["check", "dae"], 1), (["check", "daed"], 1), (["check", "invalid"], 2),
+                               (["check", "nikki"], 1), (["check", "dae"], 2), (["check", "daed"], 2),
+                               (["check", "invalid"], 2),
                                (["status", "nikki"], 2)]:
                 result = subprocess.run(command + [str(cli)] + args, text=True, capture_output=True)
                 self.assertEqual(result.returncode, code, result.stderr)
@@ -308,21 +307,20 @@ const E = (tag, attrs, children) => ({ tag, attrs, children });
 const factory = new Function('view', 'rpc', 'poll', 'dom', 'E', '_', fs.readFileSync(process.argv[1], 'utf8'));
 const api = factory({ extend: v => v }, { declare: () => () => Promise.resolve({}) }, { add: () => {} }, {}, E, v => v);
 const check = (level, message) => ({ code: message, level, message });
-const text = JSON.stringify(api.render({
+const render = nikkiInstalled => JSON.stringify(api.render({
   schema: 1, sampled_at: { uptime: 1 }, temperatures: [], fans: [], fan: {},
-  proxy: { nikki_installed: true, dae_installed: false, daed_installed: false },
+  proxy: { nikki_installed: nikkiInstalled },
   preflight: [
     { target: 'hardware', passed: false, checks: [ check('ok', 'Board ok'), check('error', 'Layout broken'), check('warn', 'PPE missing') ] },
-    { target: 'nikki', passed: true, checks: [ check('ok', 'Installed'), check('info', 'Caveat only') ] },
-    { target: 'dae', passed: false, checks: [ check('error', 'Dae core missing') ] },
-    { target: 'daed', passed: false, checks: [ check('error', 'Daed core missing') ] }
+    { target: 'nikki', passed: true, checks: [ check('ok', 'Installed'), check('info', 'Caveat only') ] }
   ]
 }));
+const text = render(true);
 assert(text.includes('hardware: Failed · 1/3 checks OK'));
 assert(text.includes('Layout broken') && text.includes('PPE missing') && !text.includes('Board ok'), 'only problems listed');
 assert(text.includes('nikki: Passed · 2/2 checks OK'), 'info is a caveat, not a failed check');
 assert(text.includes('Caveat only'), 'info caveat stays visible');
-assert(!text.includes('dae:') && !text.includes('Dae core missing') && !text.includes('Daed core missing'), 'uninstalled proxies hidden');
+assert(!render(false).includes('nikki:') && render(false).includes('hardware: Failed'), 'uninstalled proxy hidden');
 '''
         result = subprocess.run([NODE, "-e", program, str(source)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

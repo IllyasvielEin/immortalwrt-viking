@@ -128,12 +128,14 @@
     {
       "id": "RC01-SOFTWARE",
       "paths": [
-        "scripts/rc01-software-sources.py",
+        "scripts/prepare-rc01.sh",
         "config/rc01/feeds.conf",
+        "config/rc01/patches/golang/100-rc01-local-toolchain.patch",
+        "config/rc01/patches/packages/manifest.json",
         "defconfig/qualcommbe-rc01.config"
       ],
-      "reason": "独立锁定应用/feed、保留daemon选择和现有Rust构建路径",
-      "exit_condition": "按独立应用升级与构建验证迁移"
+      "reason": "feeds固定完整提交、受控补丁逐个git apply --check、保留现有Rust构建路径",
+      "exit_condition": "相关feed上游合入等价修改，或按独立应用升级与构建验证迁移"
     }
   ],
   "kernel": {

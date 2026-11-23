@@ -59,7 +59,7 @@ class StatusFixture(unittest.TestCase):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(value) + "\n")
-        if name in ("usr/libexec/mihomo", "usr/bin/dae", "usr/bin/daed"):
+        if name == "usr/libexec/mihomo":
             path.chmod(0o755)
 
     def run_script(self, body):
@@ -260,30 +260,22 @@ print(sprintf('%J', [ first, second ]));''')
         self.assertEqual(result["state"]["processes"][0]["rss_kib"], 12345)
 
     def test_configured_other_proxy_is_rejected_without_a_process(self):
-        self.config["nikki"]["config"]["enabled"] = "1"
-        self.write("usr/bin/daed", "test executable placeholder")
-        self.write("sys/kernel/btf/vmlinux", "test BTF placeholder")
-        self.assertEqual(self.levels(self.run_status("daed"))["other-proxy"], "error")
-
-    def test_dae_preflight_requires_btf_and_detects_nikki_and_daed(self):
-        self.write("usr/bin/dae", "test executable placeholder")
-        self.assertEqual(self.levels(self.run_status("dae"))["btf"], "error")
-        self.write("sys/kernel/btf/vmlinux", "test BTF placeholder")
-        self.assertTrue(self.run_status("dae")["result"]["passed"])
-        self.config["nikki"]["config"]["enabled"] = "1"
-        self.assertEqual(self.levels(self.run_status("dae"))["other-proxy"], "error")
-        self.config["nikki"]["config"]["enabled"] = "0"
-        self.write("proc/124/comm", "daed")
-        self.assertEqual(self.levels(self.run_status("dae"))["other-proxy"], "error")
+        self.config["daed"]["config"]["enabled"] = "1"
+        self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
 
     def test_dae_enabled_blocks_nikki_even_before_process_start(self):
         self.config["dae"]["config"]["enabled"] = "1"
         self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
 
-    def test_daed_requires_btf_but_nikki_does_not(self):
-        self.write("usr/bin/daed", "test executable placeholder")
-        self.assertEqual(self.levels(self.run_status("daed"))["btf"], "error")
-        self.assertTrue(self.run_status("nikki")["result"]["passed"])
+    def test_dae_processes_block_nikki(self):
+        self.write("proc/124/comm", "dae")
+        self.assertEqual(self.levels(self.run_status("nikki"))["other-proxy"], "error")
+
+    def test_nikki_preflight_needs_no_btf_and_state_has_no_dae_core_probe(self):
+        result = self.run_status("nikki")
+        self.assertTrue(result["result"]["passed"])
+        self.assertNotIn("btf", self.levels(result))
+        self.assertNotIn("btf", result["state"]["proxy"])
 
     def test_missing_ppe_counter_is_unknown_and_not_a_driver_failure(self):
         (self.root / "sys/kernel/debug/ppe/active_flows").unlink()
@@ -635,7 +627,7 @@ class FanStatus(StatusFixture):
     def test_preflight_temperature_thresholds_for_every_target(self):
         def levels():
             return self.run_script('''let state = collect(root, uci);
-print(sprintf('%J', map([ 'hardware', 'nikki', 'dae', 'daed' ], t =>
+print(sprintf('%J', map([ 'hardware', 'nikki' ], t =>
   filter(assess(state, t).checks, c => c.code == 'temperature')[0].level)));''')
         cases = [(None, "error"), (0, "error"), (999, "error"), (1000, "ok"), (59999, "ok"),
                  (60000, "warn"), (74999, "warn"), (75000, "error"), (130000, "error"),
@@ -643,13 +635,13 @@ print(sprintf('%J', map([ 'hardware', 'nikki', 'dae', 'daed' ], t =>
         for milli, expected in cases:
             with self.subTest(milli=milli):
                 self.write("sys/class/thermal/thermal_zone7/temp", "invalid" if milli is None else milli)
-                self.assertEqual(levels(), [expected] * 4)
+                self.assertEqual(levels(), [expected] * 2)
         self.write("sys/class/thermal/thermal_zone7/temp", 45000)
         self.write("sys/class/thermal/thermal_zone3/type", "nss_top_thermal")
         self.write("sys/class/thermal/thermal_zone3/temp", 45000)
-        self.assertEqual(levels(), ["error"] * 4)
+        self.assertEqual(levels(), ["error"] * 2)
         shutil.rmtree(self.root / "sys/class/thermal")
-        self.assertEqual(levels(), ["error"] * 4)
+        self.assertEqual(levels(), ["error"] * 2)
 
     def test_guard_process_presence_is_reported_alone(self):
         self.assertEqual(self.fan()["fan"]["guard_process"], "absent")

@@ -21,6 +21,7 @@ for symbol in \
 	CONFIG_PACKAGE_ath12k-firmware-qcn9274-ddwrt CONFIG_PACKAGE_ipq-wifi-xiaomi_be10000 \
 	CONFIG_PACKAGE_wpad-openssl CONFIG_PACKAGE_rc01-platform CONFIG_PACKAGE_rc01-rgb \
 	CONFIG_PACKAGE_kmod-hwmon-emc2305 CONFIG_PACKAGE_kmod-thermal CONFIG_PACKAGE_kmod-ramoops \
+	CONFIG_KERNEL_DEBUG_INFO \
 	CONFIG_PACKAGE_fdt-utils CONFIG_PACKAGE_uboot-envtools \
 	CONFIG_PACKAGE_mihomo-meta CONFIG_PACKAGE_nikki CONFIG_PACKAGE_luci-app-nikki \
 	CONFIG_PACKAGE_luci-app-router-tool CONFIG_PACKAGE_luci-app-rc01 \
@@ -41,15 +42,19 @@ do
 	require_y "$symbol"
 done
 
+# Crash symbols need full DWARF (faddr2line); reduced debug info drops it.
+! grep -Fqx 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y' "$config" || {
+	echo 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y is not allowed: crash symbols need full debug information' >&2; exit 1
+}
+
 profiles="$(grep -Ec '^CONFIG_TARGET_.+_DEVICE_.+=y$' "$config" || :)"
 [ "$profiles" -eq 1 ] || { echo "Expected one RC01 device, found $profiles" >&2; exit 1; }
 grep -Fqx 'CONFIG_FEED_nikki=m' "$config" || { echo 'Do not mix the Nikki release binary feed into this source build' >&2; exit 1; }
-grep -Fqx 'CONFIG_FEED_daede=m' "$config" || { echo 'Do not enable a public daede binary feed in this source build' >&2; exit 1; }
 
 for package in \
 	mihomo-alpha sing-box luci-app-homeproxy luci-app-openclash \
-	luci-app-passwall luci-app-passwall2 luci-app-dae \
-	daed daed-geoip daed-geosite luci-app-daed luci-i18n-daed-zh-cn vmlinux-btf \
+	luci-app-passwall luci-app-passwall2 \
+	dae daed daed-geoip daed-geosite luci-app-dae luci-app-daed luci-app-daede luci-i18n-daed-zh-cn vmlinux-btf \
 	irqbalance luci-app-qca-ppe-qos qca-ppe-qos qosify sqm-scripts \
 	tcpdump-mini ethtool iw tc-tiny tc-bpf \
 	samba4-server ksmbd-server luci-app-samba4 \
@@ -61,38 +66,6 @@ do
 	fi
 done
 
-with_dae=false
-if grep -Fqx 'CONFIG_PACKAGE_dae=y' "$config"; then
-	with_dae=true
-	for symbol in \
-		CONFIG_BPF_TOOLCHAIN_HOST CONFIG_USE_LLVM_HOST \
-		CONFIG_KERNEL_DEBUG_INFO CONFIG_KERNEL_DEBUG_INFO_BTF \
-		CONFIG_KERNEL_CGROUPS CONFIG_KERNEL_CGROUP_BPF \
-		CONFIG_KERNEL_KPROBES CONFIG_KERNEL_KPROBE_EVENTS \
-		CONFIG_KERNEL_BPF_EVENTS CONFIG_KERNEL_BPF_STREAM_PARSER \
-		CONFIG_KERNEL_XDP_SOCKETS CONFIG_PACKAGE_kmod-sched-bpf \
-		CONFIG_PACKAGE_kmod-veth CONFIG_PACKAGE_kmod-xdp-sockets-diag \
-		CONFIG_DAE_USE_KERNEL_BTF CONFIG_PACKAGE_v2ray-geoip CONFIG_PACKAGE_v2ray-geosite \
-		CONFIG_PACKAGE_luci-app-daede CONFIG_PACKAGE_luci-app-daede_dae
-	do
-		require_y "$symbol"
-	done
-	! grep -Fqx 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y' "$config" || {
-		echo 'dae requires full BTF debug information' >&2; exit 1
-	}
-	[ "$(readlink -f package/feeds/daede/dae)" = "$PWD/feeds/daede/dae" ] || {
-		echo 'dae must come from the pinned daede source feed' >&2; exit 1
-	}
-	! grep -Eq '^CONFIG_(DAE_USE_VMLINUX_BTF|PACKAGE_luci-app-daede_daed)=y$' "$config" || exit 1
-else
-	! grep -Eq '^CONFIG_PACKAGE_(dae|luci-app-daede)=[ym]$' "$config" || {
-		echo 'Incomplete dae selection; use the experimental configuration fragment' >&2; exit 1
-	}
-fi
-if [ "${RC01_WITH_DAE:-$with_dae}" != "$with_dae" ]; then
-	echo 'Generated dae selection does not match the requested variant' >&2; exit 1
-fi
-
 grep -Fq 'ATH12K_PPE_DS_SUPPORT' package/kernel/mac80211/ath.mk || {
 	echo 'Native ath12k Direct Switch support disappeared' >&2; exit 1
 }
@@ -101,4 +74,4 @@ python3 -B scripts/rc01-layout.py --check-generated >/dev/null
 grep -Fq 'include $(TOPDIR)/config/rc01/layout.mk' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'IMAGE_SIZE := $(RC01_ROOTFS_SIZE_KIB)k' target/linux/qualcommbe/image/ipq95xx.mk || exit 1
 grep -Fq 'fw_env_strict_crc_required()' package/boot/uboot-tools/patches/015-envtools-strict-crc.patch || exit 1
-echo "RC01 configuration validation passed (dae test build: $with_dae)"
+echo "RC01 configuration validation passed"
