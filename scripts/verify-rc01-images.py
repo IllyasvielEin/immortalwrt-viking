@@ -249,14 +249,20 @@ def verify_kernel_memory(tree: Fdt, load: int, size: int) -> None:
                 f"kernel footprint overlaps reserved memory: {node}")
 
 
+def verify_bootargs(args: str) -> None:
+    require([arg for arg in args.split() if arg.startswith("cma=")] == ["cma=320M"],
+            "RC01 must request cma=320M")
+    # Temporary: SLUB debugging for kmalloc-2k only (revert with the SLUB commit).
+    require([arg for arg in args.split() if arg.startswith("slub_debug=")] == ["slub_debug=FZPU,kmalloc-2k"],
+            "RC01 must request slub_debug=FZPU,kmalloc-2k exactly once")
+
+
 def verify_platform_dtb(blob: bytes) -> dict:
     """Check final compiled RC01 wiring, references and allocation policy."""
     tree = Fdt(blob)
     require("xiaomi,be10000" in tree.strings("/", "compatible"), "DTB is not RC01")
-    args = " ".join(tree.nodes.get("/chosen", {}).get(key, b"").decode().rstrip("\0")
-                    for key in ("bootargs", "bootargs-append"))
-    require([arg for arg in args.split() if arg.startswith("cma=")] == ["cma=320M"],
-            "RC01 must request cma=320M")
+    verify_bootargs(" ".join(tree.nodes.get("/chosen", {}).get(key, b"").decode().rstrip("\0")
+                             for key in ("bootargs", "bootargs-append")))
     regions = reserved_regions(tree)
     tz = [(address, size) for node, address, size in regions if node.endswith("/tzapp@49b00000")]
     require(tz == [(0x49B00000, 0x600000)], "RC01 TrustZone application reservation changed")

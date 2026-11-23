@@ -21,7 +21,7 @@ for symbol in \
 	CONFIG_PACKAGE_ath12k-firmware-qcn9274-ddwrt CONFIG_PACKAGE_ipq-wifi-xiaomi_be10000 \
 	CONFIG_PACKAGE_wpad-openssl CONFIG_PACKAGE_rc01-platform CONFIG_PACKAGE_rc01-rgb \
 	CONFIG_PACKAGE_kmod-hwmon-emc2305 CONFIG_PACKAGE_kmod-thermal CONFIG_PACKAGE_kmod-ramoops \
-	CONFIG_KERNEL_DEBUG_INFO \
+	CONFIG_KERNEL_DEBUG_INFO CONFIG_KERNEL_SLUB_DEBUG \
 	CONFIG_PACKAGE_fdt-utils CONFIG_PACKAGE_uboot-envtools \
 	CONFIG_PACKAGE_mihomo-meta CONFIG_PACKAGE_nikki CONFIG_PACKAGE_luci-app-nikki \
 	CONFIG_PACKAGE_luci-app-router-tool CONFIG_PACKAGE_luci-app-rc01 \
@@ -47,6 +47,12 @@ for symbol in \
 do
 	require_y "$symbol"
 done
+
+# Temporary kmalloc-2k debugging: SLUB debug code is built in, but only the
+# kmalloc-2k boot parameter turns it on, never every cache.
+! grep -Fqx 'CONFIG_KERNEL_SLUB_DEBUG_ON=y' "$config" || {
+	echo 'CONFIG_KERNEL_SLUB_DEBUG_ON=y would debug every cache; use slub_debug=...,kmalloc-2k' >&2; exit 1
+}
 
 # Crash symbols need full DWARF (faddr2line); reduced debug info drops it.
 ! grep -Fqx 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y' "$config" || {

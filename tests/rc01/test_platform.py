@@ -147,7 +147,10 @@ class PreparedPlatform(unittest.TestCase):
         # fdtput edits the compiled tree itself, covering real phandles and paths.
         tree = images.Fdt(self.blob)
         one = lambda suffix: next(n for n in tree.nodes if n.endswith(suffix))
-        variants = [("/chosen", "bootargs-append", "s", [" root=/dev/ubiblock0_1 cma=64M"]),
+        variants = [("/chosen", "bootargs-append", "s", [" root=/dev/ubiblock0_1 cma=64M slub_debug=FZPU,kmalloc-2k"]),
+                    ("/chosen", "bootargs-append", "s", [" root=/dev/ubiblock0_1 cma=320M"]),
+                    ("/chosen", "bootargs-append", "s",
+                     [" root=/dev/ubiblock0_1 cma=320M slub_debug=FZPU,kmalloc-2k slub_debug=FZPU,kmalloc-2k"]),
                     (one("/ethernet-phy@0"), "reset-assert-us", "i", ["1"]),
                     ("/reserved-memory/tzapp@49b00000", "reg", "x", ["0", "49b00000", "0", "500000"]),
                     (one("/pcie@18000000"), "perst-gpios", "x", ["0", "20", "1"])]
@@ -196,12 +199,66 @@ class PreparedPlatform(unittest.TestCase):
                 platform.verify_wireless(copied)
             config = Path(temporary) / ".config"
             text = "CONFIG_NETFILTER=y\nCONFIG_NETFILTER_INGRESS=y\nCONFIG_NET_INGRESS=y\nCONFIG_NF_FLOW_TABLE=m\n"
-            text += "CONFIG_PSTORE_RAM=m\nCONFIG_PSTORE_CONSOLE=y\n"
+            text += "CONFIG_PSTORE_RAM=m\nCONFIG_PSTORE_CONSOLE=y\nCONFIG_SLUB_DEBUG=y\n# CONFIG_SLUB_DEBUG_ON is not set\n"
             config.write_text(text)
             platform.verify_kernel_config(config)
             config.write_text(text.replace("CONFIG_NETFILTER_INGRESS=y", "# CONFIG_NETFILTER_INGRESS is not set"))
             with self.assertRaises(images.VerificationError):
                 platform.verify_kernel_config(config)
+
+
+class SlubDiagnostics(unittest.TestCase):
+    """Temporary kmalloc-2k SLUB debugging (revert with the commit that adds it)."""
+    KMALLOC = "slub_debug=FZPU,kmalloc-2k"
+    KERNEL_CONFIG = ("CONFIG_NETFILTER=y\nCONFIG_NETFILTER_INGRESS=y\nCONFIG_NET_INGRESS=y\nCONFIG_NF_FLOW_TABLE=m\n"
+                     "CONFIG_PSTORE_RAM=m\nCONFIG_PSTORE_CONSOLE=y\n")
+
+    def kernel_config(self, text):
+        with tempfile.TemporaryDirectory(prefix="rc01-slub-config-") as directory:
+            path = Path(directory) / ".config"
+            path.write_text(text)
+            return platform.verify_kernel_config(path)
+
+    def test_final_kernel_config_requires_slub_debug_but_not_for_every_cache(self):
+        self.kernel_config(self.KERNEL_CONFIG + "CONFIG_SLUB_DEBUG=y\n# CONFIG_SLUB_DEBUG_ON is not set\n")
+        self.kernel_config(self.KERNEL_CONFIG + "CONFIG_SLUB_DEBUG=y\n")
+        for extra, message in (("# CONFIG_SLUB_DEBUG is not set\n", "lacks CONFIG_SLUB_DEBUG=y"),
+                               ("", "lacks CONFIG_SLUB_DEBUG=y"),
+                               ("CONFIG_SLUB_DEBUG=y\nCONFIG_SLUB_DEBUG_ON=y\n", "debugs every slab cache")):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(images.VerificationError, message):
+                    self.kernel_config(self.KERNEL_CONFIG + extra)
+
+    def test_official_dts_requests_the_kmalloc_2k_cache_once(self):
+        dts = (ROOT / "target/linux/qualcommbe/dts/ipq9570-be10000.dts").read_text()
+        self.assertEqual(dts.count("slub_debug="), 1)
+        self.assertIn(f'bootargs-append = " root=/dev/ubiblock0_1 cma=320M {self.KMALLOC}";', dts)
+        # The ES variant only includes the official DTS, so it inherits the argument.
+        es = (ROOT / "target/linux/qualcommbe/dts/ipq9574-be10000-es.dts").read_text()
+        self.assertIn('#include "ipq9570-be10000.dts"', es)
+        self.assertNotIn("slub_debug", es)
+
+    def test_base_configuration_builds_slub_debug_without_enabling_it_globally(self):
+        base = (ROOT / "defconfig/qualcommbe-rc01.config").read_text().splitlines()
+        self.assertIn("CONFIG_KERNEL_SLUB_DEBUG=y", base)
+        self.assertIn("# CONFIG_KERNEL_SLUB_DEBUG_ON is not set", base)
+        self.assertNotIn("CONFIG_KERNEL_SLUB_DEBUG_ON=y", base)
+
+    def test_compiled_bootargs_need_exactly_one_kmalloc_2k_request(self):
+        good = f"root=/dev/ubiblock0_1 cma=320M {self.KMALLOC}"
+        images.verify_bootargs(good)
+        images.verify_bootargs(f"console=ttyMSM0 {good}")
+        for bad in ("root=/dev/ubiblock0_1 cma=320M",
+                    f"{good} {self.KMALLOC}",
+                    f"{good} slub_debug=FZPU",
+                    "root=/dev/ubiblock0_1 cma=320M slub_debug=FZPU,kmalloc-1k",
+                    "root=/dev/ubiblock0_1 cma=320M slub_debug=FZPU",
+                    "root=/dev/ubiblock0_1 cma=320M slub_debug=FZPU,kmalloc-2k,kmalloc-4k",
+                    f"root=/dev/ubiblock0_1 cma=64M {self.KMALLOC}",
+                    f"root=/dev/ubiblock0_1 {self.KMALLOC}"):
+            with self.subTest(bootargs=bad):
+                with self.assertRaises(images.VerificationError):
+                    images.verify_bootargs(bad)
 
 
 if __name__ == "__main__":

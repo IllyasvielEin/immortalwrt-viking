@@ -19,7 +19,7 @@
 	};
 
 	chosen {
-		bootargs-append = " root=/dev/ubiblock0_1 cma=320M";
+		bootargs-append = " root=/dev/ubiblock0_1 cma=320M slub_debug=FZPU,kmalloc-2k";
 	};
 
 	regulator_fixed_3p3: regulator-3p3 {

@@ -225,6 +225,16 @@ class ConfigValidation(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("crash symbols need full debug information", result.stderr)
 
+    def test_temporary_slub_debug_is_required_but_never_global(self):
+        self.assertEqual(self.validate(self.config()).returncode, 0)
+        without = "".join(line for line in self.config().splitlines(True) if line != "CONFIG_KERNEL_SLUB_DEBUG=y\n")
+        result = self.validate(without)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Required symbol is not enabled: CONFIG_KERNEL_SLUB_DEBUG", result.stderr)
+        result = self.validate(self.config("CONFIG_KERNEL_SLUB_DEBUG_ON=y\n"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("would debug every cache", result.stderr)
+
     def test_a_daede_feed_is_neither_required_nor_configured(self):
         self.assertNotIn("CONFIG_FEED_daede", (ROOT / "defconfig/qualcommbe-rc01.config").read_text())
         self.assertNotIn("CONFIG_FEED_daede", (ROOT / "scripts/validate-rc01-config.sh").read_text())

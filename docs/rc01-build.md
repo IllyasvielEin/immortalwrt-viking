@@ -168,6 +168,13 @@ factory/sysupgrade 载荷一致性、坏块预算和至少 32 MiB data 卷 LEB �
 基础配置（含 honk 与 Nikki）固定 `CONFIG_KERNEL_DEBUG_INFO=y` 且不启用 `KERNEL_DEBUG_INFO_REDUCED`
 （qualcommbe 默认会启用后者），`validate-rc01-config.sh` 要求前者并拒绝后者，符号包因此始终带完整 DWARF。符号包步骤不依赖 honk 专属选项（如 BTF）。
 
+**临时 SLUB 诊断（kmalloc-2k）**：为定位 kmalloc-2k freelist 被覆写的 double free / UAF，基础配置构建
+`CONFIG_KERNEL_SLUB_DEBUG=y`（不启用 `KERNEL_SLUB_DEBUG_ON`，避免全局开销），正式版
+`ipq9570-be10000.dts` 的 bootargs 追加 `slub_debug=FZPU,kmalloc-2k`，仅对该 cache 开启。
+`validate-rc01-config.sh`、`validate-rc01-platform.py`（最终内核 `.config`）与 `verify-rc01-images.py`（编译后 DTB）
+同步校验。抓到调用栈后 `git revert` 该提交即可同时撤销配置、bootargs、校验与测试；启动后可在
+`/sys/kernel/slab/kmalloc-2k/` 与 dmesg 中确认标志已生效。
+
 **验证边界：CI 通过仅证明对应提交和产物通过构建及静态检查，不模拟硬件启动。**
 当前布局的实际前级接受、ENV 兼容、ECC/坏块写入边界、RAM 恢复、迁移、启动、升级和回厂
 仍需独立验收；本指南不预报新 CI 或现场成功。风扇、无线、网络和代理共存也须在新镜像上实测。
