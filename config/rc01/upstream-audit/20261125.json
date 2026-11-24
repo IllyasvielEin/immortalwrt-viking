@@ -1,0 +1,1557 @@
+{
+ "schema": 1,
+ "local": "cb6731853b79ea1e272118c8aa565b5d401eb438",
+ "upstream": "7f2441f0781413f28bb435b858d72bd1120b5940",
+ "records": [
+  {
+   "sha": "c1869c50214ab7dad6733d3237129f985c376cb9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/rockchip）"
+  },
+  {
+   "sha": "593608fbdae92beb861b3a29ec41644053240d36",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/rockchip）"
+  },
+  {
+   "sha": "3931d4d6509dc9f03a28c566e1a74ecf4b0c9339",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（include）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "f6955d32f566dc37d5818ed414a5b46eb4f3fae7",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/mediatek）"
+  },
+  {
+   "sha": "461ce03b57ae0b0e6f85a13cbfd14737c7f96972",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "7b46f9593eb92c80541dde12b6e49f1761f9c7be",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/x86）"
+  },
+  {
+   "sha": "65283798e83ba672cd8fc6fa70af75adbd225c67",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "592d35e2d688e953064d86707e74f4ede01f8286",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "1144ed32044180918445a5381c52b70db293deef",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "ba1058bd3f6f462cff23f2c0c4fe806ebfaaa230",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "63861a1cf21477e80ad3f39bdf48860efed228fa",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "fb5c803e0c313a92f6d25405c5bb8d394c021964",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "bb9df4fd4f60b337e348fd6eeaf69e0fd87e8edf",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "5c09af5ddf065746bc2f34eb0ed8271033d22d10",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "ecbcb8b250b0f094779cc49d336eaaaefc8bc89e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "b4d9939cb5ac342486b1f0c25574ad17eefd753f",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "fb4a53538bc3fbc53d347ca65f05fd7ae2ba8050",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "879ac369e45b5c65bdf3989c7ab9d54ac23bcec9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "38f352235b09e411e527f6f02f9d0994e1ba5aea",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "2bed23026c200570fb2b837e4e591bd16eda476e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "a525dbdd9452900fb5579a6be8bf0e6a86e291cb",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "a22c8d19d8b6e05e3a7b0f49011845529e4df62f",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "1262d2e771ff6c221dc5e8b7f06be61d7358deb0",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "396692bae5476135a3d2e4dce5d66ed07ffc4e01",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "266c1d5321e53c1dca6bb672c34e59a177ccac05",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "162961542c74660c91546cc70c9158555c3058bb",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "b992b7136eeebbecc816eca9c3759a0bd60310e4",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "998889694955686551a06c1abd5ff8d06ff60b4b",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "00d5b95b006a2d81c0f72688696687c05999e586",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/utils/bluetooth-uart）"
+  },
+  {
+   "sha": "4e5b783e2c609b86fedd290a503a0e091a6b30ac",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "78c33192e90a736d8e35d6f62ac03c9b3188edc9",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/linux）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "8d3160652b2423608edadf9881362bfe95855384",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/boot/uboot-tools）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e8e9ae68ea8e35575e77d512dbc316ff2ebb14da",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "e66777299ab0fdbfc8b5e2951647cbbec282e74e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "f16c6d2dea7a15e481d2b88ef9b60ae808852c0e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "ca9349f6eef2af8faae3783618bdcca4ed50b3e4",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/mediatek）"
+  },
+  {
+   "sha": "b0ed484214cf4692ab59a9782a5fbaf20d02ee65",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b828f58d6709c687fa4c956db3ba4a6487378e3d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "744e537429de80c87ed118f6040a4d99bc3e79a0",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "980e20d43a20e3ddb16e16d3b19018f468c4c413",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "859617cc9dcdf0307cfff92ce62d4ea4d4e376e0",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7d8411109f6a297c9b49688d161ecf961fda8f99",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "c5919faf9826acbd736513f8469ce71739ec7590",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "43da5e87148cc27f138d2be8b3d94bcbfae5b88a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "db22ca18024bb77e8b80df9ccd6824be7458fa52",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "fd874b5a1c9ceb4ec2016452f372dc67f94a0453",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "112c9284a91d11316b4bb304825a0fb64139148c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a39b676e1a222aee5e389da2a863b24b54ed43f4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "aa484f2b0c6a46525093dc2ba46aeccbe5ee5e6c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "89c9e1f8bbdf631d4976be9e2118fea40f8460e7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "38e8858a7270be6104fc17db2d07094ed9b1d16d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "37546b2042a4c224f7e25086481d8263d5545857",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "508a0dba0b00040eac619a34ece8303e4fe70088",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "6ec305b90c6f97ccd7cf66b14c51cd73754bbcc6",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ec23800c7708a61c9af285ba1d483acd3df22ecb",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "68b98b5dce30722e081570755f825fed944e5d6e",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "36edba6caf33285d90a3e6bb7a2112bc90d5ea94",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "89e34051d2d16b2136fd356d6be90d395065300b",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "189a1b1c415788d5e02915842b8f0e42a843812c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "244ac7a6538a1cf3fcb6704151455dd38c4f6959",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "cb892a547ff1dca2be12e446b18a25abb9303b8d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "dba2d9ed1f9e83a3c408a1245c7169d2ef987741",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "dc22265904ad24cc86bc81ff0ef256122077bcca",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7a1f9bcbafb2004c4d342ee5243354bb551004f0",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "f043c5bbde5b7497c9427854858ffddae486c522",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "464e869ccac1320a7508aa32b32ed4ed1cf41901",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a3c9be25afa420dc631fab79dca2b34ac6b306fa",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "40812e2b4d400774ece1b2a48b172d3db675550c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "81b189558dbdeec7eaff2033d734a1b213f53271",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b5c6c2e4c4661b6cb469eb15b6e2dc0116062b19",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e0ee54a38fe68fda31cf9d587a9154b04e9c7118",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "dcfa993ce46035e46f3c8c783bff031bda3949a9",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "134fff92d30b5668a02f6e65ff982b5174800e63",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "374d561738b6eb14327e998e3c8682b59bfd1ef7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/cli）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "c2be1af0bfa7af755ed4d70c640a89d9584b6313",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/cli）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "d61cb5251769ae30b615f48294ce5da0ea9636b1",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/cli）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "d144818f0eba3e6d618892bc507c8a7e01b4f07a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "27ba5296ac772791ee4ea8c9c5188c457a3bdc9f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "8176cc82d72acb4aeda9663725757d4f46490648",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/cli）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "3ae669b6566be65774802cb9596571a704b28ed8",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/cli）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7423e3bd86d3ae71fb14eb89039ee59000b98e4c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b06db99cefdb8d583469c2ee0cff043966f7adde",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "0c815f216d39145a7066055837e85974437301f6",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ebc40d094ff04fcaafc001a23c55a94ecbe32cb7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a3becb7a4c899f1cb03c20d69e4d138190d020ba",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a0cdc009a5a4f63e3d76e405bf9247cb3ef1d151",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "45ad96f203c857ed1c326eee4c18536271626797",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "fa824b9a3223354e5c3aa4df30f61874488fead6",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e7295e8438a9712a145d8a646996ef2e651d7e8f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "655fab3f8deede98db588d126628a255c34ca3cc",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "f9989c02b5f5a3c94e4aa6703c0557f07cc82f80",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "19ed02c950c1de7a2c6ca995699f93c86e2fa939",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "034eb38f487b632a5d95128af486a0556f58023a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "fc1a637f994c5d6b6eaa75d21eb72d21fda3c312",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "45b24dfa8f3369434d9be1995b448b83f2c6f61d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "06820c96bfca8aacb7db06ee0d6acb67eb09cfff",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "4af6cb7e45497c98d9b92648507b4cc1a568702c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a543c61c1d76861298bd717a222a8a15cbd95c67",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ad45d9bf37a34383bb287faaba3156bcd1790771",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "2ac887e908c89d9f556cbd738834e235ea6d6d5c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "8244017135eb64b2effded0714dfc8f250f5ebb8",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9832c70a9fd02ab49a9d9ff22bd6b97cd5b4f43d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "5450cc90c9fb4c8ce407cf554735f722acea1c32",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b3b7ed3255d7a01bb5e25c2ca3ec6cc1a1309e92",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "5ab6c12c4a837ec7c2d562602dfcb7817473012d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "da98ca43c30ac1cc92d0b97cc1a69090fa865cf9",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "bca830d3acb48d870c7c9468456556fad78d7bb2",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b6e59e4928261172e41516dfc6b588cb9c1041dc",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "2cf2883e4aac0c70fff7379b69ed3b6b700ffcc8",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "5069f3a55f123dc882edb50339185821439311f7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "2d42ce83c8495538f30ae997a3a707f1bd981a09",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "c181f9472450b83f0b9893fc4f17220df67ab924",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "87be38fd9b83725abcd3e9d5ba249b6cfb688f34",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ce7623459c812b02ac2bd3a2d7ec8f5029c81206",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "0ea98a49b35dc19c983562627af27bb0b1baa486",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "cfae1f57f8cc73675db76d50c91da9509c8dfbd7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "8e3f6ad698203479e7f678c9b71b07f59e413d34",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b2ece0381810a49ec0f320879cceab022b6a93ab",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "bd6492c2a06f01b5bd2e83765ac06298d4d28e16",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e8e130a85f50e9ee6b0036251c46bb5999d749d0",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "3586d40fb19a0dc24afc50f8cbf980f32a165c1f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "f2b27e85448b80d70596c3bbda4bcc3c2a1f2cba",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "29278064eb9653af280277de7650939a1ca99fc0",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "bdd7b094aca4a52cde16c366376cd4e5627a3980",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "6a73e0c5d3a822ec3cc57fcf511df9624b7ded02",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a23edaa4ea9b8cb1c41b434da4ca11d1a1ada68f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e262431d2b2685ff6926bb5412ad302f7b0b5be2",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "70a7d3af6dfb98a787cc0718b00a6af87766518d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "69cc7d9c04a8dd045cfcef9609df37aae53bea22",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "257c2b76fb83a71f106d9747d8e38a8ed5e93729",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7424e2ca306c801eaf9c9dee23545af1a4e66d20",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/system/ubox）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e814a1e1944184578fdac84bb4e7bca776f6dd5f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/linux、package/libs/tpm2-tss、package/utils/tpm2-tools）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "4ae505bf2fc8491d0e26f0b2d9833052561b10e6",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "dcfaa8b3447e3ef72f5b867b793313a4acec198f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a35ad7a157d66555b51e2f01b6fe06852e34b9b0",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/utils/bluetooth-uart）"
+  },
+  {
+   "sha": "f588723224d422ee78a9c0baf3afce983307c9a5",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/arista-tool/arista-led、package/arista-tool/arista-platform、package/arista-tool/arista-radio）"
+  },
+  {
+   "sha": "a5762ace1c91007c4bd9e64fc07d485014fb3752",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/arista-tool/arista-bluetooth、package/arista-tool/arista-gnss、package/arista-tool/arista-power）"
+  },
+  {
+   "sha": "82f194e4a945d1429e76cb20f9081ade9c3aa2c9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/arista-tool/arista-net）"
+  },
+  {
+   "sha": "ddc6790222d86bd18250b205a9d813da10b3af01",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/arista-tool/airscan、package/arista-tool/dfs-look、package/arista-tool/luci-app-airscan）"
+  },
+  {
+   "sha": "669e3bab3e35ffd714d500f0fb2556b2ad820dde",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/boot/uboot-tools、package/firmware/ipq-wifi、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：qualcommbe_ipq95xx接纳Arista分支，be10000保留ENV 0x10000/0x20000/2；ipq95xx.mk与platform.sh保留RC01布局、FIT别名与升级预检"
+  },
+  {
+   "sha": "ff74343745c7ba238f959372aca5a182d2eafb8f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、target/linux/generic、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "2fe3065ade26bd1ef85539c9d1bd2272bdb0aa01",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；firewall4本地100与刷新后的001–006零fuzz共存"
+  },
+  {
+   "sha": "dd9292367f212fc2fddcc28377986952d66efa06",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：be10000不收luci-app-xiaomi-control（RC01-THERMAL-UI），validate-rc01-config.sh拒绝该包"
+  },
+  {
+   "sha": "ebd9072b3362a5f8aa5eb54b531304f2a1f16d03",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/emortal/luci-app-xiaomi-control）；RC01不构建xiaomi-control，仅路径影响"
+  },
+  {
+   "sha": "041805ab98a4ae7355da2fdeadabe7d253d05666",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "25e171ffa94882a666005bb14fa8f1a87a0ec2f2",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "25f3f2da9e98e7ac7ebb567a33480f88c8e45a08",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "51c223789a6d54a65297313ddaf9797b29108472",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "26186e6e88ef999aac7fd819ff48f44fbb08c3a4",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "410ed095faa906e3db9a6273719713691989c211",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "590bcc5f905fa14be121e9d98bfc940be2a27c49",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "e90b65068a80c8fa6d2a1dd0e6b8e1953629dbe9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "446e351ccd566abd3d3da9a77beb0dbd6d47e7a0",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "a0fe20d7f2fa75063e64724da536be647e60b405",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "619c9ec1eae02d6ce78871d10d3215514534a103",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "8a231203b59ebbcd7873e6c3b090834fe360beac",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "e7c8a79e07c858c033f3377a136a9ba50a920016",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "d9467790d1fa8b79c3976ca169d0792a50287b1e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "1b5b8716b31605e957ca896fc7e234af49e1b188",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "17477629e3fa56c8dbd3a5f190e5fa77954103f7",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "476b69c1b7b49f64f411cdd3e9b54c8e32948549",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "b32c1329ac7e2150ccae346f60daeb66918d4f16",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "e2f411dd13a52b1fde604222b872981e0f127604",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "059d0bbd7af82ae6457bb6e6175a16b27fe83490",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "118f1debc66f015fd379979f1445dac2f7c31ec7",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "3f1f6d60e74f4b0eba2562ccdc2a27296a16faf8",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "b687510bd93fe4c8b96092dbb91cca1c0a5fe9f8",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "553a233494ba2ba86b8406edf46aaa7cf343ddd0",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "29731c0444d670e9d31bb205ef4d27f914e46f80",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "6e4f1cc204078543a078e9382fd582012341706d",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "e9ba4b935dae70a27960edb86e1cf9ade35bc31a",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "02e70c7548c9d3b5033e92b6a3e578d9cca57172",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/linux）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "13fc2e4e4b592a612146b035611f721b88183fcd",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/libs/mbedtls）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ee0c03564eefd9e0391b7ee6383cedc8d4f11b2e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ath79）"
+  },
+  {
+   "sha": "058da17df29908b0b77099fb522823723c385a5e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ath79）"
+  },
+  {
+   "sha": "3dd886dd1416793374b53aa02f66fc1a7c63c61b",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "2238d9bd73308990c9cf29bb2642d2b046964d80",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ea56b7ef73bbad8c812cab1bbae7951a203bed32",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "eb0f561cc4064116e073bfb56345725e039244cd",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "3b619d935a0e09f99a385a8292e552abf0dd6acc",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/utils、target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；先前前向摘取的SONiC 984与上游最终版一致（仅hunk头差异），取上游"
+  },
+  {
+   "sha": "dbd0db77eb95bc449dbdf5e840c52e840a44ede6",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ec40e0c9cda76a02ce85af55bdd85c9ff49e02f3",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-qca-ppe-qos、package/network/config、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：qualcommbe DEFAULT_PACKAGES新增qca-ppe-qos及LuCI/中文包，defconfig显式关闭且validate拒绝"
+  },
+  {
+   "sha": "80ef55b34d7cc11b0d6d482ca66decb3bff93612",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "a637a644fb4d9c7b9aef12c8fb8ed8d911a69f66",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9ac6d39abdbf174d6a73dc4fac5e3dafb14245d4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（.github）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a68c9b7e8956f4410b441a8d7d061842b431670e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "2aee42ac2f850e190ace499ca56dbbc843f51049",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "4ef30e1bfdb0902753170ae7d47f05cab72d7f20",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "d1fb8f86664af1d04b1860ac7f4e1885248fc8aa",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "3d219412d4f919485a77e4be23321bce1f5dff44",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；先前前向摘取的0682与上游最终版一致（仅hunk头差异），取上游"
+  },
+  {
+   "sha": "d19431fc08c8676e10d74676ca09fc14b4e47401",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；先前前向摘取的0683与上游最终版一致（仅hunk头差异），取上游"
+  },
+  {
+   "sha": "886d0d542af2aa368da815e949b980ca07aa5331",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "0d817f7e7e3f0cb102038dffc7f55fc7aa0031d7",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "127078c6ba004dab176ef14c5c1ea47fcdcbfa7d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；上游710取代本地CAKE debugfs修复，合并后与上游一致"
+  },
+  {
+   "sha": "103f10a3a4d494d1018e4f9f64c1637af9ebcd88",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e2d83a6f838431ce31a48f87b3cdbf34f46bf6da",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "1162e78f39b0c5e63560b3a5a4f9455f1edcfcdf",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "29b2b32fd04f6b5388136ce7c9be9db0f1b41e55",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "3b45236abc2b3ba289a750239a432faabb2d67fc",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "a729ee7a1b98952d69c3b4f0d59ac8fbb2e3acb9",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/firmware/ipq-wifi）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "517319b413a15daf1661bd1bb8dfff343b20eb4e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/mpc85xx）"
+  },
+  {
+   "sha": "f57464f55f84843c90b7b76b9ea14fbd57bd04f3",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/rockchip）"
+  },
+  {
+   "sha": "986dd058ffbe83d5fee79413fa44ebd3c8c66cb8",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/rockchip）"
+  },
+  {
+   "sha": "f48fd6156884ec014e69a885a1a238a509762563",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；11-ath12k-trigger已由上游9a5373c2a5删除，最终树不含该脚本"
+  },
+  {
+   "sha": "780113c89b591092463515ae134d05814610e54a",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/bmips）"
+  },
+  {
+   "sha": "b49e1008af640410abca65c7245919b098357d14",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/bcm53xx）"
+  },
+  {
+   "sha": "c4acd16e4cb53a81536e943172c173f858647b4c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/system/procd）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "396f223d3df0a443394b66201de05ec4cec6900c",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "5b240697987858c59d9798c3d46f2bc3db1de994",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "14b318cf94f724a18405884a169e668167f38f34",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e7d06ddb4e06a7dc683f32b24f48bbb489f4a33a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9a0a0b58f6710a1e8d40ceac39815fab75fc3f85",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/firmware/ipq-wifi）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b7afc4baab1353d1be2211ede536a3fbae896b25",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "6d802f61486c141dd17ca4f521393e8bfd6a1389",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/boot/uboot-tools、package/firmware/ipq-wifi）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "dd30d35ff2257cf7faad8ab8bd620d7901e18564",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/base-files/files）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "6d8e9a93a706f54b86d0b6599a22793a07a73b84",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/base-files/files）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "db8296e5966826844844764aaca376500be05812",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/uboot-mediatek）"
+  },
+  {
+   "sha": "ae9cd4a1eaf4b6d95217e5d49f46f08a08a4b2d5",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ipq40xx）"
+  },
+  {
+   "sha": "393efd7d74ce6c28e48f142fdb9028f09dc904c9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "6b5baeb9a033192796ef074e78cf05653bf5b43f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、package/network/config、package/system/fstools、target/linux/generic、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；仅补丁刷新；0682/0683/984/710取上游，firewall4本地100零fuzz"
+  },
+  {
+   "sha": "76cf6420bde8c2616d33613f4ab8b59b47304874",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/qca-nss/nss-wifi-drv）"
+  },
+  {
+   "sha": "3f79bec2d24ba2863f592bac880eac42e3a14966",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；firewall4本地100共存（PKG_RELEASE取5）"
+  },
+  {
+   "sha": "6dae72b163fdcc042c959463dab2e0c9bbfa587c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；firewall4 007改start/reload，与本地100（restart）不重叠，测试覆盖007+100"
+  },
+  {
+   "sha": "43055f13cf2f3af5969c2d533bf6e658c8dce7ff",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/qca-nss/nss-wifi-drv）"
+  },
+  {
+   "sha": "e0846b86901e973396cc6662740fa2e64046e1bb",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "51c1d5a5a75200c37bece4df6b97d26ade6e60af",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "fdb0dfb367bd50bc8773be63d227695bfeaf55d1",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "5637708d36618f21c2191bdfba0fdd5da770954e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "2a425bf0a474ce2a732f079526353eb309fb41cb",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ed3ca987d57913384516be5d35d5702f4d37ac3c",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/sifiveu）"
+  },
+  {
+   "sha": "943237b9f6d502146ef708d12a354290ef0ba97d",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/uboot-sifiveu）"
+  },
+  {
+   "sha": "27b2e3dc877562bf258ff8085370b4b867a6e523",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/uboot-sifiveu、target/linux/sifiveu）"
+  },
+  {
+   "sha": "b85613d9c46052c46b8b93ba9d35335a47e6f40b",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/arm-trusted-firmware-sunxi）"
+  },
+  {
+   "sha": "395d934459c80a195a5f1d4a7f20cdc502a2f0d9",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/uboot-sunxi、target/linux/sunxi）"
+  },
+  {
+   "sha": "41a0aea338da58c6cdc6c4807e59cc52e2a78f50",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/uboot-sunxi、target/linux/sunxi）"
+  },
+  {
+   "sha": "2d7bcf13d8dabe92a8406e30f4e80da78abcad14",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/libs/mbedtls）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "1183153f77ed7bbca959ccd1c7f88260a453f68f",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "651f26edfcce364d35e53f632b22424b50bcabf5",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "5a40062b65aa7d7a7dab5873068384f38662d3c6",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/realtek）"
+  },
+  {
+   "sha": "3c2a81d482d845cb01190c7311dd8f4b5629ff5b",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "959a7f9ea96cff203b274c151561efa086c31213",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "c06ccca080872d054e564a79b652d4343ea3a1fc",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "d1f05be244cfe173407bc592595b5ce3707d9aed",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "656925183532053e8c1757b382bddc8ef3779494",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "6df68042d1db716eabca0754880876cc8a408c85",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ramips）"
+  },
+  {
+   "sha": "27663a017ad8ac6883e11a81015db0c0fc341a9e",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/airoha）"
+  },
+  {
+   "sha": "3a4719cbe7a5ecb94e378e5abd141aa9c7e7e8d8",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "539074d65b6760a630a3056e64133df1c14b2e2a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/utils/px5g-openssl）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7831633bc109bb2f5f751b1afe964e62be3c47ac",
+   "review_status": "complete",
+   "review_depth": "合并提交：其引入内容按各子提交与最终树对RC01合并结果逐区域核对（.github、COPYING、Config.in、README.md、config、feeds.conf.default、include、package/base-files/files…）"
+  },
+  {
+   "sha": "a76c22180f23d43943d7fcaeb04f61b367698c1a",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ath79）"
+  },
+  {
+   "sha": "dce2683383c929a666d5a238187b9273937d3fd7",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/ipq806x）"
+  },
+  {
+   "sha": "01a6d70222e02519d9e3ad087a89616b971e3845",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/mediatek）"
+  },
+  {
+   "sha": "c4c69cfede1bd4a28fa01b9079a7eb61ef4fed4a",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "cceec9d4c72940153449715cee02ab9056fd5b94",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01接受2.4 GHz信道auto；带宽仍由RC01固定20 MHz"
+  },
+  {
+   "sha": "3f174ba4fa59d014f37b11dcb0d1714dbbe85bb8",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool冲突解决：JS保留auto_network=0手动管理守卫"
+  },
+  {
+   "sha": "af7639d4f4d65e9fe4dd411a1f2a444d42bb369d",
+   "review_status": "complete",
+   "review_depth": "合并提交：其引入内容按各子提交与最终树对RC01合并结果逐区域核对（.github、Config.in、README.md、config、feeds.conf.default、include、package/base-files/files、package/base-files/image-config.in…）"
+  },
+  {
+   "sha": "ac7cdd64cf1b766f66d0c086e6f732323f93c396",
+   "review_status": "complete",
+   "review_depth": "合并提交：其引入内容按各子提交与最终树对RC01合并结果逐区域核对（.github、Config.in、README.md、config、feeds.conf.default、include、package/base-files/files、package/base-files/image-config.in…）"
+  },
+  {
+   "sha": "a2ed57b169373e8c163f94bfaff65e374324d9e1",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "c210ae70db721fad33be8cd58689b7bf75f8441e",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "742d25d0241c1bdde84c851ba9c8284ce009e1a4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool、package/kernel/mac80211、package/network/services、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool补丁刷新，无RC01语义变化"
+  },
+  {
+   "sha": "4885f23e39f00e9e7ad2ab8fb60ab99e269db10a",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/arm-trusted-firmware-mediatek）"
+  },
+  {
+   "sha": "ee3fe7ae05afb1ab3ba8325ac58b7f4ed5f4f594",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（include、package/network/services、scripts）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "40765a4fc6b9f027912ed52ac08d419e79dc6f1d",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/boot/arm-trusted-firmware-mediatek）"
+  },
+  {
+   "sha": "48ec92ebb29370aaa677069a46d7e2bf9ead8b40",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "4a6bc8b816137c715180b472635ffe04cfa0d520",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a00eb2c58a980c958858ee8a38f01ca0fddf86e8",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/kernel/rtl9303）"
+  },
+  {
+   "sha": "b256ba9a43745970057e3efe9b6f606f34161bbc",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/emortal/luci-app-athena-led）"
+  },
+  {
+   "sha": "5d918f31d2c2481def108abec6c476fa2f06899b",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/kernel/rtl837x）"
+  },
+  {
+   "sha": "c3f68717245d354cabe9742152bdc151a6e68342",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/generic、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "c135923b0fbd38130219f60e08033643d7dcf878",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/firmware/ipq-wifi、package/libs/uclient、package/libs/ustream-ssl、package/network/services、package/network/utils、package/system/procd、package/system/uci、package/utils/firmware-utils…）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "0c00e18b4dc98321d9c6eb8c4faf7868fac1da99",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "b650d6e3803c7b52d9cfedaece356fb8ccdf75ac",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "0c5deff5f86466122003fb535636f3f7bef793b4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖退出：上游0689包含本地0685注册语义并移除EDMA bitmap TX路径，本地0685删除；FDB类型检查保留为0695"
+  },
+  {
+   "sha": "ee65e345e2866933462571d95a2297d535457e31",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "d091b4d79fc6c7fa6f9ef3a70f69ba261a715078",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "61a6c5b1e4e9ba8d34959691b42e1cb097dee02a",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "0ef2fd7f45a462c0a0a796371fee33842ce29271",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "cdffd21a5828e3f7ec097b3e54da342186528b49",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/kernel/rtl837x）"
+  },
+  {
+   "sha": "6104c53d1395ff822179864a445c0ee4a90cf172",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "2dd39cc2815268e969146998cc758a84fd43a840",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/kernel/rtl9303）"
+  },
+  {
+   "sha": "417bf5b1a6612043cf7eb356f65424b8f086f317",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/base-files/files、scripts）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9858da6eb4e7632cae3abf0e981d1d96e988fb58",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "455c811d90fe6127be27d2c71fd0fd418a0c0f47",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool、package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：mac80211.uc对be10000按硬件模式/子radio频宽固定20/160/80/160，不写auto_htmode"
+  },
+  {
+   "sha": "4c1452934f3bbad46f991becf031292d8e0a676f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool计数显示，无RC01覆盖冲突"
+  },
+  {
+   "sha": "3b220d26471ebcdf6083d0d2dcded7886ed8c36f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "974ad47acddbb657c97f40e87c7416fc1044581d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "64c5a7a423715c37310c4279f30359b481775bdd",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：mac80211.uc生成器保留be10000禁用radio与AP"
+  },
+  {
+   "sha": "c71264e46814614746b4a3ba7fead67af3b2a012",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool：auto.uc保留auto_network=0手动分支；接受上游保留显式flow_offloading设置"
+  },
+  {
+   "sha": "4bee053a7562b72f7d838e2ced5ce013e25b11ff",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-qca-ppe-qos）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "ee5c883406948fc7249219421998ef409301f022",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "4ed7b42593ec977aef1b2cd865a7186f4d264434",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool、package/kernel/mac80211、package/network/services、target/linux/generic、target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：0689/0690–0694刷新后本地0695零fuzz；router-tool刷新后保留auto_network=0"
+  },
+  {
+   "sha": "3badda38f970c34b31dac64d159008e2027fb622",
+   "review_status": "complete",
+   "review_depth": "合并提交：其引入内容按各子提交与最终树对RC01合并结果逐区域核对（package/emortal/luci-app-router-tool、package/kernel/mac80211、package/network/services、target/linux/generic、target/linux/qualcommbe）"
+  },
+  {
+   "sha": "357fa1c2f93d622ff822d75aa5eb9a708c5d49b6",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9a5373c2a58e5b40c5270d264f2f8cce09747827",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/config）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；RC01覆盖：出厂无线生成迁入mac80211.uc，移植be10000首启禁用与带宽上限；接受删除router-tool wireless.uc与11-ath12k-trigger，测试改为新热插拔重试路径"
+  },
+  {
+   "sha": "3717c44cb2fbee49ad0482db0b46d40162655c6f",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a4cd0d871a5c9fef577329c5dc85fb5de5a32e19",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool：服务端routed_plan经auto.uc遵循auto_network=0"
+  },
+  {
+   "sha": "2b04876e8eaeb32a4ccfd990b0fb7b04d2c441ce",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（target/linux/qualcommax）"
+  },
+  {
+   "sha": "badbe448f85ccddf686c18fa7a2ca62084c80098",
+   "review_status": "complete",
+   "review_depth": "路径级：仅涉及不进入RC01构建的目标或软件包（package/kernel/rtl9303）"
+  },
+  {
+   "sha": "9792809590482eb75ab4cde5bd743518329b1bb4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（target/linux/qualcommbe）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "d1fb2f9130b4bb7cf8616c759f66c96f9beb8f44",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/emortal/luci-app-router-tool）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；router-tool菜单，无RC01覆盖冲突"
+  },
+  {
+   "sha": "361ed82bd0411bfa6778449a54bff700dd08b222",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/libs/ustream-ssl）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "e6759912a90187a6ea8aaf50dc5a5565589d9678",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/libs/uclient）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "a5a576e9bf8f8f05d9941d777eca1d579bc61d28",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/network/services）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "3a46b4918183bea3b9a6c24bb6c7e1169ff64918",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "9906e077afefeccf5bc1a7c877b43bc35103500d",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "bef6205ff2d4cdbc0b429b1c3d5577ab6d03a203",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖；ath12k 914撞号：本地914重编号为918并零fuzz重放"
+  },
+  {
+   "sha": "f5be552b788d70c8a4440bd0580c699074c4fc2c",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "b597b6920c726511330838532552f4459b7bd9f2",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "384c14375d9d86ab1aca46cd625269ad174c8ad4",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  },
+  {
+   "sha": "7f2441f0781413f28bb435b858d72bd1120b5940",
+   "review_status": "complete",
+   "review_depth": "实际diff与RC01合并结果对照（package/kernel/mac80211）；冲突解决、补丁零fuzz重放与RC01离线回归覆盖"
+  }
+ ]
+}

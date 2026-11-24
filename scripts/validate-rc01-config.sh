@@ -63,7 +63,8 @@ for package in \
 	luci-app-passwall luci-app-passwall2 \
 	dae daed daed-geoip daed-geosite luci-app-dae luci-app-daed luci-app-daede luci-i18n-daed-zh-cn \
 	vmlinux-btf vmlinux-btf-builtin \
-	irqbalance luci-app-qca-ppe-qos qca-ppe-qos qosify sqm-scripts \
+	irqbalance luci-app-qca-ppe-qos luci-i18n-qca-ppe-qos-zh-cn qca-ppe-qos qosify sqm-scripts \
+	luci-app-xiaomi-control luci-i18n-xiaomi-control-zh-cn \
 	tcpdump-mini ethtool iw tc-tiny tc-bpf \
 	samba4-server ksmbd-server luci-app-samba4 \
 	miniupnpd miniupnpd-nftables luci-app-upnp

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Real bridge/PPE/EDMA functions; kernel services and hardware are fixtures. */
+/* Real bridge/PPE/EDMA functions; kernel services and hardware are fixtures.
+ * RC01_LEGACY_TX_FLOOD selects the pre-0689 EDMA bitmap code for controls. */
 #include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -33,6 +34,7 @@ typedef uint32_t u32;
 #define ETH_HLEN 14
 #define CHECKSUM_PARTIAL 1
 #define BR_STATE_FORWARDING 3
+#define ETH_P_8021Q 0x8100
 #define SKB_GSO_TCPV4 1
 #define SKB_GSO_TCPV6 2
 #define CONFIG_BRIDGE_IGMP_SNOOPING 1
@@ -64,7 +66,7 @@ struct net_device {
 	int id;
 	void *priv;
 	struct net_bridge_port *port;
-	bool vlan_aware, offloaded, txmac, ingress_filter;
+	bool vlan_aware, offloaded, ingress_filter;
 };
 struct br_input_skb_cb {
 	struct net_device *brdev;
@@ -113,7 +115,12 @@ enum skb_drop_reason { SKB_DROP_REASON_NO_TX_TARGET, SKB_DROP_REASON_NOMEM,
 	SKB_DROP_REASON_NOT_SPECIFIED };
 #define list_for_each_entry_rcu(p, head, member) for ((p) = *(head); (p); (p) = (p)->next)
 struct ppe_port { int port_id; };
-struct edma_port_priv { struct ppe_port *ppe_port; u32 br_flood[EDMA_PORT_FLOOD_MAX]; };
+struct edma_port_priv {
+	struct ppe_port *ppe_port;
+#ifdef RC01_LEGACY_TX_FLOOD
+	u32 br_flood[EDMA_PORT_FLOOD_MAX];
+#endif
+};
 struct edma_port_tx_stats { int syncp; unsigned int tx_tso_pkts; };
 struct ppe_device { int num_ports; };
 struct ppe_bridge_vsi { u32 members; int vid; };
@@ -124,7 +131,7 @@ struct ppe_bridge {
 		struct net_device *bridge, *dev;
 		int vsi, pvid;
 		unsigned long flags;
-		bool mrouter, forwarding;
+		bool mrouter, forwarding, poisoned;
 	} ports[4];
 	struct ppe_bridge_vsi vsis[1];
 	struct ppe_bridge_mdb *mdb_ht;
@@ -155,17 +162,17 @@ static int ppe_bridge_port_id(struct net_device *dev) { return dev->id; }
 static int ppe_bridge_vsi_get(struct ppe_bridge *pb, struct net_device *br, int vid) { return 0; }
 static int ppe_bridge_vsi_hw_update(struct ppe_bridge *pb, int vsi) { return 0; }
 static int ppe_bridge_vsi_eg_update(struct ppe_bridge *pb, int vsi) { return 0; }
+static int br_vlan_get_proto(const struct net_device *dev, u16 *proto)
+{ *proto = ETH_P_8021Q; return 0; }
+static void ppe_bridge_fdb_member_set(struct ppe_bridge *pb, int vsi, int port, bool on) { }
+static void ppe_bridge_port_detach(struct ppe_bridge *pb, struct net_device *dev, bool quiet)
+{ abort(); }
 static int ppe_port_vsi_set(struct ppe_device *pd, int port, int vsi) { return 0; }
 static int ppe_port_vlan_ingress_filter_set(struct ppe_device *pd, int port, bool on)
 { devices[port].ingress_filter = on; return 0; }
-static int ppe_port_bridge_txmac_set(struct ppe_device *pd, int port, bool on)
-{ devices[port].txmac = on; return 0; }
 static void ppe_bridge_port_offload_mark_set(struct net_device *dev, bool on) { dev->offloaded = on; }
-static void ppe_bridge_port_tx_flood_clear(struct net_device *dev)
-{ memset(edma_ports[dev->id].br_flood, 0, sizeof(edma_ports[dev->id].br_flood)); }
-static void ppe_bridge_port_vlans_flush(struct ppe_bridge *pb, int port) { }
 static void queue_delayed_work(int wq, int *work, int delay) { }
-static void *netdev_priv(struct net_device *dev) { return dev->priv; }
+static inline void *netdev_priv(struct net_device *dev) { return dev->priv; }
 static bool netdev_phys_item_id_same(const struct netdev_phys_item_id *a,
 				    const struct netdev_phys_item_id *b) { return a->id == b->id; }
 static int nbp_switchdev_hwdom_set(struct net_bridge_port *p) { p->hwdom = 1; return 0; }
@@ -173,9 +180,9 @@ static void nbp_switchdev_hwdom_put(struct net_bridge_port *p) { p->hwdom = 0; }
 static int switchdev_bridge_port_offload(struct net_device *, struct net_device *, void *,
 					 int *, int *, bool, struct netlink_ext_ack *);
 static u8 br_multicast_igmp_type(const struct sk_buff *skb) { return skb->igmp; }
-static bool is_broadcast_ether_addr(const unsigned char *addr)
+static inline bool is_broadcast_ether_addr(const unsigned char *addr)
 { static const unsigned char bc[6] = {255,255,255,255,255,255}; return !memcmp(addr, bc, 6); }
-static bool is_multicast_ether_addr(const unsigned char *addr) { return addr[0] & 1; }
+static inline bool is_multicast_ether_addr(const unsigned char *addr) { return addr[0] & 1; }
 static bool is_link_local_ether_addr(const unsigned char *addr) { return false; }
 static bool ether_addr_equal(const unsigned char *a, const unsigned char *b) { return !memcmp(a,b,6); }
 static bool skb_is_gso(struct sk_buff *skb) { return skb->shinfo.gso_size != 0; }
@@ -185,14 +192,21 @@ static bool skb_is_gso(struct sk_buff *skb) { return skb->shinfo.gso_size != 0; 
 
 #include "prepared-driver.h"
 
+#ifdef RC01_LEGACY_TX_FLOOD
+#define tx_flood_update() ppe_bridge_tx_flood_update(&ppe_bridge, 0)
+#else
+#define tx_flood_update() ((void)0)
+#endif
+
 /* Switchdev's notification/replay plumbing is stubbed; capability consumption
  * uses the actual bridge nbp_switchdev_add(), including its static key. */
 static int switchdev_bridge_port_offload(struct net_device *dev, struct net_device *brport,
 		void *ctx, int *nb, int *blocking_nb, bool tx_fwd_offload, struct netlink_ext_ack *extack)
 {
-	struct ppe_bridge *pb = ctx;
+	struct ppe_bridge *pb = &ppe_bridge;
 	registrations++;
-	assert(dev->offloaded && dev->txmac);
+	assert(ctx == &pb->ports[dev->id]);
+	assert(dev->offloaded);
 	assert(pb->ports[dev->id].dev == dev);
 	if (br_vlan_enabled(pb->ports[dev->id].bridge)) {
 		/* Replay requires the join state to be visible before notification. */
@@ -266,7 +280,11 @@ static void dev_queue_xmit(struct sk_buff *skb)
 			tags[i] = skb->vlan_tag;
 		}
 	}
+#ifdef RC01_LEGACY_TX_FLOOD
 	assert(type == 2 || type == 3);
+#else
+	assert(type == 2);
+#endif
 	free(skb);
 }
 
@@ -297,7 +315,7 @@ static void setup(bool vlan_aware)
 	 * reproduction. Individual scenarios enable the third eligible exit. */
 	ports[3].state = 0;
 	ppe_bridge.ports[3].forwarding = false;
-	ppe_bridge_tx_flood_update(&ppe_bridge, 0);
+	tx_flood_update();
 	reset_output();
 }
 static struct sk_buff *packet(int ingress, int kind)
@@ -320,7 +338,7 @@ static void expect(int a, int b, int c)
 	}
 }
 static void enable_third(void)
-{ ports[3].state = BR_STATE_FORWARDING; ppe_bridge.ports[3].forwarding = true; ppe_bridge_tx_flood_update(&ppe_bridge, 0); }
+{ ports[3].state = BR_STATE_FORWARDING; ppe_bridge.ports[3].forwarding = true; tx_flood_update(); }
 static void known_to(int target)
 {
 	for (int other_offload = 0; other_offload <= 1; other_offload++) {
@@ -365,7 +383,7 @@ static void mdb(void)
 	/* Hardware's generic MC bitmap includes unrelated flood/group ports.
 	 * The selected MDB contains only LAN2, with optional LAN3 router. */
 	hw_mdb = (struct ppe_bridge_mdb){.vsi = 0, .ports = BIT(1) | BIT(2) | BIT(3)};
-	ppe_bridge.mdb_ht = &hw_mdb; ppe_bridge_tx_flood_update(&ppe_bridge, 0);
+	ppe_bridge.mdb_ht = &hw_mdb; tx_flood_update();
 	struct net_bridge_port_group group = {.key.port = &ports[2]};
 	struct net_bridge_mdb_entry entry = {.ports = &group};
 	struct net_bridge_mcast ctx = {0};
@@ -425,12 +443,12 @@ static void registration(void)
 	for (int aware = 0; aware <= 1; aware++) {
 		setup(aware);
 		for (int i = 1; i <= 3; i++) {
-			assert(devices[i].offloaded && devices[i].txmac && ports[i].hwdom);
+			assert(devices[i].offloaded && ports[i].hwdom);
 			assert(!(ports[i].flags & BR_TX_FWD_OFFLOAD));
 			nbp_switchdev_del(&ports[i]);
 			assert(!ports[i].offload_count);
 			assert(!ppe_bridge_port_join(&ppe_bridge, &devices[i], &devices[0], NULL));
-			assert(devices[i].offloaded && devices[i].txmac && ports[i].hwdom);
+			assert(devices[i].offloaded && ports[i].hwdom);
 			assert(!(ports[i].flags & BR_TX_FWD_OFFLOAD));
 		}
 		assert(!br_switchdev_tx_fwd_offload);

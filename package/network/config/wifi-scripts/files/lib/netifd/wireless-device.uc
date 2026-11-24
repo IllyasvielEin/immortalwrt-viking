@@ -152,30 +152,14 @@ function wdev_config_init(wdev)
 		config,
 		interfaces,
 	};
-
-	let prev = wdev.handler_data;
-	wdev.handler_data = {};
-
-	if (prev && prev[wdev.name])
-		wdev.handler_data[wdev.name] = prev[wdev.name];
 }
 
-function wdev_setup_cb(wdev)
+function wdev_reset(wdev)
 {
-	if (wdev.state != "setup") {
-		if (wdev.state == "up" && wdev.config_change) {
-			wdev_config_init(wdev);
-			wdev.setup();
-		}
-		return;
-	}
-
-	if (wdev.retry > 0)
-		wdev.retry--;
-	else
-		wdev.retry_setup_failed = true;
-
-	wdev.teardown();
+	wdev.retry = DEFAULT_RETRY;
+	delete wdev.retry_setup_failed;
+	delete wdev.retry_setup_pending;
+	delete wdev.setup_error;
 }
 
 function wdev_teardown_cb(wdev)
@@ -248,6 +232,7 @@ function __run_next_handler()
 
 	wdev.dbg("run " + op);
 	wdev.handler_config.data = wdev.handler_data[wdev.name] ?? {};
+	wdev.handler_config.running = op == "setup" && !!wdev.setup_previous;
 	wdev_script_task = netifd.process({
 		cb: () => run_handler_cb(wdev, cb),
 		dir: netifd.wireless.path,
@@ -324,6 +309,40 @@ function wdev_proc_add(wdev, data)
 		wdev.proc_timer = uloop.interval(1000, () => wdev_proc_check(wdev));
 }
 
+function wdev_setup_cb(wdev)
+{
+	let previous = wdev.setup_previous;
+	delete wdev.setup_previous;
+
+	if (wdev.state == "setup" && previous?.rejected) {
+		wdev.handler_data = previous.data;
+		wdev_proc_reset(wdev);
+		for (let proc in previous.procs)
+			wdev_proc_add(wdev, proc);
+
+		if (wdev.cancel_setup || !wdev.autostart || wdev.delete) {
+			wdev.teardown();
+			return;
+		}
+		wdev.state = "up";
+	}
+
+	if (wdev.state != "setup") {
+		if (wdev.state == "up" && wdev.config_change) {
+			wdev_config_init(wdev);
+			wdev.setup();
+		}
+		return;
+	}
+
+	if (wdev.retry > 0)
+		wdev.retry--;
+	else
+		wdev.retry_setup_failed = true;
+
+	wdev.teardown();
+}
+
 
 function setup()
 {
@@ -334,6 +353,10 @@ function setup()
 	if (!this.autostart || this.retry_setup_failed)
 		return;
 
+	if (this.state == "up")
+		this.setup_previous = { data: this.handler_data, procs: this.procs };
+	let device_data = this.handler_data[this.name];
+	this.handler_data = device_data ? { [this.name]: device_data } : {};
 	wdev_proc_reset(this);
 	delete this.config_change;
 	this.state = "setup";
@@ -396,13 +419,6 @@ function wdev_update_disabled_vifs(wdev)
 		wdev.config_change = true;
 
 	return wdev.config_change;
-}
-
-function wdev_reset(wdev)
-{
-	wdev.retry = DEFAULT_RETRY;
-	delete wdev.retry_setup_failed;
-	delete wdev.retry_setup_pending;
 }
 
 function update(data)
@@ -575,10 +591,14 @@ function notify(req)
 		wdev_proc_add(this, data);
 		return 0;
 	case NOTIFY_CMD_SET_RETRY:
+		if (data.retain && this.setup_previous && this.state == "setup")
+			this.setup_previous.rejected = true;
 		if (data.retry != null)
 			this.retry = data.retry;
 		else
 			this.retry = DEFAULT_RETRY;
+		if (data.error)
+			this.setup_error = data.error;
 		return 0;
 	default:
 		return ubus.STATUS_INVALID_ARGUMENT;
@@ -653,6 +673,9 @@ function status()
 		autostart: this.autostart,
 		disabled: !!this.data.config.disabled,
 		retry_setup_failed: !!this.retry_setup_failed,
+		error: this.setup_error,
+		phy: this.handler_data[this.name]?.phy,
+		channel_plan: this.handler_data[this.name]?.channel_plan,
 		config: this.data.config,
 		interfaces
 	};
@@ -710,6 +733,7 @@ export function new(data, script, driver)
 		name: data.name,
 		script, data,
 		procs: [],
+		handler_data: {},
 		vifs: {},
 		disabled_vifs: {},
 		ifindex_cache: {},

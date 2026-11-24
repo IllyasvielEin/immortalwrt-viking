@@ -1,4 +1,4 @@
-# Router Tool wireless defaults
+# Wi-Fi factory settings
 
 ## Manual network management
 
@@ -12,7 +12,9 @@ This option does not convert a network to a bypass router or restore a previous
 snapshot. Set the address, services and port roles explicitly. Relay AP mode
 remains an explicit, separate mode switch.
 
-Build systems may set the optional wireless defaults in `/etc/config/router-tool`:
+`wifi-scripts` creates the full wireless configuration when it first discovers a
+radio. OpenWRT-CI supplies its optional `WRT_SSID` and `WRT_WORD` inputs through
+the existing `/etc/config/router-tool` section:
 
 ```uci
 config settings 'main'
@@ -23,51 +25,46 @@ config wireless 'defaults'
 ```
 
 When both values are non-empty, `ssid` produces names such as
-`Home-2.4G` and `Home-5.2G`, with the same key on every band. If either value is
-empty, Router Tool uses the system hostname, vendor, and band in the SSID and
-`12345678` as the key. Hostname case is preserved and the vendor's first letter
-is capitalized. The suffix follows the radio's capabilities (`2.4G`, `5.2G`,
-`5.8G`, or `6G`). Names are shortened to 32 bytes without splitting UTF-8
-characters. A custom key must contain 8 to 63 printable ASCII characters,
-supporting both WPA2 and WPA3-SAE.
+`Home-2.4G` and `Home-5.2G`, with the same key on each generic factory AP. An
+SSID prefix must contain 1 to 32 bytes without control characters, and a key
+must contain 8 to 63 printable ASCII characters. With either input missing or
+invalid, the generic AP uses the hostname, vendor, and band for its name and
+`12345678` for its key. Names are shortened at a UTF-8 boundary within the
+32-byte SSID limit.
 
-The 5 GHz and 6 GHz radios use automatic channel selection. The 2.4 GHz
-default remains channel 1. On a wiphy with multiple radios, each radio's
-own band information determines its suffix. The 2.4 GHz default uses the
-lowest supported width (20 MHz); 5 GHz and 6 GHz use the highest advertised
-width that fits the selected radio's frequency range. EHT320 is selected
-only on a 6 GHz radio advertising that mode; AX and narrower radios keep
-their supported maximum. A restricted 5.8 GHz radio keeps its `5.8G` suffix
-without imposing an unrelated fixed width.
+The factory generator uses the provisioned country, then the board default,
+then `US`. It selects automatic channels for generic 2.4, 5, and 6 GHz APs, with
+SAE and required protected management frames on 6 GHz. The ucode backend
+plans the usable width and candidate channels from the live PHY during setup.
+Existing radios retain their settings on repeated discovery and configuration-
+preserving upgrades.
 
-These settings are initialization defaults. Only unmarked, untouched APs with
-`OWRT` / `12345678` / `psk2+ccmp` are initialized. Existing custom credentials,
-STA/mesh/WDS/MLO profiles, and radios with `defaults_done=1` are preserved.
-Subsequent LuCI edits and upgrades that retain configuration do not reapply the
-build defaults. Do not clear the markers to enforce new credentials on an
-already configured router; edit its Wireless form instead.
+Router Tool displays the running channel plan and handles explicit edits in
+the Wireless form. The form reads `channels`, `channel_list`, and `chanlist`
+in that order and saves explicit edits to `channels`.
 
-For eligible APs, 2.4 GHz starts on channel 1 with 20 MHz width; 5 and 6 GHz use
-automatic channel selection. Low 5 GHz and 6 GHz request up to 160 MHz, while
-high 5 GHz requests up to 80 MHz, always within the reported radio capabilities.
-On a PHY with child radios, the selected child's default channel determines
-whether the 5 GHz radio uses the high-band defaults. Missing child or band
-capabilities leave initialization pending. Automatic selection still follows
-the regulatory and DFS/CAC requirements. These defaults preserve both radio
-and AP disabled flags; the user enables Wi-Fi explicitly.
+## Saving and applying network presets
 
-OpenWRT-CI passes `WRT_SSID` and `WRT_WORD` through this section. It must leave
-the wifi-scripts generator's untouched-AP values intact, so custom build
-credentials do not suppress channel, bandwidth, country, and security defaults.
-Keep this configuration private when using a private Wi-Fi password.
+Router Tool remembers the committed values when a LuCI session saves its
+network form. Checked and unchecked LuCI Apply compare the session's pending
+edits with the current values. This includes Apply from the pending changes
+dialog. A conflict leaves the draft available to review or revert. Disjoint
+edits from other sessions are preserved.
+
+Relay AP mode requests its management address from the upstream router. Use
+the assigned address to reconnect. Checked Apply restores the previous
+configuration if LuCI cannot confirm the change before the timer expires.
 
 ## Configuration migration
 
-`/etc/uci-defaults/90-router-tool-migrate` owns historical settings and snapshot
-normalization and the initial generated ULA cleanup. It removes only the unchanged, owned `wan6`/`local` prefix
-filter, including its saved routed value when AP mode is active. Custom filters
-remain intact. It also normalizes older routed snapshots before regular service
-reloads and LuCI saves can use them.
+Router Tool's early `uci-defaults` script clears the initial ULA `auto` value
+before the base system generates a prefix. Explicit ULA prefixes and IPv6
+prefix delegation remain available.
+
+`/etc/uci-defaults/90-router-tool-migrate` normalizes historical settings and
+snapshots. It removes the unchanged, owned `wan6`/`local` prefix filter,
+including its saved routed value when AP mode is active. Custom filters remain
+intact.
 
 Regular runtime paths do not repair old snapshot formats. They still record new
 sections, restore AP settings, preserve manual edits, and resume interrupted

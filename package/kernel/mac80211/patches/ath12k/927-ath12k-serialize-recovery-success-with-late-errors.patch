@@ -21,7 +21,7 @@ barriers remain outside it.
 ---
 --- a/drivers/net/wireless/ath/ath12k/core.h
 +++ b/drivers/net/wireless/ath/ath12k/core.h
-@@ -959,7 +959,12 @@
+@@ -960,7 +960,12 @@
  	u8 num_hw;
  	bool mlo_capable;
  	bool teardown_done;
@@ -194,7 +194,7 @@ barriers remain outside it.
  		ath12k_err(owner, "group recovery failed: %d; resources closed\n", ret);
  	}
  unlock_return:
-@@ -2227,6 +2258,7 @@
+@@ -2262,6 +2293,7 @@
  	ag->id = count;
  	list_add(&ag->list, &ath12k_hw_group_list);
  	mutex_init(&ag->mutex);

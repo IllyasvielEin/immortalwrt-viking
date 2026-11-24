@@ -75,7 +75,7 @@ serialization covers publication through removal; workers never take it.
  	ath12k_qmi_deinit_service(ab);
  }
  
-@@ -1975,13 +1987,14 @@
+@@ -2010,13 +2022,14 @@
  
  static void ath12k_core_hw_group_free(struct ath12k_hw_group *ag)
  {
@@ -95,7 +95,7 @@ serialization covers publication through removal; workers never take it.
  }
  
  static struct ath12k_hw_group *ath12k_core_hw_group_find_by_dt(struct ath12k_base *ab)
-@@ -2189,7 +2202,11 @@
+@@ -2224,7 +2237,11 @@
  	ath12k_dbg(ab, ATH12K_DBG_BOOT, "single device added to hardware group\n");
  
  exit:
@@ -108,7 +108,7 @@ serialization covers publication through removal; workers never take it.
  		ath12k_warn(ab, "unable to add new device to group, max limit reached\n");
  		goto invalid_group;
  	}
-@@ -2204,44 +2221,39 @@
+@@ -2239,44 +2256,39 @@
  	ath12k_dbg(ab, ATH12K_DBG_BOOT, "wsi group-id %d num-devices %d index %d",
  		   ag->id, ag->num_devices, wsi->index);
  
@@ -165,7 +165,7 @@ serialization covers publication through removal; workers never take it.
  		ath12k_core_hw_group_free(ag);
  }
  
-@@ -2252,14 +2264,37 @@
+@@ -2287,14 +2299,37 @@
  
  	if (WARN_ON(!ag))
  		return;
@@ -206,7 +206,7 @@ serialization covers publication through removal; workers never take it.
  }
  
  void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *ag)
-@@ -2270,10 +2305,12 @@
+@@ -2305,10 +2340,12 @@
  	if (!ag)
  		return;
  
@@ -219,7 +219,7 @@ serialization covers publication through removal; workers never take it.
  		return;
  	}
  
-@@ -2287,11 +2324,13 @@
+@@ -2322,11 +2359,13 @@
  			continue;
  
  		mutex_lock(&ab->core_lock);
@@ -234,7 +234,7 @@ serialization covers publication through removal; workers never take it.
  }
  
  static int ath12k_core_hw_group_create(struct ath12k_hw_group *ag)
-@@ -2300,38 +2339,23 @@
+@@ -2335,38 +2374,23 @@
  	int i, ret;
  
  	lockdep_assert_held(&ag->mutex);
@@ -280,7 +280,7 @@ serialization covers publication through removal; workers never take it.
  }
  
  void ath12k_core_hw_group_set_mlo_capable(struct ath12k_hw_group *ag)
-@@ -2402,47 +2426,56 @@
+@@ -2437,47 +2461,56 @@
  		ath12k_warn(ab, "failed to register panic handler: %d\n", ret);
  
  	mutex_lock(&ath12k_hw_group_mutex);
@@ -357,7 +357,7 @@ serialization covers publication through removal; workers never take it.
  	ath12k_core_panic_notifier_unregister(ab);
  }
  
-@@ -2484,6 +2517,7 @@
+@@ -2519,6 +2552,7 @@
  
  	init_waitqueue_head(&ab->peer_mapping_wq);
  	init_waitqueue_head(&ab->wmi_ab.tx_credits_wq);
@@ -367,7 +367,7 @@ serialization covers publication through removal; workers never take it.
  	INIT_WORK(&ab->rfkill_work, ath12k_rfkill_work);
 --- a/drivers/net/wireless/ath/ath12k/core.h
 +++ b/drivers/net/wireless/ath/ath12k/core.h
-@@ -981,6 +981,8 @@
+@@ -982,6 +982,8 @@
  	struct platform_device *pdev;
  	struct device *dev;
  	struct ath12k_qmi qmi;
@@ -376,7 +376,7 @@ serialization covers publication through removal; workers never take it.
  	struct ath12k_wmi_base wmi_ab;
  	struct completion fw_ready;
  	u8 device_id;
-@@ -1327,7 +1329,6 @@
+@@ -1328,7 +1330,6 @@
  int ath12k_core_resume(struct ath12k_base *ab);
  int ath12k_core_suspend(struct ath12k_base *ab);
  int ath12k_core_suspend_late(struct ath12k_base *ab);
@@ -386,7 +386,7 @@ serialization covers publication through removal; workers never take it.
  const struct firmware *ath12k_core_firmware_request(struct ath12k_base *ab,
 --- a/drivers/net/wireless/ath/ath12k/qmi.c
 +++ b/drivers/net/wireless/ath/ath12k/qmi.c
-@@ -2653,303 +2653,6 @@
+@@ -2655,303 +2655,6 @@
  	return ret;
  }
  
@@ -690,7 +690,7 @@ serialization covers publication through removal; workers never take it.
  void ath12k_qmi_reset_mlo_mem(struct ath12k_hw_group *ag)
  {
  	struct target_mem_chunk *mlo_chunk;
-@@ -2987,7 +2690,7 @@
+@@ -2989,7 +2692,7 @@
  
  	lockdep_assert_held(&ag->mutex);
  
@@ -699,7 +699,7 @@ serialization covers publication through removal; workers never take it.
  		return;
  
  	if (ag->mlo_mem.fixed_mem) {
-@@ -3064,8 +2767,11 @@
+@@ -3066,8 +2769,11 @@
  			ath12k_qmi_unmap_fixed_mem(ab, &ab->qmi.fixed_mem[i]);
  	}
  
@@ -712,7 +712,7 @@ serialization covers publication through removal; workers never take it.
  }
  
  static int ath12k_qmi_map_fixed_mem(struct ath12k_base *ab, int idx,
-@@ -3102,10 +2808,87 @@
+@@ -3104,10 +2810,87 @@
  	return 0;
  }
  
@@ -801,7 +801,7 @@ serialization covers publication through removal; workers never take it.
  	struct target_mem_chunk *chunk;
  	int i;
  
-@@ -3121,18 +2904,8 @@
+@@ -3123,18 +2906,8 @@
  		chunk->dma_allocated = false;
  	}
  
@@ -821,8 +821,8 @@ serialization covers publication through removal; workers never take it.
 +	ath12k_qmi_release_mlo_mem(ab);
  }
  
- static int ath12k_qmi_alloc_chunk(struct ath12k_base *ab,
-@@ -3261,6 +3034,7 @@
+ static bool ath12k_qmi_needs_ipq5332_window(struct ath12k_base *ab, u32 type)
+@@ -3302,6 +3075,7 @@
  		chunk->v.ioaddr = (u8 __iomem *)mlo_chunk->v.ioaddr + offset;
  		chunk->size = size;
  		chunk->type = MLO_GLOBAL_MEM_REGION_TYPE;
@@ -830,7 +830,7 @@ serialization covers publication through removal; workers never take it.
  		return 0;
  	}
  
-@@ -3300,6 +3074,7 @@
+@@ -3341,6 +3115,7 @@
  	chunk->v.addr = (u8 *)mlo_chunk->v.addr + offset;
  	chunk->size = size;
  	chunk->type = MLO_GLOBAL_MEM_REGION_TYPE;
@@ -838,7 +838,7 @@ serialization covers publication through removal; workers never take it.
  
  	return 0;
  }
-@@ -3312,6 +3087,9 @@
+@@ -3353,6 +3128,9 @@
  	u32 mlo_size = 0;
  
  	mutex_lock(&ag->mutex);
@@ -848,7 +848,7 @@ serialization covers publication through removal; workers never take it.
  
  	if (!ag->mlo_mem.init_done) {
  		memset(ag->mlo_mem.chunk, 0, sizeof(ag->mlo_mem.chunk));
-@@ -3388,8 +3166,11 @@
+@@ -3429,8 +3207,11 @@
  		goto err;
  	}
  
@@ -861,7 +861,7 @@ serialization covers publication through removal; workers never take it.
  
  	mutex_unlock(&ag->mutex);
  
-@@ -3428,6 +3209,9 @@
+@@ -3469,6 +3250,9 @@
  
  	mutex_lock(&ag->mutex);
  	ath12k_qmi_begin_fixed_request(ab);
@@ -871,7 +871,7 @@ serialization covers publication through removal; workers never take it.
  
  	if (!ag->mlo_mem.init_done) {
  		memset(ag->mlo_mem.chunk, 0, sizeof(ag->mlo_mem.chunk));
-@@ -4339,10 +4123,15 @@
+@@ -4380,10 +4164,15 @@
  	event->data = data;
  
  	spin_lock(&qmi->event_lock);
@@ -889,7 +889,7 @@ serialization covers publication through removal; workers never take it.
  
  	return 0;
  }
-@@ -4735,14 +4524,22 @@
+@@ -4776,14 +4565,22 @@
  	spin_unlock(&qmi->event_lock);
  }
  
@@ -915,7 +915,7 @@ serialization covers publication through removal; workers never take it.
  	ab->qmi.target_mem_mode = ab->target_mem_mode;
  	ret = qmi_handle_init(&ab->qmi.handle, ATH12K_QMI_RESP_LEN_MAX,
  			      &ath12k_qmi_ops, ath12k_qmi_msg_handlers);
-@@ -4750,6 +4547,7 @@
+@@ -4791,6 +4588,7 @@
  		ath12k_warn(ab, "failed to initialize qmi handle\n");
  		return ret;
  	}
@@ -923,7 +923,7 @@ serialization covers publication through removal; workers never take it.
  
  	ab->qmi.event_wq = alloc_ordered_workqueue("ath12k_qmi_driver_event", 0);
  	if (!ab->qmi.event_wq) {
-@@ -4757,30 +4555,54 @@
+@@ -4798,30 +4596,54 @@
  		return -EFAULT;
  	}
  
@@ -991,7 +991,7 @@ serialization covers publication through removal; workers never take it.
  	ath12k_qmi_aux_uc_free(ab);
  	ath12k_qmi_m3_free(ab);
  	ath12k_qmi_free_target_mem_chunk(ab);
-@@ -4789,6 +4611,7 @@
+@@ -4830,6 +4652,7 @@
  
  void ath12k_qmi_free_resource(struct ath12k_base *ab)
  {

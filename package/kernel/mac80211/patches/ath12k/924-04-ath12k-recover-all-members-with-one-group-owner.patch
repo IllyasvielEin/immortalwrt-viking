@@ -181,7 +181,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static void ath12k_rfkill_work(struct work_struct *work)
-@@ -1748,49 +1745,39 @@
+@@ -1755,49 +1752,39 @@
  	complete(&ab->driver_recovery);
  }
  
@@ -260,7 +260,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	complete(&ab->restart_completed);
  }
  
-@@ -1799,7 +1786,13 @@
+@@ -1806,7 +1793,13 @@
  	unsigned long flags;
  
  	spin_lock_irqsave(&ab->recovery_lock, flags);
@@ -275,7 +275,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  		set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
  		set_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
  		queue_work(ab->workqueue_aux, &ab->reset_work);
-@@ -1807,99 +1800,322 @@
+@@ -1814,99 +1807,322 @@
  	spin_unlock_irqrestore(&ab->recovery_lock, flags);
  }
  
@@ -687,7 +687,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	mutex_unlock(&ag->mutex);
  }
  
-@@ -1999,6 +2215,8 @@
+@@ -2041,6 +2257,8 @@
  	ag->id = count;
  	list_add(&ag->list, &ath12k_hw_group_list);
  	mutex_init(&ag->mutex);
@@ -696,7 +696,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	ag->mlo_capable = false;
  
  	return ag;
-@@ -2304,6 +2522,7 @@
+@@ -2346,6 +2564,7 @@
  
  	lockdep_assert_held(&ag->mutex);
  	set_bit(ATH12K_GROUP_FLAG_UNREGISTER, &ag->flags);
@@ -706,7 +706,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  		if (!ab)
 --- a/drivers/net/wireless/ath/ath12k/core.h
 +++ b/drivers/net/wireless/ath/ath12k/core.h
-@@ -632,6 +632,7 @@
+@@ -633,6 +633,7 @@
  #define ATH12K_VDEV_DELETE_TIMEOUT_HZ (5 * HZ)
  
  struct ath12k {
@@ -714,7 +714,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	struct ath12k_base *ab;
  	struct ath12k_pdev *pdev;
  	struct ath12k_hw *ah;
-@@ -774,6 +775,7 @@
+@@ -776,6 +777,7 @@
  	struct completion fw_stats_done;
  
  	struct completion mlo_setup_done;
@@ -722,7 +722,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	u32 mlo_setup_status;
  	struct completion mlo_teardown_done;
  	u32 mlo_teardown_status;
-@@ -798,6 +800,7 @@
+@@ -800,6 +802,7 @@
  
  struct ath12k_hw {
  	bool registered;
@@ -730,7 +730,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	struct ieee80211_hw *hw;
  	struct device *dev;
  
-@@ -919,6 +922,13 @@
+@@ -923,6 +926,13 @@
  /* Holds info on the group of devices that are registered as a single
   * wiphy, protected with struct ath12k_hw_group::mutex.
   */
@@ -744,7 +744,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  struct ath12k_hw_group {
  	/* Keep dp_hw_grp as the first member to allow efficient
  	 * usage of cache lines for DP fields
-@@ -946,6 +956,13 @@
+@@ -950,6 +960,13 @@
  	u8 num_hw;
  	bool mlo_capable;
  	bool teardown_done;
@@ -758,7 +758,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	struct device_node *wsi_node[ATH12K_MAX_DEVICES];
  	struct ath12k_mlo_memory mlo_mem;
  	bool hw_link_id_init_done;
-@@ -989,6 +1006,7 @@
+@@ -993,6 +1010,7 @@
  	struct ath12k_qmi qmi;
  	/* Protected by ag->mutex; set only after successful HIF power-up. */
  	bool soc_created;
@@ -766,7 +766,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	/* Resource obligations, independent of group started/borrower refs. */
  	bool core_live;
  	bool pdev_live;
-@@ -1324,6 +1342,8 @@
+@@ -1332,6 +1350,8 @@
  int ath12k_core_qmi_firmware_ready(struct ath12k_base *ab);
  void ath12k_core_hw_group_cleanup(struct ath12k_hw_group *ag);
  void ath12k_core_queue_reset(struct ath12k_base *ab);
@@ -809,7 +809,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
 --- a/drivers/net/wireless/ath/ath12k/mac.c
 +++ b/drivers/net/wireless/ath/ath12k/mac.c
-@@ -10122,6 +10122,19 @@
+@@ -10145,6 +10145,19 @@
  		return -EPERM;
  
  	lockdep_assert_wiphy(hw->wiphy);
@@ -829,7 +829,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	ath12k_drain_tx(ah);
  
-@@ -13847,7 +13860,7 @@
+@@ -13863,7 +13876,7 @@
  	struct ath12k_vif *ahvif;
  	struct ath12k_link_vif *arvif;
  	bool hw_restarted;
@@ -838,7 +838,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	lockdep_assert_wiphy(hw->wiphy);
  
-@@ -13891,23 +13904,4 @@
+@@ -13901,23 +13914,4 @@
  
 -		if (ab->is_reset) {
 -			recovery_count = atomic_inc_return(&ab->recovery_count);
@@ -862,7 +862,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  		if (!hw_restarted)
  			continue;
  
-@@ -13934,6 +13928,7 @@
+@@ -13944,6 +13938,7 @@
  			}
  		}
  	}
@@ -870,7 +870,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  EXPORT_SYMBOL(ath12k_mac_op_reconfig_complete);
  
-@@ -14891,6 +14886,8 @@
+@@ -14905,6 +14900,8 @@
  static
  void ath12k_mac_cleanup_iface_comb(const struct ieee80211_iface_combination *iface_comb)
  {
@@ -879,7 +879,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	kfree(iface_comb[0].limits);
  	kfree(iface_comb);
  }
-@@ -14910,6 +14907,10 @@
+@@ -14924,6 +14921,10 @@
  	}
  
  	ath12k_mac_cleanup_iface_comb(wiphy->iface_combinations);
@@ -890,7 +890,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static int ath12k_mac_setup_iface_combinations(struct ath12k_hw *ah)
-@@ -15062,8 +15063,11 @@
+@@ -15076,8 +15077,11 @@
  	idr_destroy(&ar->txmgmt_idr);
  
  	kfree(ar->mac.sbands[NL80211_BAND_2GHZ].channels);
@@ -902,7 +902,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static void ath12k_mac_hw_unregister(struct ath12k_hw *ah)
-@@ -15077,7 +15081,10 @@
+@@ -15091,7 +15095,10 @@
  		ath12k_fw_stats_reset(ar);
  	}
  
@@ -914,7 +914,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	for_each_ar(ah, ar, i)
  		ath12k_mac_cleanup_unregister(ar);
-@@ -15094,9 +15101,6 @@
+@@ -15108,9 +15115,6 @@
  	struct ath12k_pdev_cap *cap = &ar->pdev->cap;
  	int ret;
  
@@ -924,7 +924,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	ath12k_pdev_caps_update(ar);
  
-@@ -15140,7 +15144,7 @@
+@@ -15154,7 +15158,7 @@
  		WLAN_CIPHER_SUITE_GCMP_256,
  		WLAN_CIPHER_SUITE_CCMP_256,
  	};
@@ -933,7 +933,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	u32 ht_cap = U32_MAX, antennas_rx = 0, antennas_tx = 0;
  	bool is_6ghz = false, is_raw_mode = false, is_monitor_disable = false;
  	u8 *mac_addr = NULL;
-@@ -15373,6 +15377,7 @@
+@@ -15387,6 +15391,7 @@
  		goto err_cleanup_if_combs;
  	}
  
@@ -941,7 +941,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	if (is_monitor_disable)
  		/* There's a race between calling ieee80211_register_hw()
  		 * and here where the monitor mode is enabled for a little
-@@ -15432,25 +15437,12 @@
+@@ -15418,25 +15423,12 @@
  	return 0;
  
  err_unregister_hw:
@@ -970,7 +970,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	return ret;
  }
  
-@@ -15459,6 +15451,11 @@
+@@ -15445,6 +15437,11 @@
  	struct ath12k_base *ab = ar->ab;
  	struct ath12k_pdev *pdev = ar->pdev;
  	u8 pdev_idx = ar->pdev_idx;
@@ -982,7 +982,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	ar->lmac_id = ath12k_hw_get_mac_from_pdev_id(ab->hw_params, pdev_idx);
  
-@@ -15580,17 +15577,16 @@
+@@ -15569,17 +15566,16 @@
  
  	ath12k_dbg(ab, ATH12K_DBG_MAC, "mlo setup done for pdev %d\n", ar->pdev_idx);
  
@@ -1002,7 +1002,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	num_link = ath12k_get_num_partner_link(ar);
  
-@@ -15624,6 +15620,14 @@
+@@ -15613,6 +15609,14 @@
  		ah = ag->ah[i];
  		if (!ah)
  			continue;
@@ -1017,7 +1017,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  		for_each_ar(ah, ar, j) {
  			ar = &ah->radio[j];
-@@ -15638,20 +15642,7 @@
+@@ -15627,20 +15631,7 @@
  	return 0;
  
  err_setup:
@@ -1039,7 +1039,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	return ret;
  }
  
-@@ -15672,6 +15663,11 @@
+@@ -15661,6 +15652,11 @@
  			continue;
  
  		for_each_ar(ah, ar, j) {
@@ -1051,7 +1051,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			WRITE_ONCE(ar->mlo_teardown_pending, false);
  			ret = __ath12k_mac_mlo_teardown(ar);
  			if (ret)
-@@ -15721,7 +15717,7 @@
+@@ -15710,7 +15706,7 @@
  
  	for (i = ag->num_hw - 1; i >= 0; i--) {
  		ah = ath12k_ag_to_ah(ag, i);
@@ -1060,7 +1060,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			continue;
  		ath12k_mac_hw_unregister(ah);
  		ah->registered = false;
-@@ -15774,13 +15770,15 @@
+@@ -15763,13 +15759,15 @@
  		ar->pdev = pdev;
  		ar->pdev_idx = pdev_idx;
  		ar->radio_idx = i;
@@ -1077,7 +1077,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	}
  
  	return ah;
-@@ -15802,7 +15800,9 @@
+@@ -15791,7 +15789,9 @@
  			pdev = &ab->pdevs[j];
  			if (!pdev->ar)
  				continue;
@@ -1087,7 +1087,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  		}
  	}
  
-@@ -15921,15 +15921,9 @@
+@@ -15910,15 +15910,9 @@
  	return 0;
  
  err:
@@ -1123,7 +1123,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			queue_work(ab->workqueue_aux, &ab->reset_work);
 --- a/drivers/net/wireless/ath/ath12k/qmi.c
 +++ b/drivers/net/wireless/ath/ath12k/qmi.c
-@@ -2414,7 +2414,7 @@
+@@ -2416,7 +2416,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1132,7 +1132,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_HOST_CAP_REQ_V01,
  			       QMI_WLANFW_HOST_CAP_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_host_cap_req_msg_v01_ei, &req);
-@@ -2439,7 +2439,7 @@
+@@ -2441,7 +2441,7 @@
  	return ret;
  }
  
@@ -1141,7 +1141,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  {
  	struct qmi_wlanfw_phy_cap_req_msg_v01 req = {};
  	struct qmi_wlanfw_phy_cap_resp_msg_v01 resp = {};
-@@ -2452,7 +2452,7 @@
+@@ -2454,7 +2454,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1150,7 +1150,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_PHY_CAP_REQ_V01,
  			       QMI_WLANFW_PHY_CAP_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_phy_cap_req_msg_v01_ei, &req);
-@@ -2494,7 +2494,7 @@
+@@ -2496,7 +2496,7 @@
  		   resp.num_phy_valid, resp.num_phy,
  		   resp.board_id_valid, resp.board_id);
  
@@ -1159,7 +1159,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  out:
  	/* If PHY capability not advertised then rely on default num link */
-@@ -2503,6 +2503,7 @@
+@@ -2505,6 +2505,7 @@
  	ath12k_dbg(ab, ATH12K_DBG_QMI,
  		   "no valid response from PHY capability, choose default num_phy %d\n",
  		   ab->qmi.num_radios);
@@ -1167,7 +1167,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
-@@ -2544,7 +2545,7 @@
+@@ -2546,7 +2547,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1176,7 +1176,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_IND_REGISTER_REQ_V01,
  			       QMI_WLANFW_IND_REGISTER_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_ind_register_req_msg_v01_ei, req);
-@@ -2619,7 +2620,7 @@
+@@ -2621,7 +2622,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1185,7 +1185,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_RESPOND_MEM_REQ_V01,
  			       QMI_WLANFW_RESPOND_MEM_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_respond_mem_req_msg_v01_ei, req);
-@@ -2660,7 +2661,8 @@
+@@ -2662,7 +2663,8 @@
  
  	lockdep_assert_held(&ag->mutex);
  
@@ -1195,7 +1195,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  		return;
  
  	for (i = 0; i < ARRAY_SIZE(ag->mlo_mem.chunk); i++) {
-@@ -2823,6 +2825,23 @@
+@@ -2825,6 +2827,23 @@
  	if (WARN_ON_ONCE(!ag->mlo_mem.num_users))
  		return;
  	ag->mlo_mem.num_users--;
@@ -1219,7 +1219,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static void ath12k_qmi_get_mlo_mem_ref(struct ath12k_base *ab)
-@@ -3339,7 +3358,7 @@
+@@ -3380,7 +3399,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1228,7 +1228,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_CAP_REQ_V01,
  			       QMI_WLANFW_CAP_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_cap_req_msg_v01_ei, &req);
-@@ -3488,7 +3507,7 @@
+@@ -3529,7 +3548,7 @@
  		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi bdf download req fixed addr type %d\n",
  			   type);
  
@@ -1237,7 +1237,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  				       QMI_WLANFW_BDF_DOWNLOAD_REQ_V01,
  				       QMI_WLANFW_BDF_DOWNLOAD_REQ_MSG_V01_MAX_LEN,
  				       qmi_wlanfw_bdf_download_req_msg_v01_ei, req);
-@@ -3730,7 +3749,7 @@
+@@ -3771,7 +3790,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1246,7 +1246,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_M3_INFO_REQ_V01,
  			       QMI_WLANFW_M3_INFO_REQ_MSG_V01_MAX_MSG_LEN,
  			       qmi_wlanfw_m3_info_req_msg_v01_ei, &req);
-@@ -3855,7 +3874,7 @@
+@@ -3896,7 +3915,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1255,7 +1255,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_AUX_UC_INFO_REQ_V01,
  			       QMI_WLANFW_AUX_UC_INFO_REQ_MSG_V01_MAX_MSG_LEN,
  			       qmi_wlanfw_aux_uc_info_req_msg_v01_ei, &req);
-@@ -3899,7 +3918,7 @@
+@@ -3940,7 +3959,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1264,7 +1264,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_WLAN_MODE_REQ_V01,
  			       QMI_WLANFW_WLAN_MODE_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_wlan_mode_req_msg_v01_ei, &req);
-@@ -3997,7 +4016,7 @@
+@@ -4038,7 +4057,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1273,7 +1273,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       QMI_WLANFW_WLAN_CFG_REQ_V01,
  			       QMI_WLANFW_WLAN_CFG_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_wlan_cfg_req_msg_v01_ei, req);
-@@ -4041,7 +4060,7 @@
+@@ -4082,7 +4101,7 @@
  	if (ret < 0)
  		goto out;
  
@@ -1282,7 +1282,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			       ATH12K_QMI_WLANFW_WLAN_INI_REQ_V01,
  			       QMI_WLANFW_WLAN_INI_REQ_MSG_V01_MAX_LEN,
  			       qmi_wlanfw_wlan_ini_req_msg_v01_ei, &req);
-@@ -4108,6 +4127,35 @@
+@@ -4149,6 +4168,35 @@
  	return 0;
  }
  
@@ -1318,7 +1318,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  static int
  ath12k_qmi_driver_event_post_data(struct ath12k_qmi *qmi,
  				 enum ath12k_qmi_event_type type,
-@@ -4117,8 +4165,10 @@
+@@ -4158,8 +4206,10 @@
  
  	/* The event owns its payload through rejection, execution and purge. */
  	event = kzalloc(sizeof(*event) + len, GFP_ATOMIC);
@@ -1330,7 +1330,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	event->type = type;
  	event->data = len ? event + 1 : NULL;
-@@ -4131,6 +4181,10 @@
+@@ -4172,6 +4222,10 @@
  		kfree(event);
  		return -ESHUTDOWN;
  	}
@@ -1341,7 +1341,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	list_add_tail(&event->list, &qmi->event_list);
  	/* Stop sets events_stopped under this lock before destroying event_wq. */
  	queue_work(qmi->event_wq, &qmi->event_work);
-@@ -4172,7 +4226,9 @@
+@@ -4213,7 +4267,9 @@
  	for (i = 0; i < ag->num_devices; i++) {
  		ab = ag->ab[i];
  
@@ -1352,7 +1352,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			return false;
  	}
  
-@@ -4212,7 +4268,9 @@
+@@ -4253,7 +4309,9 @@
  	struct ath12k_hw_group *ag = ab->ag;
  	int ret;
  
@@ -1363,7 +1363,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	ret = ath12k_qmi_fw_ind_register_send(ab);
  	if (ret < 0) {
-@@ -4222,6 +4280,11 @@
+@@ -4263,6 +4321,11 @@
  
  	spin_lock(&qmi->event_lock);
  
@@ -1375,7 +1375,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	ath12k_qmi_set_event_block(qmi, true);
  
  	spin_unlock(&qmi->event_lock);
-@@ -4331,6 +4394,9 @@
+@@ -4372,6 +4435,9 @@
  	const struct qmi_wlanfw_request_mem_ind_msg_v01 *msg = data;
  	int ret;
  
@@ -1385,7 +1385,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi firmware request memory request\n");
  
  	if (msg->mem_seg_len == 0 ||
-@@ -4354,6 +4420,9 @@
+@@ -4395,6 +4461,9 @@
  	struct ath12k_qmi *qmi = container_of(qmi_hdl, struct ath12k_qmi, handle);
  	struct ath12k_base *ab = qmi->ab;
  
@@ -1395,7 +1395,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi firmware memory ready indication\n");
  	ath12k_qmi_driver_event_post(qmi, ATH12K_QMI_EVENT_FW_MEM_READY, NULL);
  }
-@@ -4365,6 +4434,9 @@
+@@ -4406,6 +4475,9 @@
  {
  	struct ath12k_qmi *qmi = container_of(qmi_hdl, struct ath12k_qmi, handle);
  	struct ath12k_base *ab = qmi->ab;
@@ -1405,7 +1405,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  	ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi firmware ready\n");
  	ath12k_qmi_driver_event_post(qmi, ATH12K_QMI_EVENT_FW_READY, NULL);
-@@ -4401,24 +4473,46 @@
+@@ -4442,24 +4514,46 @@
  				     struct qmi_service *service)
  {
  	struct ath12k_qmi *qmi = container_of(qmi_hdl, struct ath12k_qmi, handle);
@@ -1469,7 +1469,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	return ret;
  }
  
-@@ -4426,10 +4520,18 @@
+@@ -4467,10 +4561,18 @@
  				      struct qmi_service *service)
  {
  	struct ath12k_qmi *qmi = container_of(qmi_hdl, struct ath12k_qmi, handle);
@@ -1492,7 +1492,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  }
  
  static const struct qmi_ops ath12k_qmi_ops = {
-@@ -4465,22 +4567,29 @@
+@@ -4506,22 +4608,29 @@
  		event = list_first_entry(&qmi->event_list,
  					 struct ath12k_qmi_driver_event, list);
  		list_del(&event->list);
@@ -1523,7 +1523,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  			set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
  			break;
  		case ATH12K_QMI_EVENT_REQUEST_MEM:
-@@ -4498,21 +4607,24 @@
+@@ -4539,21 +4648,24 @@
  				break;
  
  			clear_bit(ATH12K_FLAG_QMI_FAIL, &ab->dev_flags);
@@ -1555,7 +1555,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  
  			break;
  		case ATH12K_QMI_EVENT_HOST_CAP:
-@@ -4525,6 +4637,15 @@
+@@ -4566,6 +4678,15 @@
  			break;
  		}
  
@@ -1571,7 +1571,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  skip:
  		kfree(event);
  		spin_lock(&qmi->event_lock);
-@@ -4543,10 +4664,22 @@
+@@ -4584,10 +4705,22 @@
  
  int ath12k_qmi_init_service(struct ath12k_base *ab)
  {
@@ -1596,7 +1596,7 @@ DMA and in-flight reconfiguration obligations explicit for final removal.
  	ab->qmi.ab = ab;
  	ab->qmi.target_mem_mode = ab->target_mem_mode;
  	ret = qmi_handle_init(&ab->qmi.handle, ATH12K_QMI_RESP_LEN_MAX,
-@@ -4560,10 +4693,15 @@
+@@ -4601,10 +4734,15 @@
  	ab->qmi.event_wq = alloc_ordered_workqueue("ath12k_qmi_driver_event", 0);
  	if (!ab->qmi.event_wq) {
  		ath12k_err(ab, "failed to allocate workqueue\n");

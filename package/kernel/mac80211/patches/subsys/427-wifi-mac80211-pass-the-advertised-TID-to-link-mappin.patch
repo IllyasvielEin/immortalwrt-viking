@@ -1,5 +1,5 @@
 From: Felix Fietkau <nbd@nbd.name>
-Date: Wed, 11 Nov 2026 16:11:45 +0800
+Date: Thu, 19 Nov 2026 00:22:58 +0800
 Subject: [PATCH] wifi: mac80211: pass the advertised TID-to-link mapping to  the driver
 
 Pass a request for an advertised TID-to-link mapping of an AP MLD to the
@@ -225,7 +225,7 @@ Signed-off-by: ViKing <viking.yfy@qq.com>
  		       enum nl80211_iftype type)
 --- a/net/mac80211/ieee80211_i.h
 +++ b/net/mac80211/ieee80211_i.h
-@@ -1121,6 +1121,8 @@ static inline u32 ieee80211_crit_update_
+@@ -1132,6 +1132,8 @@ static inline u32 ieee80211_crit_update_
  	return (u64)val >> 32;
  }
  
@@ -234,7 +234,7 @@ Signed-off-by: ViKing <viking.yfy@qq.com>
  struct ieee80211_link_data_ap {
  	struct beacon_data __rcu *beacon;
  	struct probe_resp __rcu *probe_resp;
-@@ -1135,6 +1137,9 @@ struct ieee80211_link_data_ap {
+@@ -1146,6 +1148,9 @@ struct ieee80211_link_data_ap {
  
  	/* IEEE80211_CRIT_UPDATE() */
  	atomic64_t crit_update;
@@ -312,7 +312,7 @@ Signed-off-by: ViKing <viking.yfy@qq.com>
  		     struct ieee80211_sub_if_data *sdata,
 --- a/net/mac80211/tx.c
 +++ b/net/mac80211/tx.c
-@@ -5754,6 +5754,40 @@ static void ieee80211_beacon_crit_update
+@@ -5760,6 +5760,40 @@ static void ieee80211_beacon_crit_update
  	}
  }
  
@@ -353,7 +353,7 @@ Signed-off-by: ViKing <viking.yfy@qq.com>
  static struct sk_buff *
  __ieee80211_beacon_get_ap(struct ieee80211_hw *hw,
  			  struct ieee80211_vif *vif,
-@@ -5815,6 +5849,8 @@ __ieee80211_beacon_get_ap(struct ieee802
+@@ -5821,6 +5855,8 @@ __ieee80211_beacon_get_ap(struct ieee802
  	if (beacon->tail)
  		skb_put_data(skb, beacon->tail, beacon->tail_len);
  

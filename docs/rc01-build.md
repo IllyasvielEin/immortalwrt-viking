@@ -192,6 +192,8 @@ factory/sysupgrade 载荷一致性、坏块预算和至少 32 MiB data 卷 LEB �
 
 LAN 作为 DHCP 客户端，管理地址从上游租约查找；LAN DHCP/RA/NDP 服务关闭。
 `lan1..lan4` 与 `sfp` 在 LAN 桥内，`wan`/WAN6 不自动启动；无线、代理和 Tailscale 首启禁用。
+首次生成的无线 radio 与默认 AP 均禁用（`wifi-scripts` 的 `mac80211.uc`，仅 `xiaomi,be10000`）；自动带宽上限固定为
+2.4 GHz 20、低 5 GHz 160、高 5 GHz（默认信道 ≥100）80、6 GHz 160 MHz，不写 `auto_htmode`，运行时不升到 320 MHz。
 HTTPS 证书在设备本地生成，不预置账号、密码、订阅或私钥。跨驱动迁移须重新核对接口配置。
 
 RC01 使用 EMC2301 风扇控制器及 `emc2305` 驱动，按设备寻找 hwmon，不固定序号。

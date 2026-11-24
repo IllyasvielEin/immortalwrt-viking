@@ -15,7 +15,7 @@ WMI requests until wiphy destruction; it is not a firmware ACK.
 diff --git a/drivers/net/wireless/ath/ath12k/core.h b/drivers/net/wireless/ath/ath12k/core.h
 --- a/drivers/net/wireless/ath/ath12k/core.h
 +++ b/drivers/net/wireless/ath/ath12k/core.h
-@@ -732,6 +732,7 @@
+@@ -733,6 +733,7 @@
  	struct completion bss_survey_done;
  
  	struct work_struct regd_update_work;
@@ -23,7 +23,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/core.h b/drivers/net/wireless/ath/a
  	struct work_struct regd_channel_update_work;
  	struct list_head regd_channel_update_queue;
  
-@@ -806,8 +807,10 @@
+@@ -807,8 +808,10 @@
  	spinlock_t survey_lock;
  	struct survey_info survey[ATH12K_NUM_CHANS];
  
@@ -36,7 +36,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/core.h b/drivers/net/wireless/ath/a
  	bool host_alloc_ml_id;
  	struct completion peer_ml_id_done;
  
-@@ -1073,6 +1076,10 @@
+@@ -1074,6 +1077,10 @@
  	 */
  	struct ieee80211_regdomain *new_regd[MAX_RADIOS];
  
@@ -90,7 +90,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/core.c b/drivers/net/wireless/ath/a
  }
  
  static void ath12k_core_post_reconfigure_recovery(struct ath12k_base *ab)
-@@ -2513,6 +2520,9 @@
+@@ -2548,6 +2555,9 @@
  
  	mutex_init(&ab->core_lock);
  	spin_lock_init(&ab->base_lock);
@@ -1024,7 +1024,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  		}
  
  	/* IEEE80211_STA_AUTHORIZED -> IEEE80211_STA_ASSOC: station may be in removal,
-@@ -10245,7 +10242,6 @@
+@@ -10271,7 +10268,6 @@
  	cancel_delayed_work_sync(&ar->scan.timeout);
  	wiphy_work_cancel(ath12k_ar_to_hw(ar)->wiphy, &ar->scan.vdev_clean_wk);
  	cancel_work_sync(&ar->regd_channel_update_work);
@@ -1032,7 +1032,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	cancel_work_sync(&ar->ab->rfkill_work);
  	cancel_work_sync(&ar->ab->update_11d_work);
  	ar->state_11d = ATH12K_11D_IDLE;
-@@ -10540,6 +10536,9 @@
+@@ -10566,6 +10562,9 @@
  
  	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
  
@@ -1042,7 +1042,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	if (ar->regdom_set_by_user)
  		goto fin;
  
-@@ -10559,6 +10558,7 @@
+@@ -10585,6 +10584,7 @@
  	ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
  		   "mac start 11d scan for vdev %d\n", vdev_id);
  
@@ -1050,7 +1050,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	ret = ath12k_wmi_send_11d_scan_start_cmd(ar, &arg);
  	if (ret) {
  		ath12k_warn(ar->ab, "failed to start 11d scan vdev %d ret: %d\n",
-@@ -10574,6 +10574,7 @@
+@@ -10600,6 +10600,7 @@
  		ar->state_11d = ATH12K_11D_IDLE;
  		complete(&ar->completed_11d_scan);
  	}
@@ -1058,7 +1058,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  }
  
  void ath12k_mac_11d_scan_stop(struct ath12k *ar)
-@@ -11104,10 +11105,7 @@
+@@ -11130,10 +11131,7 @@
  {
  	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
  	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
@@ -1069,7 +1069,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	int i;
  
  	lockdep_assert_wiphy(hw->wiphy);
-@@ -11129,23 +11127,8 @@
+@@ -11155,23 +11153,8 @@
  
  	ath12k_mac_determine_vdev_type(vif, ahvif);
  
@@ -1095,7 +1095,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  }
  EXPORT_SYMBOL(ath12k_mac_op_add_interface);
  
-@@ -11689,7 +11672,7 @@
+@@ -11715,7 +11698,7 @@
  		arg.passive = arg.chan_radar;
  
  		spin_lock_bh(&ab->base_lock);
@@ -1104,7 +1104,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  		spin_unlock_bh(&ab->base_lock);
  
  		/* TODO: Notify if secondary 80Mhz also needs radar detection */
-@@ -12518,8 +12501,15 @@
+@@ -12544,8 +12527,15 @@
  	bool psd_valid, non_psd_valid;
  	int i;
  
@@ -1120,7 +1120,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  
  	local_psd = &tpe->psd_local[client_type];
  	reg_psd = &tpe->psd_reg_client[client_type];
-@@ -13880,14 +13870,8 @@
+@@ -13906,14 +13896,8 @@
  				   "complete recovery while pdev %d is stopped\n",
  				   ar->pdev->pdev_id);
  
@@ -1137,7 +1137,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  
  		if (ab->is_reset) {
  			recovery_count = atomic_inc_return(&ab->recovery_count);
-@@ -14563,7 +14547,7 @@
+@@ -14589,7 +14573,7 @@
  	struct ath12k_wmi_hal_reg_capabilities_ext_arg *reg_cap;
  	struct ath12k_base *ab = ar->ab;
  	u32 phy_id, freq_low, freq_high;
@@ -1146,7 +1146,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	void *channels;
  	int ret;
  
-@@ -14572,6 +14556,11 @@
+@@ -14598,6 +14582,11 @@
  		      ARRAY_SIZE(ath12k_6ghz_channels)) !=
  		     ATH12K_NUM_CHANS);
  
@@ -1158,7 +1158,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  	reg_cap = &ab->hal_reg_cap[ar->pdev_idx];
  
  	if (supported_bands & WMI_HOST_WLAN_2GHZ_CAP) {
-@@ -14594,9 +14583,9 @@
+@@ -14620,9 +14609,9 @@
  		}
  
  		freq_low = max(reg_cap->low_2ghz_chan,
@@ -1170,7 +1170,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  
  		ath12k_mac_update_ch_list(ar, band,
  					  reg_cap->low_2ghz_chan,
-@@ -14639,16 +14628,15 @@
+@@ -14665,16 +14654,15 @@
  			band->bitrates = ath12k_a_rates;
  
  			freq_low = max(reg_cap->low_5ghz_chan,
@@ -1189,7 +1189,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  
  			if (!bands[NL80211_BAND_6GHZ]) {
  				bands[NL80211_BAND_6GHZ] = band;
-@@ -14696,9 +14684,9 @@
+@@ -14722,9 +14710,9 @@
  			}
  
  			freq_low = max(reg_cap->low_5ghz_chan,
@@ -1201,7 +1201,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  
  			ath12k_mac_update_ch_list(ar, band,
  						  reg_cap->low_5ghz_chan,
-@@ -15394,39 +15382,11 @@
+@@ -15420,39 +15408,11 @@
  		}
  
  		if (this_ab->hw_params->current_cc_support) {
@@ -1245,7 +1245,7 @@ diff --git a/drivers/net/wireless/ath/ath12k/mac.c b/drivers/net/wireless/ath/at
  		ath12k_fw_stats_init(ar);
  		ath12k_debugfs_register(ar);
  	}
-@@ -15506,6 +15466,9 @@
+@@ -15532,6 +15492,9 @@
  	INIT_WORK(&ar->regd_channel_update_work, ath12k_regd_update_chan_list_work);
  	INIT_LIST_HEAD(&ar->regd_channel_update_queue);
  	INIT_WORK(&ar->regd_update_work, ath12k_regd_update_work);

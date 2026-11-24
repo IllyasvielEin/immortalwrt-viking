@@ -340,9 +340,10 @@ static void rhashtable_remove_fast(int *t, struct rhash_head *n, int p) { assert
 static void ppe_vp_flow_del(void *d, int ivp, int *vp_flow) { }
 static void ppe_ft_flow_owner_clear(struct ppe_flowtable *ft, struct ppe_ft_flow *f) { }
 static void ppe_ft_flow_deps_put(struct ppe_flowtable *ft, struct ppe_ft_flow *f) { assert(!f->released); f->released=true; }
-static bool ppe_ft_flow_hw_del(struct ppe_flowtable *ft, struct ppe_ft_flow *f) {
-    /* Readback/delete can sleep: never under an RCU reader. */
-    assert(ft->lock.held && !rcu_depth && !f->retired && !f->freed);
+static bool ppe_ft_flow_hw_del(struct ppe_flowtable *ft, struct ppe_ft_flow *f, bool account) {
+    /* Readback/delete can sleep: never under an RCU reader. Teardown of a
+     * published flow folds its last counter delta (0694). */
+    assert(ft->lock.held && !rcu_depth && !f->retired && !f->freed && account);
     f->retired=true; return !f->hw_del_fails; }
 static void ppe_ft_flow_quarantine(struct ppe_flowtable *ft, struct ppe_ft_flow *f) {
     list_add_tail(&f->zombie_node,&ft->zombies); }

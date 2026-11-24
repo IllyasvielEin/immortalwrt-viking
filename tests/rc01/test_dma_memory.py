@@ -44,8 +44,9 @@ class FirmwareMemoryOwnership(unittest.TestCase):
         qmi_c = (driver / "qmi.c").read_text()
         start = qmi_c.index("void ath12k_qmi_reset_mlo_mem(")
         end = qmi_c.index("/* clang stack usage explodes", start)
-        chunk_bound = re.search(r"^#define ATH12K_QMI_MAX_CHUNK_SIZE\s+[^\n]+", qmi_c, re.M)[0]
-        (work / "prepared-functions.h").write_text(chunk_bound + "\n" + qmi_c[start:end])
+        bounds = "".join(re.search(rf"^#define {name}\s+[^\n]+", qmi_c, re.M)[0] + "\n" for name in
+                         ("ATH12K_QMI_MAX_CHUNK_SIZE", "ATH12K_QMI_IPQ5332_FW_MEM_START", "ATH12K_QMI_IPQ5332_FW_MEM_END"))
+        (work / "prepared-functions.h").write_text(bounds + qmi_c[start:end])
         cls.binary = work / "memory-test"
         result = subprocess.run([shutil.which("cc"), "-std=gnu11", "-Werror", "-I", str(work),
                                  str(HERE / "dma_memory_harness.c"), "-o", str(cls.binary)],

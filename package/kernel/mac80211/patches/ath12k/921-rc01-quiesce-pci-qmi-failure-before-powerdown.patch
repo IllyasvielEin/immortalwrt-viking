@@ -6,7 +6,7 @@ remove branch releases hardware or group state.
 
 --- a/drivers/net/wireless/ath/ath12k/pci.c
 +++ b/drivers/net/wireless/ath/ath12k/pci.c
-@@ -1715,14 +1715,12 @@
+@@ -1754,14 +1754,12 @@
  {
  	struct ath12k_base *ab = pci_get_drvdata(pdev);
  	struct ath12k_pci *ab_pci = ath12k_pci_priv(ab);
@@ -24,7 +24,7 @@ remove branch releases hardware or group state.
  	set_bit(ATH12K_FLAG_UNREGISTERING, &ab->dev_flags);
  
  	cancel_work_sync(&ab->reset_work);
-@@ -1730,6 +1728,14 @@
+@@ -1769,6 +1767,14 @@
  	cancel_work_sync(&ab->qmi.event_work);
  	cancel_work_sync(&ab->restart_work);
  	cancel_work_sync(&ab->dump_work);

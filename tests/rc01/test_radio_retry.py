@@ -1,79 +1,74 @@
-"""Execute the production retry ucode with bounded bus/PHY fixtures."""
-import json
-import os
+"""Execute the production PHY hotplug retry in mac80211.uc with bounded bus/PHY fixtures."""
 from pathlib import Path
-import re
-import shutil
 import subprocess
+import sys
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "package/network/config/wifi-scripts/files/etc/hotplug.d/ieee80211/11-ath12k-trigger"
-UCODE = os.environ.get("UCODE") or shutil.which("ucode")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_router import ROOT, UCODE, nl_band, run_wifi_config  # noqa: E402
+
+WIFI = ROOT / "package/network/config/wifi-scripts/files"
+PATHS = {"/sys/devices/pci/a": "/stable/a",
+         "/sys/class/ieee80211/renamed-phy/device": "/stable/a",
+         "/sys/class/ieee80211/other-phy/device": "/stable/b"}
+# A configured PHY, so the retry follows a generator pass that commits nothing.
+PHYS = {"phy0": {"path": "pci-a", "bands": {"5G": nl_band("5G")}}}
+WIRELESS = {"radio0": {".type": "wifi-device", ".name": "radio0", "path": "pci-a"}}
 
 
-class DriverGate(unittest.TestCase):
-    def test_actual_driver_expression_accepts_wifi7_but_not_other_drivers(self):
-        expression = re.search(r"grep -qsE '([^']+)'", SCRIPT.read_text())[1]
-        for driver, expected in (("ath12k_pci", True), ("ath12k_ahb", True),
-                                 ("ath12k_wifi7_pci", True), ("ath12k_wifi7_ahb", True),
-                                 ("ath11k_pci", False), ("ath12k_pci_extra", False)):
-            with self.subTest(driver=driver):
-                result = subprocess.run(["grep", "-qE", expression],
-                                        input=f"DRIVER={driver}\n", text=True)
-                self.assertEqual(result.returncode == 0, expected)
+class HotplugWiring(unittest.TestCase):
+    def test_phy_add_runs_wifi_config_hotplug_for_every_driver(self):
+        # Upstream replaced the ath12k-only 11-ath12k-trigger with this hook;
+        # the retry no longer depends on the PHY's driver.
+        hook = (WIFI / "etc/hotplug.d/ieee80211/10-wifi-detect").read_text()
+        self.assertIn('[ "${ACTION}" = "add" ]', hook)
+        self.assertIn("/sbin/wifi config --hotplug", hook)
+        self.assertFalse((WIFI / "etc/hotplug.d/ieee80211/11-ath12k-trigger").exists())
+        result = subprocess.run(["sh", "-c", 'sed -n "/^wifi_config()/,/^}/p" "$0"', str(WIFI / "sbin/wifi")],
+                                capture_output=True, text=True)
+        self.assertIn('ucode /lib/wifi/mac80211.uc "$1"', result.stdout)
 
 
 @unittest.skipUnless(UCODE, "real ucode required for radio retry regression")
 class RadioRetry(unittest.TestCase):
-    def run_retry(self, status, devpath="/devices/pci/a/ieee80211/old-phy", paths=None):
-        # Only replace imports; run the unchanged production control flow.
-        body = SCRIPT.read_text().split("ucode - <<'EOF'\n", 1)[1].rsplit("\nEOF", 1)[0]
-        body = re.sub(r"^import .*?;\n", "", body, flags=re.M)
-        paths = paths or {"/sys/devices/pci/a": "/stable/a",
-                          "/sys/class/ieee80211/renamed-phy/device": "/stable/a",
-                          "/sys/class/ieee80211/other-phy/device": "/stable/b"}
-        prelude = "let status_data = " + json.dumps(status) + ";\n"
-        prelude += "let paths = " + json.dumps(paths) + ";\n"
-        prelude += r'''
-let calls = [];
-function realpath(path) { return paths[path]; }
-function find_phy(config, retry) {
-    if (retry !== true) die('retry must allow a renamed PHY');
-    return config?.phy;
-}
-function connect() {
-    return { call: function(object, method, args) {
-        if (object != 'network.wireless') die('unexpected bus object');
-        if (method == 'status') return status_data;
-        if (method != 'retry') die('retry must not reload or stop the network');
-        push(calls, args);
-    }};
-}
-'''
-        result = subprocess.run([UCODE, "-"], input=prelude + body + "\nprint(sprintf('%J', calls));\n",
-                                env={**os.environ, "DEVPATH": devpath}, text=True,
-                                capture_output=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(result.stdout or "[]")
+    def run_retry(self, status, devpath="/devices/pci/a/ieee80211/old-phy", paths=None, args=("--hotplug",)):
+        result = run_wifi_config(PHYS, wireless=WIRELESS, args=args, devpath=devpath,
+                                 status=status, realpaths=PATHS if paths is None else paths)
+        self.assertEqual((result["code"], result["commit"]), (0, None), result["stderr"])
+        for obj, method, _ in result["calls"]:
+            # Only network.wireless status/retry; never reload or stop the network.
+            self.assertEqual(obj, "network.wireless")
+            self.assertIn(method, ("status", "retry"))
+        return [args for _, method, args in result["calls"] if method == "retry"]
 
-    def failed(self, **changes):
-        return {"autostart": True, "retry_setup_failed": True,
-                "config": {"phy": "renamed-phy"}, **changes}
+    def down(self, **changes):
+        return {"autostart": True, "config": {"phy": "renamed-phy"}, **changes}
 
-    def test_renamed_phy_retries_only_the_matching_failed_radio(self):
-        self.assertEqual(self.run_retry({"radio0": self.failed(),
-                                        "radio1": self.failed(config={"phy": "other-phy"}),
-                                        "radio2": self.failed(config={})}),
-                         [{"device": "radio0"}])
+    def test_renamed_phy_retries_only_radios_on_the_same_device(self):
+        self.assertEqual(self.run_retry({"radio0": self.down(), "radio1": self.down(config={"phy": "other-phy"}),
+                                         "radio2": self.down(config={}), "radio3": self.down()}),
+                         [{"devices": ["radio0", "radio3"]}])
 
-    def test_running_pending_disabled_manual_and_successful_radios_are_untouched(self):
-        for change in ({"up": True}, {"pending": True}, {"disabled": True},
-                       {"autostart": False}, {"retry_setup_failed": False}):
+    def test_running_disabled_and_manually_stopped_radios_are_untouched(self):
+        # netifd's retry_setup() itself queues a retry for radios in setup or
+        # teardown, so the hook no longer filters pending/failed states.
+        for change in ({"up": True}, {"disabled": True}, {"autostart": False}):
             with self.subTest(change=change):
-                self.assertEqual(self.run_retry({"radio0": self.failed(**change)}), [])
+                self.assertEqual(self.run_retry({"radio0": self.down(**change)}), [])
 
-    def test_unrelated_or_unresolvable_event_does_not_retry(self):
-        self.assertEqual(self.run_retry({"radio0": self.failed()}, devpath="/devices/no-phy"), [])
-        self.assertEqual(self.run_retry({"radio0": self.failed()}, paths={"unrelated": "/stable/b"}), [])
+    def test_unrelated_device_does_not_retry(self):
+        self.assertEqual(self.run_retry({"radio0": self.down(config={"phy": "other-phy"})}), [])
         self.assertEqual(self.run_retry({}), [])
+
+    def test_unresolvable_event_retries_all_radios(self):
+        # Upstream retries every radio when the event cannot be matched to a
+        # parent device; netifd skips running and stopped radios.
+        self.assertEqual(self.run_retry({"radio0": self.down()}, devpath="/devices/no-phy"), [{}])
+        self.assertEqual(self.run_retry({"radio0": self.down()}, paths={}), [{}])
+
+    def test_plain_wifi_config_does_not_retry(self):
+        self.assertEqual(self.run_retry({"radio0": self.down()}, args=()), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

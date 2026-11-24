@@ -4,14 +4,14 @@
     "mode": "upstream-merges-with-local-overrides",
     "upstream_url": "https://github.com/VIKINGYFY/immortalwrt",
     "upstream_ref": "owrt",
-    "imported_head": "1f21e82da200de8ff389d315bcacd719e02bf829",
+    "imported_head": "7f2441f0781413f28bb435b858d72bd1120b5940",
     "acceptance": "integration-candidate; physical acceptance not performed"
   },
   "review": {
-    "local_base": "c0c8b86ad07c170bbb0c6c5caa8b862ad06ee96e",
-    "inventory": "config/rc01/upstream-audit/20261115.json",
-    "inventory_sha256": "9fa763a02edf106efc036502e9f6c6fd58dc47733ccd8a52b65460828c933b92",
-    "completed_unique_commits": 472
+    "local_base": "cb6731853b79ea1e272118c8aa565b5d401eb438",
+    "inventory": "config/rc01/upstream-audit/20261125.json",
+    "inventory_sha256": "30346241c698941f7692d97d047166e8588349493f2a0ed5adef4bc0c1adb8e1",
+    "completed_unique_commits": 310
   },
   "legacy_selection": {
     "path": "config/rc01/upstream-audit/selected-20261114.json",
@@ -59,17 +59,9 @@
       "exit_condition": "上游包含等价失败态契约且故障注入通过"
     },
     {
-      "id": "RC01-PPE-TX",
-      "paths": [
-        "target/linux/qualcommbe/patches-6.18/0685-net-ppe-disable-unsafe-tx-forwarding-offload.patch"
-      ],
-      "reason": "保留正确单播/MDB出口语义",
-      "exit_condition": "上游精确TX复制实现通过现有正负例及实机验证"
-    },
-    {
       "id": "RC01-PPE-FDB",
       "paths": [
-        "target/linux/qualcommbe/patches-6.18/0686-net-ppe-check-fdb-upper-type-before-vlan-access.patch"
+        "target/linux/qualcommbe/patches-6.18/0695-net-ppe-check-fdb-upper-type-before-vlan-access.patch"
       ],
       "reason": "读取bridge私有VLAN状态前验证upper类型",
       "exit_condition": "上游具备等价类型检查后移除"
@@ -101,15 +93,15 @@
     {
       "id": "RC01-RADIO-DEFAULTS",
       "paths": [
-        "package/emortal/luci-app-router-tool/root/usr/share/router-tool/wireless.uc"
+        "package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
       ],
-      "reason": "等待指定子radio且自动20/80/160策略不变",
-      "exit_condition": "上游等价等待行为且带宽策略经本板验证后变更"
+      "reason": "RC01新生成radio与默认AP禁用；自动带宽固定2.4G 20/低5G 160/高5G 80/6G 160且不写auto_htmode（不随运行时升至320）",
+      "exit_condition": "上游提供按板禁用默认AP与带宽上限的等价机制且经本板验证后变更"
     },
     {
       "id": "RC01-WIRELESS-LIFETIME",
       "paths": [
-        "package/kernel/mac80211/patches/ath12k/914-rc01-protect-pre-start-mlo-borrowers.patch",
+        "package/kernel/mac80211/patches/ath12k/918-rc01-protect-pre-start-mlo-borrowers.patch",
         "package/kernel/mac80211/patches/ath12k/920-ath12k-stop-group-work-before-memory-release.patch",
         "package/kernel/mac80211/patches/ath12k/921-rc01-quiesce-pci-qmi-failure-before-powerdown.patch",
         "package/kernel/mac80211/patches/ath12k/922-rc01-preserve-regulatory-request-order.patch",
@@ -146,9 +138,9 @@
   },
   "wireless": {
     "version": "7.2",
-    "release": 51,
+    "release": 61,
     "sha256": "6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454",
-    "release_scope": "Viking 1f21e82da2 merged with explicit RC01 local overrides"
+    "release_scope": "Viking 7f2441f078 merged with explicit RC01 local overrides"
   },
   "ath12k_firmware": {
     "url": "https://github.com/VIKINGYFY/ath12k-firmware-ddwrt.git",
@@ -183,6 +175,6 @@
   },
   "local_repair": {
     "manifest": "config/rc01/upstream-audit/local-repair-20261116.json",
-    "sha256": "56fb9ff53837b9bbb8732836bde1ca9e2c548c4a14d7409183affbf9717c28f8"
+    "sha256": "fe18461f3198a8ec4714d0f8625cf279c2837649f24dc2630f6fecbdf2e3c1e5"
   }
 }

@@ -1,0 +1,72 @@
+From: Matt Merhar <mattmerhar@protonmail.com>
+Date: Tue, 24 Nov 2026 18:35:49 +0800
+Subject: [PATCH] wifi: ath12k: configure and guard thermal support
+
+Keep ATH12K_THERMAL independent of CONFIG_THERMAL. Check the active pdev
+under the wiphy lock before sending a temperature request. A shared
+wiphy can be up while a pdev with no usable channels stays inactive.
+
+Merged from:
+  300-ath12k-control-thermal-support-via-symbol.patch - ath12k: control thermal support via symbol
+  913-ath12k-skip-temperature-reads-for-inactive-pdevs.patch - wifi: ath12k: skip temperature reads for inactive pdevs
+
+Signed-off-by: Matt Merhar <mattmerhar@protonmail.com>
+Signed-off-by: ViKing <viking.yfy@qq.com>
+
+--- a/drivers/net/wireless/ath/ath12k/Kconfig
++++ b/drivers/net/wireless/ath/ath12k/Kconfig
+@@ -60,3 +60,10 @@ config ATH12K_COREDUMP
+ 
+ 	  If unsure, say Y to make it easier to debug problems. But if
+ 	  dump collection not required choose N.
++
++config ATH12K_THERMAL
++	bool "ath12k thermal sensors and throttling support"
++	depends on ATH12K
++	depends on THERMAL
++	help
++	  Enable ath12k thermal sensors and throttling support.
+--- a/drivers/net/wireless/ath/ath12k/Makefile
++++ b/drivers/net/wireless/ath/ath12k/Makefile
+@@ -32,7 +32,7 @@ ath12k-$(CPTCFG_ATH12K_TRACING) += trace
+ ath12k-$(CONFIG_PM) += wow.o
+ ath12k-$(CPTCFG_ATH12K_COREDUMP) += coredump.o
+ ath12k-$(CPTCFG_NL80211_TESTMODE) += testmode.o
+-ath12k-$(CONFIG_THERMAL) += thermal.o
++ath12k-$(CPTCFG_ATH12K_THERMAL) += thermal.o
+ 
+ # for tracing framework to find trace.h
+ CFLAGS_trace.o := -I$(src)
+--- a/drivers/net/wireless/ath/ath12k/thermal.h
++++ b/drivers/net/wireless/ath/ath12k/thermal.h
+@@ -35,7 +35,7 @@ struct ath12k_thermal {
+ 	u32 throttle_state;
+ };
+ 
+-#if IS_REACHABLE(CONFIG_THERMAL)
++#if IS_REACHABLE(CPTCFG_ATH12K_THERMAL)
+ int ath12k_thermal_register(struct ath12k_base *ab);
+ void ath12k_thermal_unregister(struct ath12k_base *ab);
+ void ath12k_thermal_event_temperature(struct ath12k *ar, int temperature);
+--- a/local-symbols
++++ b/local-symbols
+@@ -173,6 +173,7 @@ ATH12K_DEBUG=
+ ATH12K_DEBUGFS=
+ ATH12K_TRACING=
+ ATH12K_COREDUMP=
++ATH12K_THERMAL=
+ WLAN_VENDOR_ATMEL=
+ AT76C50X_USB=
+ WLAN_VENDOR_BROADCOM=
+--- a/drivers/net/wireless/ath/ath12k/thermal.c
++++ b/drivers/net/wireless/ath/ath12k/thermal.c
+@@ -153,7 +153,8 @@ static ssize_t ath12k_thermal_temp_show(
+ 
+ 	guard(wiphy)(ath12k_ar_to_hw(ar)->wiphy);
+ 
+-	if (ar->ah->state != ATH12K_HW_STATE_ON)
++	if (ar->ah->state != ATH12K_HW_STATE_ON ||
++	    !rcu_access_pointer(ar->ab->pdevs_active[ar->pdev_idx]))
+ 		return -ENETDOWN;
+ 
+ 	reinit_completion(&ar->thermal.wmi_sync);

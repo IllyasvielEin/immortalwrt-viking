@@ -20,6 +20,7 @@ typedef uint64_t phys_addr_t;
 #define ATH12K_FLAG_FIXED_MEM_REGION 0
 #define ATH12K_BUS_PCI 1
 #define ATH12K_BUS_AHB 2
+#define ATH12K_HW_IPQ5332_HW10 30
 #define fallthrough __attribute__((fallthrough))
 #define ath12k_warn(ab, ...) ((void)(ab))
 #define ath12k_info(ab, ...) ((void)(ab))
@@ -49,6 +50,7 @@ struct ath12k_base {
 	struct device *dev;
 	struct ath12k_qmi qmi;
 	unsigned long dev_flags;
+	int hw_rev;
 	struct { int bus; } hif;
 };
 

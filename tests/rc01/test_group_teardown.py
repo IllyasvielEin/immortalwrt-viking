@@ -1,7 +1,7 @@
 """Probe actual ath12k core/QMI creation and teardown entrypoints on the host.
 
 Kernel I/O is fault-injected; worker cancellation rejects uninitialized work or
-held group/core locks. Shared allocations use the prepared 914 implementation.
+held group/core locks. Shared allocations use the prepared 918 implementation.
 This exercises the real outer deinit/create rollback and alloc/find/assign/free
 functions. Pthread barriers reproduce probe/remove lookup and publication
 interleavings; no test wrapper takes lifecycle locks for these entrypoints.
@@ -93,8 +93,9 @@ class GroupTeardown(unittest.TestCase):
                 if line is not None:
                     extra.append(line[0])
             (work / output).write_text("\n".join(extra) + "\n")
-        chunk_bound = re.search(r"^#define ATH12K_QMI_MAX_CHUNK_SIZE\s+[^\n]+", qmi, re.M)[0]
-        (work / "prepared-memory-functions.h").write_text(chunk_bound + "\n" + memory)
+        bounds = "".join(re.search(rf"^#define {name}\s+[^\n]+", qmi, re.M)[0] + "\n" for name in
+                         ("ATH12K_QMI_MAX_CHUNK_SIZE", "ATH12K_QMI_IPQ5332_FW_MEM_START", "ATH12K_QMI_IPQ5332_FW_MEM_END"))
+        (work / "prepared-memory-functions.h").write_text(bounds + memory)
         for code, output in ((qmi_code, "prepared-qmi-functions.h"), (core_code, "prepared-core-functions.h")):
             prototypes = []
             for name in qmi_names if output.startswith("prepared-qmi") else core_names:

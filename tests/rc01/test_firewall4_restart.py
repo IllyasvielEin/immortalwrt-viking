@@ -1,4 +1,4 @@
-"""firewall4 restart continuity (005 + 006 + local result reporting).
+"""firewall4 restart continuity (005 + 006 + 007 + local result reporting).
 
 Rendering uses real ucode with fw4's own mocklib (see test_firewall4_bridge).
 The real /sbin/fw4 script runs under BusyBox ash with LOCK/STATE/MAIN
@@ -54,15 +54,17 @@ exec "$BUSYBOX" rm "$@"''',
 
 class PackagePatches(unittest.TestCase):
     def test_upstream_patches_are_unchanged_and_release_bumped(self):
-        # Git blob SHAs of 005/006 at VIKINGYFY 43d9a24a (read at dd8de871).
+        # Git blob SHAs of 005/006/007 at VIKINGYFY 7f2441f0.
         for name, blob in (("005-restart-owned-tables-atomically.patch",
-                            "12169701ebf220356d0d07b1e34f0e33457005b7"),
+                            "969c4be92858794f40a2606662dad78edfefa364"),
                            ("006-keep-established-state-matching-live-on-restart.patch",
-                            "aaf2cc06fbfa9921b45ed3054a42a8d40d2caf2d")):
+                            "97a6ea031a3d312df9c2e8830a01bfb24fa718fc"),
+                           ("007-keep-active-rules-on-render-failure.patch",
+                            "f94b9c02505ef41b7e92420daf60ea3f91606302")):
             data = (bridge.PACKAGE / "patches" / name).read_bytes()
             self.assertEqual(hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(), blob, name)
         makefile = (bridge.PACKAGE / "Makefile").read_text()
-        for line in ("PKG_RELEASE:=3", "PKG_SOURCE_DATE:=2026-11-08",
+        for line in ("PKG_RELEASE:=5", "PKG_SOURCE_DATE:=2026-11-08",
                      "PKG_SOURCE_VERSION:=3722eadc088c3ab81389596ca9796112b436583a",
                      "PKG_MIRROR_HASH:=a95c6cfe419c7d4e22bda5608aa6e46c67dadc9c7096879702d614cc498759d0"):
             self.assertIn(line + "\n", makefile)
@@ -251,6 +253,25 @@ class RestartScript(unittest.TestCase):
                          "Firewall restart: new ruleset is active, but firewall includes failed.\n"
                          "Firewall restart failed.\n")
         self.assertNotIn("kept", result.stderr)
+
+    def test_reload_never_applies_a_failed_render_and_returns_includes(self):
+        # 007 stages start/reload like restart; 100's include status reaches it.
+        includes = ["APPLY", "utpl includes restart="]
+        for flags, calls, state in (({"FAIL_RENDER": 1}, [], "old"),
+                                    ({"FAIL_APPLY": 1}, ["APPLY"], "old"),
+                                    ({"FAIL_INCLUDES": 1}, includes, "new"),
+                                    ({}, includes, "new")):
+            with self.subTest(**flags):
+                self.setUp()
+                apply = f"nft -f {self.fix}/tmp/fw4-start.XXXXXX.1"
+                result, trace, current = self.fw4("reload", state="old", **flags)
+                self.assertEqual(result.returncode, 1 if flags else 0, result.stderr)
+                self.assertEqual(trace, ["flock -x 1000", "utpl start restart="] +
+                                 [apply if c == "APPLY" else c for c in calls])
+                self.assertEqual(current, state)
+                if "FAIL_RENDER" in flags:
+                    self.assertFalse((self.fix / "applied").exists())
+                self.assertNoTemporaries()
 
     def test_stop_deletes_both_owned_tables_and_restart_from_stopped(self):
         result, trace, current = self.fw4("stop", state="old")

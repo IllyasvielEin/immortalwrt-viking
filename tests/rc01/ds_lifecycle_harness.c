@@ -136,7 +136,7 @@ struct wireless_dev { struct net_device *netdev; };
 struct ieee80211_vif { int type; struct wireless_dev *wdev; };
 struct ieee80211_sta { bool mlo; };
 struct ath12k_vif { struct ieee80211_vif *vif; };
-struct ath12k_sta { struct ieee80211_sta *sta; bool enable_4addr; };
+struct ath12k_sta { struct ieee80211_sta *sta; bool enable_4addr; bool ap_vlan; };
 struct ath12k_base;
 struct ath12k_pci;
 #include "prepared_enums.inc"

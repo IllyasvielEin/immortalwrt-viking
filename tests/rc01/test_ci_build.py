@@ -196,6 +196,19 @@ class ConfigValidation(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn(f"Unwanted package selected: {package}", result.stderr)
 
+    def test_target_default_qos_and_duplicate_xiaomi_control_are_rejected(self):
+        # qualcommbe DEFAULT_PACKAGES now selects PPE QoS; RC01 must keep it out.
+        target = (ROOT / "target/linux/qualcommbe/Makefile").read_text()
+        base = (ROOT / "defconfig/qualcommbe-rc01.config").read_text().splitlines()
+        for package in ("qca-ppe-qos", "luci-app-qca-ppe-qos", "luci-i18n-qca-ppe-qos-zh-cn",
+                        "sqm-scripts", "luci-app-xiaomi-control", "luci-i18n-xiaomi-control-zh-cn"):
+            with self.subTest(package=package):
+                if package in target:
+                    self.assertIn(f"# CONFIG_PACKAGE_{package} is not set", base)
+                result = self.validate(self.config(f"CONFIG_PACKAGE_{package}=y\n"))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"Unwanted package selected: {package}", result.stderr)
+
     def test_full_debug_info_is_part_of_the_base_configuration(self):
         base = (ROOT / "defconfig/qualcommbe-rc01.config").read_text().splitlines()
         self.assertIn("CONFIG_KERNEL_DEBUG_INFO=y", base)

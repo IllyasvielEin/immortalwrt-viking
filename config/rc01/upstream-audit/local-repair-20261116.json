@@ -18,7 +18,7 @@
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/923-ath12k-regulatory-lifetime-and-publication.patch",
-      "sha256": "0d0986f4b7c7ce4171ff1641fea2ca867605e9a8d4b81160880bd2f7f046897f"
+      "sha256": "b8b16a9373713f9db460a26afa98c8ad9bce24a49f314cbd6e865454727440ff"
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/924-01-ath12k-put-group-ref-on-hash-init-failure.patch",
@@ -26,19 +26,19 @@
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/924-02-ath12k-serialize-memory-requests-in-event-worker.patch",
-      "sha256": "c6393dbf8a6b0ba022b712c482629093692f28a75121e976b087cc01350deabe"
+      "sha256": "32afd0b8609d89345ee3884f5cdaba2947adb48abb6c63fd6324585c50bfd09d"
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/924-03-ath12k-close-and-drain-group-before-host-teardown.patch",
-      "sha256": "730871246b38f23f9db104faf14ee5c47276d1e188d0e19e39b50697e20f35fd"
+      "sha256": "61bc1bd37bffcbcb147673fa9bea8ac2c36b1f147492dc10500eb3674587044e"
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/924-04-ath12k-recover-all-members-with-one-group-owner.patch",
-      "sha256": "1c21b82426e31b3dbe9e233dbe4325a9b70b167e95b82e8506b783f9d103af9c"
+      "sha256": "c444170a04174314e7bf14538ea000e09b754885eaf3ea49914df9239d7cc696"
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/925-ath12k-run-owner-teardown-barriers-outside-resource-locks.patch",
-      "sha256": "037f048b404b9f7eb64e00f15a79102c916fef2d592c00941fd5febf176238f8"
+      "sha256": "990a02d725303131f9afa84f48601ab12215964a75208f7abe6597740b72571b"
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/926-ath12k-close-mgmt-completions-and-limit-regd-dedup.patch",
@@ -46,7 +46,7 @@
     },
     {
       "path": "package/kernel/mac80211/patches/ath12k/927-ath12k-serialize-recovery-success-with-late-errors.patch",
-      "sha256": "9cadf533dd63776192a249f3a27dc84594ae56da57654a9c32f144ce7c472f4a"
+      "sha256": "10dff5348a48f8eca946b192c538251dfe9c5319792455b5f7a4e403b70d2cda"
     }
   ]
 }

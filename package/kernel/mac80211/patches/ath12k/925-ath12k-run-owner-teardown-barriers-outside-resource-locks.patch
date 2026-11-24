@@ -84,7 +84,7 @@ the lifecycle mutex; recovery has a single owner joined by permanent exit.
  	for (i = 0; i < ag->num_devices; i++) {
  		ab = ag->ab[i];
  		if (!ab)
-@@ -2574,20 +2579,21 @@
+@@ -2609,20 +2614,21 @@
  		ath12k_core_mac_delivery_close(ab);
  	}
  

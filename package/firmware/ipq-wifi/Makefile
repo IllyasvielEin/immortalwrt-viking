@@ -2,13 +2,13 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/version.mk
 
 PKG_NAME:=ipq-wifi
-PKG_RELEASE:=7
+PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL=$(PROJECT_GIT)/project/firmware/qca-wireless.git
-PKG_SOURCE_DATE:=2026-11-12
-PKG_SOURCE_VERSION:=e1c4cbaf43917e19779dbf9f8e276e31116bcaef
-PKG_MIRROR_HASH:=2d525d7af66de1dc947aff2653669265ccad678424e7fdfe71aebc6c55692437
+PKG_SOURCE_DATE:=2026-11-19
+PKG_SOURCE_VERSION:=6d7ddb81dfd1f641f96c94aef62a050ee4e46bf5
+PKG_MIRROR_HASH:=12b2ebae1515d07da1054f73a4b050dca168902e29d3135196c19551437b93b3
 PKG_FLAGS:=nonshared
 
 include $(INCLUDE_DIR)/package.mk
@@ -32,6 +32,11 @@ ALLWIFIBOARDS:= \
 	alfa-network_ap120c-ax \
 	aliyun_ap8220 \
 	arcadyan_aw1000 \
+	arista_c-200 \
+	arista_c-230 \
+	arista_c-260 \
+	arista_c-360 \
+	arista_c-460 \
 	aruba_ap-303 \
 	aruba_ap-303h \
 	aruba_ap-325 \
@@ -83,6 +88,7 @@ ALLWIFIBOARDS:= \
 	netgear_rbk40 \
 	netgear_rbk750 \
 	netgear_rbk850 \
+	netgear_rbk860 \
 	netgear_sxk80 \
 	netgear_wax214 \
 	netgear_wax218 \
@@ -117,6 +123,7 @@ ALLWIFIBOARDS:= \
 	tplink_re700x \
 	tplink_tl-wa1201-v2 \
 	ubnt_u7-pro-xgs \
+	ubnt_unifi-6-pro \
 	ubnt_utr \
 	wallys_dr40x9 \
 	wallys_dr5018s \
@@ -144,8 +151,6 @@ ALLWIFIBOARDS:= \
 	zyxel_nwa210ax \
 	zyxel_scr50axe \
 	anysafe_e1 \
-	arista_c260 \
-	arista_c360 \
 	cmiot_ax18 \
 	dptech_ap3000-2c \
 	glinet_gl-be6500 \
@@ -280,6 +285,11 @@ $(eval $(call generate-ipq-wifi-package,8devices_mango,8devices Mango))
 $(eval $(call generate-ipq-wifi-package,alfa-network_ap120c-ax,ALFA Network AP120C-AX))
 $(eval $(call generate-ipq-wifi-package,aliyun_ap8220,Aliyun AP8220))
 $(eval $(call generate-ipq-wifi-package,arcadyan_aw1000,Arcadyan AW1000))
+$(eval $(call generate-ipq-wifi-package,arista_c-200,Arista C-200))
+$(eval $(call generate-ipq-wifi-package,arista_c-230,Arista C-230))
+$(eval $(call generate-ipq-wifi-package,arista_c-260,Arista C-260))
+$(eval $(call generate-ipq-wifi-package,arista_c-360,Arista C-360))
+$(eval $(call generate-ipq-wifi-package,arista_c-460,Arista C-460))
 $(eval $(call generate-ipq-wifi-package,aruba_ap-303,Aruba AP-303))
 $(eval $(call generate-ipq-wifi-package,aruba_ap-303h,Aruba AP-303H))
 $(eval $(call generate-ipq-wifi-package,aruba_ap-325,Aruba AP-325))
@@ -331,6 +341,7 @@ $(eval $(call generate-ipq-wifi-package,netgear_rbk350,Netgear RBK350))
 $(eval $(call generate-ipq-wifi-package,netgear_rbk40,Netgear RBK40))
 $(eval $(call generate-ipq-wifi-package,netgear_rbk750,Netgear RBK750))
 $(eval $(call generate-ipq-wifi-package,netgear_rbk850,Netgear RBK850))
+$(eval $(call generate-ipq-wifi-package,netgear_rbk860,Netgear RBK860))
 $(eval $(call generate-ipq-wifi-package,netgear_sxk80,Netgear SXK80))
 $(eval $(call generate-ipq-wifi-package,netgear_wax214,Netgear WAX214))
 $(eval $(call generate-ipq-wifi-package,netgear_wax218,Netgear WAX218))
@@ -365,6 +376,7 @@ $(eval $(call generate-ipq-wifi-package,tplink_eap660-hd-v1,TP-Link EAP660 HD v1
 $(eval $(call generate-ipq-wifi-package,tplink_re700x,TP-Link RE700X))
 $(eval $(call generate-ipq-wifi-package,tplink_tl-wa1201-v2,TP-Link TL-WA1201 V2))
 $(eval $(call generate-ipq-wifi-package,ubnt_u7-pro-xgs,Ubiquiti UniFi 7 Pro XGS))
+$(eval $(call generate-ipq-wifi-package,ubnt_unifi-6-pro,Ubiquiti UniFi 6 Pro))
 $(eval $(call generate-ipq-wifi-package,ubnt_utr,Ubiquiti UniFi Travel Router))
 $(eval $(call generate-ipq-wifi-package,wallys_dr40x9,Wallys DR40X9))
 $(eval $(call generate-ipq-wifi-package,wallys_dr5018s,Wallys DR5018S))
@@ -392,8 +404,6 @@ $(eval $(call generate-ipq-wifi-package,zyxel_nwa110ax,Zyxel NWA110AX))
 $(eval $(call generate-ipq-wifi-package,zyxel_nwa210ax,Zyxel NWA210AX))
 $(eval $(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE))
 $(eval $(call generate-ipq-wifi-package,anysafe_e1,AnySafe E1))
-$(eval $(call generate-ipq-wifi-package,arista_c260,Arista AP-C260))
-$(eval $(call generate-ipq-wifi-package,arista_c360,Arista AP-C360))
 $(eval $(call generate-ipq-wifi-package,cmiot_ax18,CMIOT AX18))
 $(eval $(call generate-ipq-wifi-package,dptech_ap3000-2c,DPtech AP3000-2C))
 $(eval $(call generate-ipq-wifi-package,glinet_gl-be6500,GL.iNet GL-BE6500))
