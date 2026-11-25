@@ -2,7 +2,8 @@
 # Prepare public, pinned inputs for the source-level RC01 regressions that
 # otherwise skip: prepared Linux/backports trees (DTB, platform, wireless),
 # BusyBox ash, the locked LuCI form/validation sources and a host ucode.
-# Pins and patches come from this tree; downloads are hash-checked.
+# Pins and patches come from this tree; downloads are hash-checked and reuse
+# a matching archive in the tree's dl/ cache before trying the network.
 # Only download archives are reused. Recreate sources/tools on every run so
 # old markers, local patches or tool options cannot silently survive. The
 # work directory is generated output, not a place for manual source edits.
@@ -24,9 +25,26 @@ KPATCH="$TREE/scripts/patch-kernel.sh"
 rm -f "$W/env.sh"
 
 pin() { sed -n "s/^$2[[:space:]]*[:]*=[[:space:]]*//p" "$1" | head -n1; }
-fetch() { # url file sha256
-	[ -f "$W/dl/$2" ] || curl -sSfL -o "$W/dl/$2.part" "$1" && { [ ! -f "$W/dl/$2.part" ] || mv "$W/dl/$2.part" "$W/dl/$2"; }
-	echo "$3  $W/dl/$2" | sha256sum -c --quiet -
+hashok() { [ -f "$2" ] && echo "$1  $2" | sha256sum -c --quiet - >/dev/null 2>&1; }
+fetch() { # file sha256 url... (work dl/, then the tree's dl/ cache, then each URL)
+	f=$1 h=$2
+	shift 2
+	hashok "$h" "$W/dl/$f" && return 0
+	rm -f "$W/dl/$f"
+	if hashok "$h" "$TREE/dl/$f"; then
+		cp "$TREE/dl/$f" "$W/dl/$f" && return 0
+	fi
+	for u in "$@"; do
+		rm -f "$W/dl/$f.part"
+		if curl -sSfL --connect-timeout 30 --retry 2 -o "$W/dl/$f.part" "$u" &&
+		   hashok "$h" "$W/dl/$f.part"; then
+			mv "$W/dl/$f.part" "$W/dl/$f" && return 0
+		fi
+		echo "fetch: $u failed or hash mismatch" >&2
+	done
+	rm -f "$W/dl/$f.part"
+	echo "fetch: no valid source for $f" >&2
+	return 1
 }
 patchdir() { # tree dir
 	[ -d "$2" ] || return 0
@@ -40,7 +58,9 @@ patchdir() { # tree dir
 # BusyBox 1.38.0 + package patches, built with the package's ash/applet config
 BBV=$(pin "$TREE/package/utils/busybox/Makefile" PKG_VERSION)
 BBH=$(pin "$TREE/package/utils/busybox/Makefile" PKG_HASH)
-fetch "https://www.busybox.net/downloads/busybox-$BBV.tar.bz2" "busybox-$BBV.tar.bz2" "$BBH"
+fetch "busybox-$BBV.tar.bz2" "$BBH" "https://www.busybox.net/downloads/busybox-$BBV.tar.bz2" \
+	"https://sources.openwrt.org/busybox-$BBV.tar.bz2" \
+	"https://sources.buildroot.net/busybox/busybox-$BBV.tar.bz2"
 rm -rf "$W/src/busybox-$BBV"
 tar -C "$W/src" -xjf "$W/dl/busybox-$BBV.tar.bz2"
 patchdir "$W/src/busybox-$BBV" "$TREE/package/utils/busybox/patches"
@@ -69,7 +89,7 @@ fi
 # Linux 6.18.60 + generic files/backport/pending/hack + qualcommbe platform patches
 KV=6.18$(pin "$TREE/target/linux/generic/kernel-6.18" 'LINUX_VERSION-6.18')
 KH=$(pin "$TREE/target/linux/generic/kernel-6.18" "LINUX_KERNEL_HASH-$KV")
-fetch "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$KV.tar.xz" "linux-$KV.tar.xz" "$KH"
+fetch "linux-$KV.tar.xz" "$KH" "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$KV.tar.xz"
 rm -rf "$W/src/linux-$KV"
 tar -C "$W/src" -xJf "$W/dl/linux-$KV.tar.xz"
 for d in "$TREE/target/linux/generic/files" "$TREE/target/linux/generic/files-6.18"; do
@@ -83,7 +103,7 @@ patchdir "$W/src/linux-$KV" "$TREE/target/linux/qualcommbe/patches-6.18"
 # mac80211 backports + package patches (series per subdirectory, as mac80211 Makefile)
 BV=$(pin "$TREE/package/kernel/mac80211/Makefile" PKG_SOURCE_VERSION)
 BH=$(pin "$TREE/package/kernel/mac80211/Makefile" PKG_HASH)
-fetch "https://github.com/openwrt/backports/releases/download/backports-v$BV/backports-$BV.tar.zst" "backports-$BV.tar.zst" "$BH"
+fetch "backports-$BV.tar.zst" "$BH" "https://github.com/openwrt/backports/releases/download/backports-v$BV/backports-$BV.tar.zst"
 rm -rf "$W/src/backports-$BV"
 tar -C "$W/src" --zstd -xf "$W/dl/backports-$BV.tar.zst"
 # Order and ath11k host-only selection follow mac80211 Build/Patch (no NSS on qualcommbe).
