@@ -130,7 +130,7 @@ rc01_netled_sysfs_write() {
 		[ "$t" = "$2" ] && t="[$t]"
 		out="$out $t"
 	done
-	printf '%s\n' "${out# }" > "$dir/trigger"
+	printf '%s\n' "${out# }" > "$dir/.trigger.new" && mv "$dir/.trigger.new" "$dir/trigger"
 	case "$2" in none) echo 0 ;; *) echo 1 ;; esac > "$dir/brightness"
 	[ "$2" = timer ] && echo 500 > "$dir/delay_on" && echo 500 > "$dir/delay_off"
 	return 0

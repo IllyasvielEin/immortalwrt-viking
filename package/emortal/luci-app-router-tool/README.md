@@ -50,6 +50,9 @@ network form. Checked and unchecked LuCI Apply compare the session's pending
 edits with the current values. This includes Apply from the pending changes
 dialog. A conflict leaves the draft available to review or revert. Disjoint
 edits from other sessions are preserved.
+In manual mode (`auto_network='0'`) with the relay AP disabled, Router Tool
+records no baseline and Apply follows standard LuCI behavior without
+cross-session conflict checks.
 
 Relay AP mode requests its management address from the upstream router. Use
 the assigned address to reconnect. Checked Apply restores the previous
